@@ -88,6 +88,9 @@ static String buildUserAgentString(const UserAgentQuirks& quirks)
     else {
         uaString.append(platformForUAString());
         uaString.appendLiteral("; ");
+#if defined(USER_AGENT_GTK_DISTRIBUTOR_NAME)
+        uaString.appendLiteral(USER_AGENT_GTK_DISTRIBUTOR_NAME "; ");
+#endif
         uaString.append(platformVersionForUAString());
     }
 
