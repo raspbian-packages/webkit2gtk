@@ -1,0 +1,33 @@
+From: Alberto Garcia <berto@igalia.com>
+Subject: Install the MiniBrowser binary
+Forwarded: not-needed
+Index: webkitgtk/Tools/MiniBrowser/gtk/main.c
+===================================================================
+--- webkitgtk.orig/Tools/MiniBrowser/gtk/main.c
++++ webkitgtk/Tools/MiniBrowser/gtk/main.c
+@@ -240,7 +240,6 @@ aboutURISchemeRequestCallback(WebKitURIS
+ int main(int argc, char *argv[])
+ {
+     gtk_init(&argc, &argv);
+-    g_setenv("WEBKIT_INJECTED_BUNDLE_PATH", WEBKIT_INJECTED_BUNDLE_PATH, FALSE);
+ 
+     const gchar *multiprocess = g_getenv("MINIBROWSER_MULTIPROCESS");
+     if (multiprocess && *multiprocess) {
+Index: webkitgtk/Tools/MiniBrowser/gtk/CMakeLists.txt
+===================================================================
+--- webkitgtk.orig/Tools/MiniBrowser/gtk/CMakeLists.txt
++++ webkitgtk/Tools/MiniBrowser/gtk/CMakeLists.txt
+@@ -52,3 +52,4 @@ include_directories(${MiniBrowser_INCLUD
+ add_executable(MiniBrowser ${MiniBrowser_SOURCES})
+ target_link_libraries(MiniBrowser ${MiniBrowser_LIBRARIES})
+ set_target_properties(MiniBrowser PROPERTIES FOLDER "Tools")
++install(TARGETS MiniBrowser DESTINATION "${LIBEXEC_INSTALL_DIR}")
+Index: webkitgtk/CMakeLists.txt
+===================================================================
+--- webkitgtk.orig/CMakeLists.txt
++++ webkitgtk/CMakeLists.txt
+@@ -184,3 +184,4 @@ add_subdirectory(Source)
+ if (ENABLE_TOOLS)
+     add_subdirectory(Tools)
+ endif ()
++add_subdirectory(Tools/MiniBrowser/gtk)
