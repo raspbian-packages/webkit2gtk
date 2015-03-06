@@ -240,7 +240,6 @@ aboutURISchemeRequestCallback(WebKitURISchemeRequest *request, gpointer userData
 int main(int argc, char *argv[])
 {
     gtk_init(&argc, &argv);
-    g_setenv("WEBKIT_INJECTED_BUNDLE_PATH", WEBKIT_INJECTED_BUNDLE_PATH, FALSE);
 
     const gchar *multiprocess = g_getenv("MINIBROWSER_MULTIPROCESS");
     if (multiprocess && *multiprocess) {
