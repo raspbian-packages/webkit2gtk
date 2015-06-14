@@ -69,3 +69,10 @@ endif ()
 # files must be used to deal with very long linker command lines.
 # See https://bugs.webkit.org/show_bug.cgi?id=129771
 set(CMAKE_NINJA_FORCE_RESPONSE_FILE 1)
+
+try_compile(ATOMIC_BUILD_SUCCEEDED ${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR}/atomic.cpp)
+if (NOT ATOMIC_BUILD_SUCCEEDED)
+    message(STATUS "Adding -latomic to the linker flags")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--push-state,--no-as-needed,-latomic,--pop-state")
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--push-state,--no-as-needed,-latomic,--pop-state")
+endif()
