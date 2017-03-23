@@ -1,10 +1,20 @@
-webkit2gtk (2.14.5-1+rpi1) stretch-staging; urgency=medium
+webkit2gtk (2.14.5-2+rpi1) stretch-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
- -- Raspbian forward porter <root@raspbian.org>  Sun, 26 Feb 2017 16:11:07 +0000
+ -- Raspbian forward porter <root@raspbian.org>  Thu, 23 Mar 2017 16:28:53 +0000
+
+webkit2gtk (2.14.5-2) unstable; urgency=medium
+
+  * debian/patches/fix-ftbfs-x32.patch:
+    + Fix FTBFS in x32 (Closes: #856498).
+  * debian/libwebkit2gtk-4.0-doc.links:
+    + Remove webkit2gtk-4.0.devhelp2.gz -> webkit2gtk.devhelp2.gz symlink
+      as it is now obsolete (see upstream bug #139369) (Closes: #857412)
+
+ -- Alberto Garcia <berto@igalia.com>  Mon, 13 Mar 2017 12:48:26 +0200
 
 webkit2gtk (2.14.5-1) unstable; urgency=high
 
