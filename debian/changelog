@@ -1,3 +1,7 @@
+webkit2gtk (2.16.6-1+rpi1) buster-staging; urgency=medium
+
+ -- Raspbian forward porter <root@raspbian.org>  Sat, 29 Jul 2017 11:13:57 +0000
+
 webkit2gtk (2.16.6-1) unstable; urgency=high
 
   * New upstream release.
