@@ -1,3 +1,26 @@
+webkit2gtk (2.16.6-1) unstable; urgency=high
+
+  * New upstream release.
+  * The WebKitGTK+ security advisory WSA-2017-0006 lists the following
+    security fixes in the latest versions of WebKitGTK+:
+    + CVE-2017-7020 (fixed in 2.16.1).
+    + CVE-2017-7006, CVE-2017-7012, CVE-2017-7019, CVE-2017-7038,
+      CVE-2017-7041, CVE-2017-7042, CVE-2017-7043, CVE-2017-7049
+      (fixed in 2.16.2).
+    + CVE-2017-7011, CVE-2017-7040, CVE-2017-7059 (fixed in 2.16.3).
+    + CVE-2017-7052 (fixed in 2.16.4).
+    + CVE-2017-7018, CVE-2017-7030, CVE-2017-7034, CVE-2017-7037,
+      CVE-2017-7039, CVE-2017-7046, CVE-2017-7048, CVE-2017-7055,
+      CVE-2017-7056, CVE-2017-7061, CVE-2017-7064 (fixed in 2.16.6).
+  * debian/patches/fix-ftbfs-m68k.patch:
+    + Fix FTBFS in m68k (Closes: #868126).
+  * Override typelib-package-name-does-not-match and
+    gir-missing-typelib-dependency lintian warnings in
+    gir1.2-javascriptcoregtk-4.0, gir1.2-webkit2-4.0,
+    libjavascriptcoregtk-4.0-dev and libwebkit2gtk-4.0-dev.
+
+ -- Alberto Garcia <berto@igalia.com>  Thu, 27 Jul 2017 02:16:11 +0200
+
 webkit2gtk (2.16.5-1+rpi1) buster-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
