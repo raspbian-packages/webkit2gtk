@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 Apple Inc. All rights reserved.
+ * Copyright (C) 2014-2017 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,9 +26,9 @@
 #ifndef Algorithm_h
 #define Algorithm_h
 
-#include "Algorithm.h"
 #include "BAssert.h"
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <cstddef>
 #include <limits>
@@ -50,7 +50,13 @@ template<typename T> inline constexpr T min(T a, T b)
 
 template<typename T> inline constexpr T mask(T value, uintptr_t mask)
 {
-    return reinterpret_cast<T>(reinterpret_cast<uintptr_t>(value) & mask);
+    static_assert(sizeof(T) == sizeof(uintptr_t), "sizeof(T) must be equal to sizeof(uintptr_t).");
+    return static_cast<T>(static_cast<uintptr_t>(value) & mask);
+}
+
+template<typename T> inline T* mask(T* value, uintptr_t mask)
+{
+    return reinterpret_cast<T*>(reinterpret_cast<uintptr_t>(value) & mask);
 }
 
 template<typename T> inline constexpr bool test(T value, uintptr_t mask)
@@ -66,10 +72,23 @@ inline constexpr bool isPowerOfTwo(size_t size)
 template<typename T> inline T roundUpToMultipleOf(size_t divisor, T x)
 {
     BASSERT(isPowerOfTwo(divisor));
-    return reinterpret_cast<T>((reinterpret_cast<uintptr_t>(x) + (divisor - 1)) & ~(divisor - 1));
+    static_assert(sizeof(T) == sizeof(uintptr_t), "sizeof(T) must be equal to sizeof(uintptr_t).");
+    return static_cast<T>((static_cast<uintptr_t>(x) + (divisor - 1)) & ~(divisor - 1));
 }
 
-template<size_t divisor, typename T> inline constexpr T roundUpToMultipleOf(T x)
+template<size_t divisor, typename T> inline T roundUpToMultipleOf(T x)
+{
+    static_assert(isPowerOfTwo(divisor), "'divisor' must be a power of two.");
+    return roundUpToMultipleOf(divisor, x);
+}
+
+template<typename T> inline T* roundUpToMultipleOf(size_t divisor, T* x)
+{
+    BASSERT(isPowerOfTwo(divisor));
+    return reinterpret_cast<T*>((reinterpret_cast<uintptr_t>(x) + (divisor - 1)) & ~(divisor - 1));
+}
+
+template<size_t divisor, typename T> inline T* roundUpToMultipleOf(T* x)
 {
     static_assert(isPowerOfTwo(divisor), "'divisor' must be a power of two.");
     return roundUpToMultipleOf(divisor, x);
@@ -118,9 +137,44 @@ template<typename T> inline constexpr size_t bitCount()
     return sizeof(T) * 8;
 }
 
+#if BOS(WINDOWS)
+template<int depth> __forceinline constexpr unsigned long clzl(unsigned long value)
+{
+    return value & (1UL << (bitCount<unsigned long>() - 1)) ? 0 : 1 + clzl<depth - 1>(value << 1);
+}
+
+template<> __forceinline constexpr unsigned long clzl<1>(unsigned long value)
+{
+    return 0;
+}
+
+__forceinline constexpr unsigned long __builtin_clzl(unsigned long value)
+{
+    return value == 0 ? 32 : clzl<bitCount<unsigned long>()>(value);
+}
+#endif
+
 inline constexpr unsigned long log2(unsigned long value)
 {
     return bitCount<unsigned long>() - 1 - __builtin_clzl(value);
+}
+
+// We need a CAS API that isn't the badly designed one from C++.
+template<typename T>
+bool compareExchangeWeak(std::atomic<T>& word, T expected, T desired, std::memory_order order = std::memory_order_seq_cst)
+{
+    // They could have made a sensible CAS API, but they didn't. Sneaky fact: for no good reason, the
+    // C++ API will mutate expected. I think that apologists will say something about how it saves you
+    // reloading the value around the back of your CAS loop, but that's nonsense. The delay along the
+    // back edge of a CAS loop has almost no impact on CAS loop performance. More often than not, we
+    // want to *add* delays to the back edge, not remove them.
+    return word.compare_exchange_weak(expected, desired, order, std::memory_order_relaxed);
+}
+
+template<typename T>
+bool compareExchangeStrong(std::atomic<T>& word, T expected, T desired, std::memory_order order = std::memory_order_seq_cst)
+{
+    return word.compare_exchange_strong(expected, desired, order, std::memory_order_relaxed);
 }
 
 } // namespace bmalloc

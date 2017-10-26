@@ -1,50 +1,161 @@
-webkit2gtk (2.16.6-1+rpi1) buster-staging; urgency=medium
-
- -- Raspbian forward porter <root@raspbian.org>  Sat, 29 Jul 2017 11:13:57 +0000
-
-webkit2gtk (2.16.6-1) unstable; urgency=high
-
-  * New upstream release.
-  * The WebKitGTK+ security advisory WSA-2017-0006 lists the following
-    security fixes in the latest versions of WebKitGTK+:
-    + CVE-2017-7020 (fixed in 2.16.1).
-    + CVE-2017-7006, CVE-2017-7012, CVE-2017-7019, CVE-2017-7038,
-      CVE-2017-7041, CVE-2017-7042, CVE-2017-7043, CVE-2017-7049
-      (fixed in 2.16.2).
-    + CVE-2017-7011, CVE-2017-7040, CVE-2017-7059 (fixed in 2.16.3).
-    + CVE-2017-7052 (fixed in 2.16.4).
-    + CVE-2017-7018, CVE-2017-7030, CVE-2017-7034, CVE-2017-7037,
-      CVE-2017-7039, CVE-2017-7046, CVE-2017-7048, CVE-2017-7055,
-      CVE-2017-7056, CVE-2017-7061, CVE-2017-7064 (fixed in 2.16.6).
-  * debian/patches/fix-ftbfs-m68k.patch:
-    + Fix FTBFS in m68k (Closes: #868126).
-  * Override typelib-package-name-does-not-match and
-    gir-missing-typelib-dependency lintian warnings in
-    gir1.2-javascriptcoregtk-4.0, gir1.2-webkit2-4.0,
-    libjavascriptcoregtk-4.0-dev and libwebkit2gtk-4.0-dev.
-
- -- Alberto Garcia <berto@igalia.com>  Thu, 27 Jul 2017 02:16:11 +0200
-
-webkit2gtk (2.16.5-1+rpi1) buster-staging; urgency=medium
+webkit2gtk (2.18.1-1+rpi1) buster-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
- -- Raspbian forward porter <root@raspbian.org>  Fri, 30 Jun 2017 12:09:14 +0000
+ -- Peter Michael Green <plugwash@raspbian.org>  Thu, 26 Oct 2017 15:08:25 +0000
 
-webkit2gtk (2.16.5-1) unstable; urgency=medium
-
-  * New upstream release (Closes: #865772).
-
- -- Alberto Garcia <berto@igalia.com>  Tue, 27 Jun 2017 10:29:49 +0300
-
-webkit2gtk (2.16.4-1) unstable; urgency=high
+webkit2gtk (2.18.1-1) unstable; urgency=medium
 
   * New upstream release.
-    + This fixes CVE-2017-2538.
+  * The WebKitGTK+ security advisory WSA-2017-0008 lists the following
+    security fixes in the latest versions of WebKitGTK+:
+    + CVE-2017-7081 and CVE-2017-7142 (fixed in 2.16.1).
+    + CVE-2017-7094 (fixed in 2.16.3).
+    + CVE-2017-7099 (fixed in 2.16.4).
+    + CVE-2017-7087, CVE-2017-7089, CVE-2017-7090, CVE-2017-7091,
+      CVE-2017-7092, CVE-2017-7093, CVE-2017-7095, CVE-2017-7096,
+      CVE-2017-7098, CVE-2017-7100, CVE-2017-7102, CVE-2017-7104,
+      CVE-2017-7107, CVE-2017-7109, CVE-2017-7111, CVE-2017-7117,
+      CVE-2017-7120 (fixed in 2.18.0).
+  * debian/control:
+    + Recommend the Pulseaudio or ALSA GStreamer plugins, since they're
+      needed for audio playback (Closes: #877281).
+  * debian/patches/fix-ftbfs-alpha.patch:
+    + This patch is no longer needed, drop it.
+  * Refresh all other patches.
+  * debian/control:
+    + Remove 'Priority: extra' fields, all packages have optional priority
+      now (the 'extra' priority has been deprecated).
+  * debian/copyright:
+    + Use https for the Format URL.
 
- -- Alberto Garcia <berto@igalia.com>  Tue, 20 Jun 2017 17:24:48 +0300
+ -- Alberto Garcia <berto@igalia.com>  Wed, 18 Oct 2017 14:36:55 +0300
+
+webkit2gtk (2.18.0-2) unstable; urgency=medium
+
+  * Upload to unstable.
+  * debian/gbp.conf:
+    + Update upstream branch name.
+  * The WebKitGTK+ security advisory WSA-2017-0007 lists the following
+    security fixes in WebKitGTK+ 2.16.3:
+    + CVE-2017-1000121.
+    + CVE-2017-1000122.
+
+ -- Alberto Garcia <berto@igalia.com>  Thu, 14 Sep 2017 10:44:32 +0300
+
+webkit2gtk (2.18.0-1) experimental; urgency=medium
+
+  * New upstream release.
+
+ -- Alberto Garcia <berto@igalia.com>  Mon, 11 Sep 2017 11:05:27 +0300
+
+webkit2gtk (2.17.92-1) experimental; urgency=medium
+
+  * New upstream development release.
+  * Disable GStreamerGL in the Hurd:
+    + Pass -DUSE_GSTREAMER_GL=OFF in debian/rules.
+    + Remove build dependency on libgstreamer-plugins-bad1.0-dev from
+      debian/control.
+  * debian/control:
+    + Recommmend libgl1-mesa-dri (Closes: #873084).
+  * debian/patches/fix-ftbfs-m68k.patch:
+    + Refresh.
+
+ -- Alberto Garcia <berto@igalia.com>  Mon, 04 Sep 2017 17:02:41 +0300
+
+webkit2gtk (2.17.91-1) experimental; urgency=medium
+
+  * New upstream development release.
+  * Refresh all patches and remove no-whole-archive.patch.
+  * debian/patches/fix-ftbfs-hurd.patch:
+    + Work around missing PATH_MAX definition in ConfigFile.h
+  * Disable GStreamerGL in kFreeBSD and sparc64:
+    + Pass -DUSE_GSTREAMER_GL=OFF in debian/rules.
+    + Remove build dependency on libgstreamer-plugins-bad1.0-dev from
+      debian/control.
+
+ -- Alberto Garcia <berto@igalia.com>  Fri, 18 Aug 2017 14:32:00 +0300
+
+webkit2gtk (2.17.90-1) experimental; urgency=medium
+
+  * New upstream development release.
+  * Refresh all patches.
+  * debian/control:
+    + Add build dependency on libtasn1-6-dev (for Web Crypto).
+  * debian/libwebkit2gtk-4.0-37.symbols:
+    + Update symbols.
+  * Disable GStreamerGL in armel and armhf, the usage of two different GL
+    implementations causes a build failure (see WebKit but #175127).
+    + debian/control: Don't install libgstreamer-plugins-bad1.0-dev in
+      those architectures.
+    + debian/rules: Pass -DUSE_GSTREAMER_GL=OFF.
+  * debian/patches/no-whole-archive.patch:
+    + Don't use --whole-archive for the WebKit2 target libraries.
+
+ -- Alberto Garcia <berto@igalia.com>  Thu, 10 Aug 2017 12:45:07 +0300
+
+webkit2gtk (2.17.5-2) experimental; urgency=medium
+
+  * debian/rules:
+    + Don't pass -DENABLE_DISASSEMBLER=0, this is no longer necessary.
+    + Don't disable JIT in arm64.
+    + Don't disable the gold linker in any architecture.
+  * debian/control:
+    + Add build dependency on mesa-common-dev (GStreamerGL needs GL/gl.h),
+      this is automatically pulled in some architectures by
+      libgl1-mesa-dev, but without it the build fails in all others.
+  * Refresh debian/patches/fix-ftbfs-m68k.patch.
+
+ -- Alberto Garcia <berto@igalia.com>  Fri, 04 Aug 2017 15:23:53 +0300
+
+webkit2gtk (2.17.5-1) experimental; urgency=medium
+
+  * New upstream development release.
+  * Refresh all patches.
+  * debian/source/lintian-overrides:
+    + Update source-is-missing overrides.
+  * debian/patches/fix-ftbfs-m68k.patch:
+    + Fix FTBFS in m68k.
+  * debian/control:
+    + Add build dependency on libgstreamer-plugins-bad1.0-dev for
+      GStreamerGL and bump all GStreamer dependencies to >= 1.2.3.
+    + Add build dependency on libgles2-mesa-dev for all
+      architectures (GStreamerGL needs GLES3/gl3.h).
+  * debian/libwebkit2gtk-4.0-37.symbols:
+    + Update symbols.
+  * Override typelib-package-name-does-not-match and
+    gir-missing-typelib-dependency lintian warnings in
+    gir1.2-javascriptcoregtk-4.0, gir1.2-webkit2-4.0,
+    libjavascriptcoregtk-4.0-dev and libwebkit2gtk-4.0-dev.
+
+ -- Alberto Garcia <berto@igalia.com>  Fri, 28 Jul 2017 23:27:14 +0200
+
+webkit2gtk (2.17.4-1) experimental; urgency=medium
+
+  * New upstream development release.
+  * debian/patches/fix-ftbfs-sparc64.patch:
+    + Refresh.
+  * debian/patches/fix-ftbfs-x86.patch:
+    + Update to fix build in x86_64.
+  * debian/libwebkit2gtk-4.0-37.symbols:
+    + Update symbols.
+
+ -- Alberto Garcia <berto@igalia.com>  Mon, 19 Jun 2017 10:42:06 +0300
+
+webkit2gtk (2.17.3-1) experimental; urgency=medium
+
+  * New upstream development release.
+  * Refresh all patches.
+  * debian/patches/fix-ftbfs-x86.patch:
+    + Fix FTBFS in x86.
+  * debian/watch, debian/gbp.conf:
+    + Update for 2.17.x packages in experimental.
+  * debian/libwebkit2gtk-4.0-37.symbols:
+    + Update symbols.
+
+ -- Alberto Garcia <berto@igalia.com>  Sat, 03 Jun 2017 18:51:02 +0300
 
 webkit2gtk (2.16.3-2) unstable; urgency=medium
 

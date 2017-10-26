@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015-2016 Apple Inc. All rights reserved.
+ * Copyright (C) 2015-2017 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -27,6 +27,7 @@
 #include "WordLock.h"
 
 #include "ThreadSpecific.h"
+#include "Threading.h"
 #include "ThreadingPrimitives.h"
 #include <condition_variable>
 #include <mutex>
@@ -75,6 +76,10 @@ ThreadData* myThreadData()
 
 } // anonymous namespace
 
+// NOTE: It's a bug to use any memory order other than seq_cst in this code. The cost of seq_cst
+// fencing is negligible on slow paths, so any use of a more relaxed memory model is all risk and no
+// reward.
+
 NEVER_INLINE void WordLockBase::lockSlow()
 {
     unsigned spinCount = 0;
@@ -99,7 +104,7 @@ NEVER_INLINE void WordLockBase::lockSlow()
         // If there is no queue and we haven't spun too much, we can just try to spin around again.
         if (!(currentWordValue & ~queueHeadMask) && spinCount < spinLimit) {
             spinCount++;
-            std::this_thread::yield();
+            Thread::yield();
             continue;
         }
 
@@ -120,7 +125,7 @@ NEVER_INLINE void WordLockBase::lockSlow()
         if ((currentWordValue & isQueueLockedBit)
             || !(currentWordValue & isLockedBit)
             || !m_word.compareExchangeWeak(currentWordValue, currentWordValue | isQueueLockedBit)) {
-            std::this_thread::yield();
+            Thread::yield();
             continue;
         }
         
@@ -197,12 +202,12 @@ NEVER_INLINE void WordLockBase::unlockSlow()
                 return;
             }
             // Loop around and try again.
-            std::this_thread::yield();
+            Thread::yield();
             continue;
         }
         
         if (currentWordValue & isQueueLockedBit) {
-            std::this_thread::yield();
+            Thread::yield();
             continue;
         }
 
@@ -222,7 +227,8 @@ NEVER_INLINE void WordLockBase::unlockSlow()
     ASSERT(currentWordValue & isLockedBit);
     ASSERT(currentWordValue & isQueueLockedBit);
     ThreadData* queueHead = bitwise_cast<ThreadData*>(currentWordValue & ~queueHeadMask);
-    ASSERT(queueHead);
+    RELEASE_ASSERT(queueHead);
+    RELEASE_ASSERT(queueHead->shouldPark); // This would have been set before the thread was enqueued, so it must still be set now.
 
     ThreadData* newQueueHead = queueHead->nextInQueue;
     // Either this was the only thread on the queue, in which case we delete the queue, or there
@@ -253,12 +259,14 @@ NEVER_INLINE void WordLockBase::unlockSlow()
     // We do this carefully because this may run either before or during the parkingLock critical
     // section in lockSlow().
     {
-        std::unique_lock<std::mutex> locker(queueHead->parkingLock);
+        std::lock_guard<std::mutex> locker(queueHead->parkingLock);
         queueHead->shouldPark = false;
+        // We have to do the notify while still holding the lock, since otherwise, we could try to
+        // do it after the queueHead has destructed. It's impossible for queueHead to destruct
+        // while we hold the lock, since it is either currently in the wait loop or it's before it
+        // so it has to grab the lock before destructing.
+        queueHead->parkingCondition.notify_one();
     }
-    // Doesn't matter if we notify_all() or notify_one() here since the only thread that could be
-    // waiting is queueHead.
-    queueHead->parkingCondition.notify_one();
 
     // The old queue head can now contend for the lock again. We're done!
 }
