@@ -1,10 +1,42 @@
-webkit2gtk (2.18.3-1+rpi1) buster-staging; urgency=medium
+webkit2gtk (2.18.4-1+rpi1) buster-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
- -- Peter Michael Green <plugwash@raspbian.org>  Thu, 23 Nov 2017 17:51:27 +0000
+ -- Raspbian forward porter <root@raspbian.org>  Wed, 27 Dec 2017 15:27:56 +0000
+
+webkit2gtk (2.18.4-1) unstable; urgency=high
+
+  [ Alberto Garcia ]
+  * New upstream release.
+    + This fixes CVE-2017-13866, CVE-2017-13870, CVE-2017-7156 and
+      CVE-2017-13856.
+  * Refresh all patches.
+  * debian/control:
+    + Request native version of the Ruby package (thanks, Helmut Grohne)
+      (Closes: #881637).
+  * Instead of passing -DUSE_GSTREAMER_GL=OFF explicitly, let CMake do it
+    if libgstreamer-plugins-bad1.0-dev is not installed.
+    + debian/patches/detect-gstreamer-gl.patch:
+      - Disable USE_GSTREAMER_GL if GStreamerGL is not found.
+    + debian/rules:
+      - Remove the list of architectures that are not using GStreamerGL.
+  * debian/control:
+    + Don't require libgstreamer-plugins-bad1.0-dev in hppa, m68k,
+      powerpcspe, sh4 or x32.
+
+  [ Jeremy Bicha ]
+  * debian/control: Update Vcs-Git to point to correct branch.
+  * Allow setting the distributor name in the User Agent string. Ubuntu
+    wants this patch, but since it makes it easier to identify the user
+    let's leave it disabled in Debian (Closes: #883712).
+    + debian/patches/user-agent-branding.patch:
+      - Patch to support updating the User-Agent string.
+    + debian/rules:
+      - Pass -DUSER_AGENT_GTK_DISTRIBUTOR_NAME when building for Ubuntu.
+
+ -- Alberto Garcia <berto@igalia.com>  Tue, 19 Dec 2017 18:31:33 +0200
 
 webkit2gtk (2.18.3-1) unstable; urgency=high
 
