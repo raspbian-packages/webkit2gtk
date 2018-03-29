@@ -38,7 +38,7 @@ struct SameSizeAsNodeRareData {
     void* m_pointer[3];
 };
 
-#if CPU(M68K)
+#if defined(__m68k__)
 COMPILE_ASSERT(sizeof(NodeRareData) <= sizeof(SameSizeAsNodeRareData), NodeRareDataShouldStaySmall);
 #else
 COMPILE_ASSERT(sizeof(NodeRareData) == sizeof(SameSizeAsNodeRareData), NodeRareDataShouldStaySmall);

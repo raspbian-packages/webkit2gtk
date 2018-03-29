@@ -41,13 +41,12 @@ struct SameSizeAsElementRareData : NodeRareData {
 #else
     unsigned bitfields : 10;
 #endif
-    RegionOversetState regionOversetState;
     LayoutSize sizeForResizing;
     IntPoint savedLayerScrollPosition;
     void* pointers[8];
 };
 
-#if CPU(M68K)
+#if defined(__m68k__)
 static_assert(sizeof(ElementRareData) <= sizeof(SameSizeAsElementRareData), "ElementRareData should stay small");
 #else
 static_assert(sizeof(ElementRareData) == sizeof(SameSizeAsElementRareData), "ElementRareData should stay small");
