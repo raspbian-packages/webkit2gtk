@@ -116,15 +116,15 @@ set(JavaScriptCore_LIBRARIES
     ${LLVM_LIBRARIES}
 )
 
-# Since r228149, on MIPS we need to link with -latomic, because
-# __atomic_fetch_add_8 is not available as a compiler intrinsic. It is
-# available on other platforms (including 32-bit Arm), so the link with
-# libatomic is only neede on MIPS.
-if (WTF_CPU_MIPS)
-    list(APPEND JavaScriptCore_LIBRARIES
-        -latomic
-    )
+file(WRITE ${CMAKE_BINARY_DIR}/test_atomics.cpp
+     "int main(void)\n"
+     "{ long long x = 1; return (int) __atomic_fetch_add_8(&x, 1, 1); }\n")
+try_compile(ATOMICS_BUILD_SUCCEEDED ${CMAKE_BINARY_DIR} ${CMAKE_BINARY_DIR}/test_atomics.cpp)
+message(STATUS "Found __atomic_fetch_add_8(): ${ATOMICS_BUILD_SUCCEEDED}")
+if (NOT ATOMICS_BUILD_SUCCEEDED)
+    list(APPEND JavaScriptCore_LIBRARIES -latomic)
 endif ()
+file(REMOVE ${CMAKE_BINARY_DIR}/test_atomics.cpp)
 
 set(JavaScriptCore_SCRIPTS_SOURCES_DIR "${JAVASCRIPTCORE_DIR}/Scripts")
 
