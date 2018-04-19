@@ -51,18 +51,16 @@ else
 	CPPFLAGS += -DNDEBUG -DG_DISABLE_CAST_CHECKS
 endif
 
-# https://launchpad.net/bugs/1753581 gstreamergl
 # https://launchpad.net/bugs/1742743 woff2
 ifeq ($(shell dpkg-vendor --derives-from Ubuntu && echo yes),yes)
-	EXTRA_CMAKE_ARGUMENTS += -DUSE_GSTREAMER_GL=OFF -DUSE_WOFF2=OFF
+	EXTRA_CMAKE_ARGUMENTS += -DUSE_WOFF2=OFF
 	CPPFLAGS += -DUSER_AGENT_GTK_DISTRIBUTOR_NAME='"Ubuntu"'
-	DEB_DH_GENCONTROL_ARGS += -- -Vgst:Recommends=""
 else
-	DEB_DH_GENCONTROL_ARGS += -- -Vgst:Recommends="gstreamer1.0-gl, gstreamer1.0-libav,"
+	DEB_DH_GENCONTROL_ARGS += -- -Vgst:Recommends="gstreamer1.0-libav"
 endif
 
 %:
-	dh $@ --parallel --with gir
+	dh $@ --with gir
 
 override_dh_auto_configure:
 	CXXFLAGS="$(CFLAGS)" \
@@ -93,8 +91,14 @@ override_dh_makeshlibs:
 	dh_makeshlibs -plibwebkit2gtk-4.0-37 -Xinjected-bundle
 	dh_makeshlibs -plibjavascriptcoregtk-4.0-18
 
+# http://bugs.debian.org/459427
+ifeq ($(shell dpkg-vendor --derives-from Ubuntu && echo yes),yes)
+override_dh_installdocs:
+	dh_installdocs -A NEWS
+else
 override_dh_installchangelogs:
-	dh_installchangelogs $(CURDIR)/NEWS
+	dh_installchangelogs NEWS
+endif
 
 override_dh_builddeb:
 	DEB_BUILD_OPTIONS="$(filter-out parallel=%,$(DEB_BUILD_OPTIONS))" \
