@@ -116,15 +116,9 @@ set(JavaScriptCore_LIBRARIES
     ${LLVM_LIBRARIES}
 )
 
-file(WRITE ${CMAKE_BINARY_DIR}/test_atomics.cpp
-     "int main(void)\n"
-     "{ long long x = 1; return (int) __atomic_fetch_add_8(&x, 1, 1); }\n")
-try_compile(ATOMICS_BUILD_SUCCEEDED ${CMAKE_BINARY_DIR} ${CMAKE_BINARY_DIR}/test_atomics.cpp)
-message(STATUS "Found __atomic_fetch_add_8(): ${ATOMICS_BUILD_SUCCEEDED}")
-if (NOT ATOMICS_BUILD_SUCCEEDED)
-    list(APPEND JavaScriptCore_LIBRARIES -latomic)
+if (ATOMIC_INT64_REQUIRES_LIBATOMIC)
+    list(APPEND JavaScriptCore_LIBRARIES atomic)
 endif ()
-file(REMOVE ${CMAKE_BINARY_DIR}/test_atomics.cpp)
 
 set(JavaScriptCore_SCRIPTS_SOURCES_DIR "${JAVASCRIPTCORE_DIR}/Scripts")
 

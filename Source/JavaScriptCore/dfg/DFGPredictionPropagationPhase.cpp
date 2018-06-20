@@ -704,6 +704,8 @@ private:
         case GetById:
         case GetByIdFlush:
         case GetByIdWithThis:
+        case GetByIdDirect:
+        case GetByIdDirectFlush:
         case TryGetById:
         case GetByValWithThis:
         case GetByOffset:
@@ -768,6 +770,7 @@ private:
             break;
         }
 
+        case SetCallee:
         case SetArgumentCountIncludingThis:
             break;
 

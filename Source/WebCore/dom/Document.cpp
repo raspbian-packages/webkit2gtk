@@ -2078,6 +2078,10 @@ bool Document::updateLayoutIfDimensionsOutOfDate(Element& element, DimensionsChe
         requireFullLayout = true;
     }
 
+    // Turn off this optimization for input elements with shadow content.
+    if (is<HTMLInputElement>(element))
+        requireFullLayout = true;
+
     bool isVertical = renderer && !renderer->isHorizontalWritingMode();
     bool checkingLogicalWidth = ((dimensionsCheck & WidthDimensionsCheck) && !isVertical) || ((dimensionsCheck & HeightDimensionsCheck) && isVertical);
     bool checkingLogicalHeight = ((dimensionsCheck & HeightDimensionsCheck) && !isVertical) || ((dimensionsCheck & WidthDimensionsCheck) && isVertical);
@@ -7492,7 +7496,7 @@ void Document::hasStorageAccess(Ref<DeferredPromise>&& promise)
     ASSERT(settings().storageAccessAPIEnabled());
 
 #if HAVE(CFNETWORK_STORAGE_PARTITIONING)
-    if (hasFrameSpecificStorageAccess()) {
+    if (m_frame && hasFrameSpecificStorageAccess()) {
         promise->resolve<IDLBoolean>(true);
         return;
     }
@@ -7543,7 +7547,7 @@ void Document::requestStorageAccess(Ref<DeferredPromise>&& promise)
     ASSERT(settings().storageAccessAPIEnabled());
     
 #if HAVE(CFNETWORK_STORAGE_PARTITIONING)
-    if (hasFrameSpecificStorageAccess()) {
+    if (m_frame && hasFrameSpecificStorageAccess()) {
         promise->resolve();
         return;
     }

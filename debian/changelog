@@ -1,10 +1,43 @@
-webkit2gtk (2.20.1-1+rpi1) buster-staging; urgency=medium
+webkit2gtk (2.20.3-1+rpi1) buster-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
- -- Raspbian forward porter <root@raspbian.org>  Thu, 19 Apr 2018 17:00:08 +0000
+ -- Raspbian forward porter <root@raspbian.org>  Wed, 20 Jun 2018 16:23:21 +0000
+
+webkit2gtk (2.20.3-1) unstable; urgency=high
+
+  * New upstream release.
+    + This fixes CVE-2018-4190, CVE-2018-4199, CVE-2018-4218,
+      CVE-2018-4222, CVE-2018-4232, CVE-2018-4233, CVE-2018-4246 and
+      CVE-2018-11646.
+  * debian/control:
+    + Remove compatibility with versions of debhelper < 9.20151219 in
+      override_dh_strip, we require version 10 since 2.20.1-1.
+  * debian/patches/fix-atomics-build.patch:
+    + The __atomic_fetch_add_8() check is now in this release. Update the
+      patch to enable THREADS_PREFER_PTHREAD_FLAG. This fixes the riscv64
+      build.
+  * debian/rules:
+    + Build with -DRELEASE_WITHOUT_OPTIMIZATIONS if "noopt" is set.
+  * debian/libwebkit2gtk-4.0-doc.install, debian/rules:
+    + Update path of installed documentation. This changed upstream in
+      2.20.2 but it was reverted in this release.
+
+ -- Alberto Garcia <berto@igalia.com>  Tue, 12 Jun 2018 12:58:42 +0300
+
+webkit2gtk (2.20.2-1) unstable; urgency=high
+
+  * New upstream release.
+    + This fixes CVE-2018-4200.
+  * debian/patches/fix-atomics-build.patch:
+    + Set THREADS_PREFER_PTHREAD_FLAG to ON. This fixes the build in
+      riscv64 (thanks, Aurelien Jarno).
+  * debian/libwebkit2gtk-4.0-doc.install, debian/rules:
+    + Update path of installed documentation (see WebKit #184771).
+
+ -- Alberto Garcia <berto@igalia.com>  Mon, 07 May 2018 14:41:30 +0300
 
 webkit2gtk (2.20.1-1) unstable; urgency=medium
 

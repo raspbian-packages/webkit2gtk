@@ -457,16 +457,6 @@ if (NOT USE_SYSTEM_MALLOC)
     list(APPEND WTF_LIBRARIES bmalloc)
 endif ()
 
-file(WRITE ${CMAKE_BINARY_DIR}/test_atomics.cpp
-     "int main(void)\n"
-     "{ long long x = 1; return (int) __sync_add_and_fetch_8(&x, 1); }\n")
-try_compile(ATOMICS_BUILD_SUCCEEDED ${CMAKE_BINARY_DIR} ${CMAKE_BINARY_DIR}/test_atomics.cpp)
-message(STATUS "Found __sync_add_and_fetch_8(): ${ATOMICS_BUILD_SUCCEEDED}")
-if (NOT ATOMICS_BUILD_SUCCEEDED)
-    list(APPEND WTF_SOURCES Atomics.cpp)
-endif ()
-file(REMOVE ${CMAKE_BINARY_DIR}/test_atomics.cpp)
-
 list(APPEND WTF_SOURCES
     unicode/CollatorDefault.cpp
 

@@ -27,14 +27,6 @@
 
 #if ENABLE(JIT)
 
-// We've run into some problems where changing the size of the class JIT leads to
-// performance fluctuations.  Try forcing alignment in an attempt to stabalize this.
-#if COMPILER(GCC_OR_CLANG)
-#define JIT_CLASS_ALIGNMENT __attribute__ ((aligned (32)))
-#else
-#define JIT_CLASS_ALIGNMENT
-#endif
-
 #define ASSERT_JIT_OFFSET(actual, expected) ASSERT_WITH_MESSAGE(actual == expected, "JIT Offset \"%s\" should be %d, not %d.\n", #expected, static_cast<int>(expected), static_cast<int>(actual));
 
 #include "CodeBlock.h"
@@ -176,7 +168,9 @@ namespace JSC {
 
     void ctiPatchCallByReturnAddress(ReturnAddressPtr, FunctionPtr newCalleeFunction);
 
-    class JIT : private JSInterfaceJIT {
+    // We've run into some problems where changing the size of the class JIT leads to
+    // performance fluctuations. Try forcing alignment in an attempt to stabilize this.
+    class alignas(32) JIT : private JSInterfaceJIT {
         friend class JITSlowPathCall;
         friend class JITStubCall;
 
@@ -497,6 +491,7 @@ namespace JSC {
         void emit_op_try_get_by_id(Instruction*);
         void emit_op_get_by_id(Instruction*);
         void emit_op_get_by_id_with_this(Instruction*);
+        void emit_op_get_by_id_direct(Instruction*);
         void emit_op_get_arguments_length(Instruction*);
         void emit_op_get_by_val(Instruction*);
         void emit_op_get_argument_by_val(Instruction*);
@@ -604,6 +599,7 @@ namespace JSC {
         void emitSlow_op_try_get_by_id(Instruction*, Vector<SlowCaseEntry>::iterator&);
         void emitSlow_op_get_by_id(Instruction*, Vector<SlowCaseEntry>::iterator&);
         void emitSlow_op_get_by_id_with_this(Instruction*, Vector<SlowCaseEntry>::iterator&);
+        void emitSlow_op_get_by_id_direct(Instruction*, Vector<SlowCaseEntry>::iterator&);
         void emitSlow_op_get_arguments_length(Instruction*, Vector<SlowCaseEntry>::iterator&);
         void emitSlow_op_get_by_val(Instruction*, Vector<SlowCaseEntry>::iterator&);
         void emitSlow_op_get_argument_by_val(Instruction*, Vector<SlowCaseEntry>::iterator&);
@@ -946,7 +942,7 @@ namespace JSC {
         bool m_shouldEmitProfiling;
         bool m_shouldUseIndexMasking;
         unsigned m_loopOSREntryBytecodeOffset { 0 };
-    } JIT_CLASS_ALIGNMENT;
+    };
 
 } // namespace JSC
 

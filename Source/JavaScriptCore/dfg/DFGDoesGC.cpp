@@ -51,6 +51,7 @@ bool doesGC(Graph& graph, Node* node)
     case Identity:
     case IdentityWithProfile:
     case GetCallee:
+    case SetCallee:
     case GetArgumentCountIncludingThis:
     case SetArgumentCountIncludingThis:
     case GetRestLength:
@@ -100,6 +101,8 @@ bool doesGC(Graph& graph, Node* node)
     case GetById:
     case GetByIdFlush:
     case GetByIdWithThis:
+    case GetByIdDirect:
+    case GetByIdDirectFlush:
     case PutById:
     case PutByIdFlush:
     case PutByIdWithThis:

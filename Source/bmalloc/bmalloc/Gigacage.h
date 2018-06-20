@@ -45,6 +45,13 @@
 #define GIGACAGE_ALLOCATION_CAN_FAIL 0
 #endif
 
+// In Linux, if `vm.overcommit_memory = 2` is specified, mmap with large size can fail if it exceeds the size of RAM.
+// So we specify GIGACAGE_ALLOCATION_CAN_FAIL = 1.
+#if BOS(LINUX)
+#undef GIGACAGE_ALLOCATION_CAN_FAIL
+#define GIGACAGE_ALLOCATION_CAN_FAIL 1
+#endif
+
 static_assert(bmalloc::isPowerOfTwo(PRIMITIVE_GIGACAGE_SIZE), "");
 static_assert(bmalloc::isPowerOfTwo(JSVALUE_GIGACAGE_SIZE), "");
 static_assert(bmalloc::isPowerOfTwo(STRING_GIGACAGE_SIZE), "");
@@ -68,7 +75,7 @@ static_assert(bmalloc::isPowerOfTwo(STRING_GIGACAGE_SIZE), "");
 #define GIGACAGE_BASE_PTRS_SIZE 4096
 #endif
 
-extern "C" BEXPORT char g_gigacageBasePtrs[GIGACAGE_BASE_PTRS_SIZE] __attribute__((aligned(GIGACAGE_BASE_PTRS_SIZE)));
+extern "C" alignas(GIGACAGE_BASE_PTRS_SIZE) BEXPORT char g_gigacageBasePtrs[GIGACAGE_BASE_PTRS_SIZE];
 
 namespace Gigacage {
 
@@ -133,7 +140,7 @@ BINLINE void*& basePtr(BasePtrs& basePtrs, Kind kind)
 
 BINLINE BasePtrs& basePtrs()
 {
-    return *reinterpret_cast<BasePtrs*>(g_gigacageBasePtrs);
+    return *reinterpret_cast<BasePtrs*>(reinterpret_cast<void*>(g_gigacageBasePtrs));
 }
 
 BINLINE void*& basePtr(Kind kind)
