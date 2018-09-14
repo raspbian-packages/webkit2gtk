@@ -59,6 +59,11 @@
 /* ==== CPU() - the target CPU architecture ==== */
 /* CPU(KNOWN) becomes true if we explicitly support a target CPU. */
 
+/* CPU(M68K) - m68k */
+#if defined(__m68k__)
+#define WTF_CPU_BIG_ENDIAN 1
+#endif
+
 /* CPU(MIPS) - MIPS 32-bit and 64-bit */
 #if (defined(mips) || defined(__mips__) || defined(MIPS) || defined(_MIPS_) || defined(__mips64))
 #if defined(_ABI64) && (_MIPS_SIM == _ABI64)
