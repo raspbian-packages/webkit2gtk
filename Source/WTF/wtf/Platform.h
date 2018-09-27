@@ -143,9 +143,11 @@
 /* CPU(X86_64) - AMD64 / Intel64 / x86_64 64-bit */
 #if   defined(__x86_64__) \
     || defined(_M_X64)
+#if !defined(__ILP32__)
 #define WTF_CPU_X86_64 1
 #define WTF_CPU_X86_SSE2 1
 #define WTF_CPU_KNOWN 1
+#endif
 #endif
 
 /* CPU(ARM64) - Apple */
@@ -1324,6 +1326,7 @@
 #if PLATFORM(MAC)
 #define HAVE_TOUCH_BAR 1
 #define HAVE_ADVANCED_SPELL_CHECKING 1
+#define USE_DICTATION_ALTERNATIVES 1
 
 #if defined(__LP64__)
 #define ENABLE_WEB_PLAYBACK_CONTROLS_MANAGER 1
