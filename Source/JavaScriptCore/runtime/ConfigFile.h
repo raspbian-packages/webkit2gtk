@@ -42,6 +42,8 @@ private:
 
 #if OS(WINDOWS)
     static const size_t s_maxPathLength = 260; // Windows value for "MAX_PATH"
+#elif OS(HURD)
+    static const size_t s_maxPathLength = 4096;
 #else
     static const size_t s_maxPathLength = PATH_MAX;
 #endif
