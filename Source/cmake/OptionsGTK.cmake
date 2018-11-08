@@ -1,11 +1,11 @@
 include(GNUInstallDirs)
 include(VersioningUtils)
 
-SET_PROJECT_VERSION(2 22 2)
+SET_PROJECT_VERSION(2 22 3)
 set(WEBKITGTK_API_VERSION 4.0)
 
-CALCULATE_LIBRARY_VERSIONS_FROM_LIBTOOL_TRIPLE(WEBKIT 70 3 33)
-CALCULATE_LIBRARY_VERSIONS_FROM_LIBTOOL_TRIPLE(JAVASCRIPTCORE 29 3 11)
+CALCULATE_LIBRARY_VERSIONS_FROM_LIBTOOL_TRIPLE(WEBKIT 70 4 33)
+CALCULATE_LIBRARY_VERSIONS_FROM_LIBTOOL_TRIPLE(JAVASCRIPTCORE 29 4 11)
 
 # These are shared variables, but we special case their definition so that we can use the
 # CMAKE_INSTALL_* variables that are populated by the GNUInstallDirs macro.
@@ -349,7 +349,8 @@ endif ()
 if (USE_WOFF2)
     find_package(WOFF2Dec 1.0.2)
     if (NOT WOFF2DEC_FOUND)
-       message(FATAL_ERROR "libwoff2dec is needed for USE_WOFF2.")
+       set(USE_WOFF2 OFF)
+       message(STATUS "libwoff2dec is needed for USE_WOFF2.")
     endif ()
 endif ()
 

@@ -1,10 +1,28 @@
-webkit2gtk (2.22.2-1+rpi1) buster-staging; urgency=medium
+webkit2gtk (2.22.3-1+rpi1) buster-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
- -- Peter Michael Green <plugwash@raspbian.org>  Thu, 27 Sep 2018 14:41:02 +0000
+ -- Raspbian forward porter <root@raspbian.org>  Thu, 08 Nov 2018 00:30:26 +0000
+
+webkit2gtk (2.22.3-1) unstable; urgency=medium
+
+  * New upstream release.
+
+  [ Jeremy Bicha ]
+  * Enable woff2 support in Ubuntu too.
+  * Opt out of Ubuntu language packs. This package is updated too often.
+
+  [ Alberto Garcia ]
+  * debian/patches/detect-woff.patch:
+    + WOFF2 is not available on all platforms, so don't abort the build if
+      it's not installed. This way it's enough if we simply remove
+      libwoff-dev from the Build-Depends when necessary.
+  * debian/control:
+    + Don't depend on libwoff-dev on kfreebsd, it's not available.
+
+ -- Alberto Garcia <berto@igalia.com>  Mon, 29 Oct 2018 13:36:11 +0200
 
 webkit2gtk (2.22.2-1) unstable; urgency=medium
 
