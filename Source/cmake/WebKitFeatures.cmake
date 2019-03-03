@@ -84,6 +84,10 @@ macro(WEBKIT_OPTION_BEGIN)
         set(ENABLE_JIT_DEFAULT OFF)
     endif ()
 
+    if (CMAKE_CXX_LIBRARY_ARCHITECTURE STREQUAL "arm-linux-gnueabi")
+        set(ENABLE_JIT_DEFAULT OFF)
+    endif ()
+
     WEBKIT_OPTION_DEFINE(ENABLE_3D_TRANSFORMS "Toggle 3D transforms support" PRIVATE ON)
     WEBKIT_OPTION_DEFINE(ENABLE_ACCELERATED_2D_CANVAS "Toggle accelerated 2D canvas support" PRIVATE OFF)
     WEBKIT_OPTION_DEFINE(ENABLE_ACCELERATED_OVERFLOW_SCROLLING "Toggle accelerated scrolling support" PRIVATE OFF)
