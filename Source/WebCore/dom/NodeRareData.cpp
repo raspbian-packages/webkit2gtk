@@ -38,7 +38,11 @@ struct SameSizeAsNodeRareData {
     void* m_pointer[3];
 };
 
+#if defined(__m68k__)
+COMPILE_ASSERT(sizeof(NodeRareData) <= sizeof(SameSizeAsNodeRareData), NodeRareDataShouldStaySmall);
+#else
 COMPILE_ASSERT(sizeof(NodeRareData) == sizeof(SameSizeAsNodeRareData), NodeRareDataShouldStaySmall);
+#endif
 
 // Ensure the 10 bits reserved for the m_connectedFrameCount cannot overflow
 static_assert(Page::maxNumberOfFrames < 1024, "Frame limit should fit in rare data count");
