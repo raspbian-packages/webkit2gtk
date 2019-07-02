@@ -42,6 +42,10 @@
 #include <wtf/text/CString.h>
 #include <wtf/text/StringView.h>
 
+#if !defined(PATH_MAX)
+#define PATH_MAX 4096
+#endif
+
 namespace WebCore {
 
 static const char* const gDictionaryDirectories[] = {
