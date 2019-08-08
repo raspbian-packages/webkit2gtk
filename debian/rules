@@ -23,8 +23,13 @@ ifeq (,$(filter $(DEB_HOST_ARCH),amd64 ppc64 ppc64el))
 	CFLAGS := $(CFLAGS:-g=-g1)
 endif
 
+# The 32-bit x86 build requires SSE2
+ifneq (,$(filter $(DEB_HOST_ARCH),i386))
+	CFLAGS += -msse2 -mfpmath=sse
+endif
+
 # See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=81426
-ifneq (,$(filter $(DEB_HOST_ARCH),sh3 sh4 powerpc))
+ifneq (,$(filter $(DEB_HOST_ARCH),armhf sh3 sh4 powerpc))
 	CFLAGS := $(CFLAGS:-O2=-O1)
 endif
 
@@ -51,7 +56,9 @@ else
 	CPPFLAGS += -DNDEBUG -DG_DISABLE_CAST_CHECKS
 endif
 
+# openjpeg2 is not in Ubuntu main yet https://launchpad.net/bugs/711061
 ifeq ($(shell dpkg-vendor --derives-from Ubuntu && echo yes),yes)
+	EXTRA_CMAKE_ARGUMENTS += -DUSE_OPENJPEG=OFF
 	CPPFLAGS += -DUSER_AGENT_GTK_DISTRIBUTOR_NAME='"Ubuntu"'
 else
 	# gstreamer1.0-libav is not in Ubuntu "main"
@@ -59,7 +66,7 @@ else
 endif
 
 %:
-	dh $@ --with gir
+	dh $@ --with gir --buildsystem=cmake+ninja
 
 override_dh_auto_configure:
 	CXXFLAGS="$(CFLAGS)" \
