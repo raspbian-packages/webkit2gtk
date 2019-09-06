@@ -2277,7 +2277,7 @@ RetainPtr<CFDataRef> WebPage::pdfSnapshotAtSize(const IntRect& rect, const IntSi
     CGPDFContextClose(pdfContext.get());
 #endif
 
-    return WTFMove(data);
+    return data;
 }
 #endif
 
@@ -5797,9 +5797,9 @@ void WebPage::determinePrimarySnapshottedPlugIn()
             IntRect plugInRectRelativeToTopDocument(plugInRectRelativeToView.location() + scrollPosition, plugInRectRelativeToView.size());
             HitTestResult hitTestResult(plugInRectRelativeToTopDocument.center());
 
-            if (!mainFrameView->renderView())
+            if (!mainFrame() || !mainFrame()->document())
                 return;
-            mainFrameView->renderView()->hitTest(request, hitTestResult);
+            mainFrame()->document()->hitTest(request, hitTestResult);
 
             RefPtr<Element> element = hitTestResult.targetElement();
             if (!element)
@@ -6059,7 +6059,7 @@ Ref<DocumentLoader> WebPage::createDocumentLoader(Frame& frame, const ResourceRe
         }
     }
 
-    return WTFMove(documentLoader);
+    return documentLoader;
 }
 
 void WebPage::updateCachedDocumentLoader(WebDocumentLoader& documentLoader, Frame& frame)

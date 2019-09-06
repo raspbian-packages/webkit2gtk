@@ -1,3 +1,44 @@
+================
+WebKitGTK 2.24.4
+================
+
+What's new in WebKitGTK 2.24.4?
+
+  - Updated the user agent string to make happy certain websites which
+    would claim that the browser being used was unsupported.
+  - Improve loading of multimedia streams to avoid memory exhaustion due
+    to excessive caching.
+  - Fix display of documents with MIME type application/xml in the Web
+    Inspector, when loaded using XmlHttpRequest.
+  - Fix a hang while scrolling certain websites which include HLS video
+    content (Twitter, for example).
+  - Fix rounding artifacts in volume levels for media playback.
+  - Fix several crashes and rendering issues.
+  - Fix the build with video track support disabled.
+  - Fix the build with OpenGL support disabled.
+  - Fix build issue which would cause media controls to disappear when
+    Python 3.x was used during the build process.
+
+=================
+WebKitGTK  2.24.3
+=================
+
+What's new in WebKitGTK 2.24.3?
+
+  - Deprecate WebSQL APIs.
+  - Make Previous/Next gesture work in RTL mode.
+  - Fix content disappearing when using CSS transforms.
+  - Fix rendering artifacts in youtube volume button.
+  - Fix trapezoid artifact in github comment box.
+  - Fix video pause that sometimes caused to skip to finish.
+  - Fix volume level changes when playing a video.
+  - Fix HLS streams being slow to start.
+  - Fix some radio streams that could not be played.
+  - Fix the build with older versions of GStreamer.
+  - Fix the build with video and audio disabled.
+  - Fix several crashes and rendering issues.
+  - Translation updates: Brazilian Portuguese.
+
 =================
 WebKitGTK  2.24.2
 =================

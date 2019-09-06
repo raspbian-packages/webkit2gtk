@@ -61,7 +61,7 @@ static inline bool canReferToParentFrameEncoding(const Frame* frame, const Frame
 // This is only called by ScriptController::executeIfJavaScriptURL
 // and always contains the result of evaluating a javascript: url.
 // This is the <iframe src="javascript:'html'"> case.
-void DocumentWriter::replaceDocument(const String& source, Document* ownerDocument)
+void DocumentWriter::replaceDocumentWithResultOfExecutingJavascriptURL(const String& source, Document* ownerDocument)
 {
     m_frame->loader().stopAllLoaders();
 
@@ -137,20 +137,21 @@ bool DocumentWriter::begin(const URL& urlReference, bool dispatch, Document* own
     // FIXME: Do we need to consult the content security policy here about blocked plug-ins?
 
     bool shouldReuseDefaultView = m_frame->loader().stateMachine().isDisplayingInitialEmptyDocument() && m_frame->document()->isSecureTransitionTo(url);
-    if (shouldReuseDefaultView)
-        document->takeDOMWindowFrom(*m_frame->document());
-    else
-        document->createDOMWindow();
 
-    // Per <http://www.w3.org/TR/upgrade-insecure-requests/>, we need to retain an ongoing set of upgraded
-    // requests in new navigation contexts. Although this information is present when we construct the
-    // Document object, it is discard in the subsequent 'clear' statements below. So, we must capture it
-    // so we can restore it.
-    HashSet<SecurityOriginData> insecureNavigationRequestsToUpgrade;
-    if (auto* existingDocument = m_frame->document())
-        insecureNavigationRequestsToUpgrade = existingDocument->contentSecurityPolicy()->takeNavigationRequestsToUpgrade();
-    
-    m_frame->loader().clear(document.ptr(), !shouldReuseDefaultView, !shouldReuseDefaultView);
+    // Temporarily extend the lifetime of the existing document so that FrameLoader::clear() doesn't destroy it as
+    // we need to retain its ongoing set of upgraded requests in new navigation contexts per <http://www.w3.org/TR/upgrade-insecure-requests/>
+    // and we may also need to inherit its Content Security Policy in FrameLoader::didBeginDocument().
+    RefPtr<Document> existingDocument = m_frame->document();
+    auto* previousContentSecurityPolicy = existingDocument ? existingDocument->contentSecurityPolicy() : nullptr;
+
+    WTF::Function<void()> handleDOMWindowCreation = [this, document = document.copyRef(), url] {
+        if (m_frame->loader().stateMachine().isDisplayingInitialEmptyDocument() && m_frame->document()->isSecureTransitionTo(url))
+            document->takeDOMWindowFrom(*m_frame->document());
+        else
+            document->createDOMWindow();
+    };
+
+    m_frame->loader().clear(document.ptr(), !shouldReuseDefaultView, !shouldReuseDefaultView, true, WTFMove(handleDOMWindowCreation));
     clear();
 
     // m_frame->loader().clear() might fire unload event which could remove the view of the document.
@@ -164,7 +165,8 @@ bool DocumentWriter::begin(const URL& urlReference, bool dispatch, Document* own
     m_frame->loader().setOutgoingReferrer(url);
     m_frame->setDocument(document.copyRef());
 
-    document->contentSecurityPolicy()->setInsecureNavigationRequestsToUpgrade(WTFMove(insecureNavigationRequestsToUpgrade));
+    if (previousContentSecurityPolicy)
+        document->contentSecurityPolicy()->setInsecureNavigationRequestsToUpgrade(previousContentSecurityPolicy->takeNavigationRequestsToUpgrade());
 
     if (m_decoder)
         document->setDecoder(m_decoder.get());
@@ -174,7 +176,7 @@ bool DocumentWriter::begin(const URL& urlReference, bool dispatch, Document* own
         document->setStrictMixedContentMode(ownerDocument->isStrictMixedContentMode());
     }
 
-    m_frame->loader().didBeginDocument(dispatch);
+    m_frame->loader().didBeginDocument(dispatch, previousContentSecurityPolicy);
 
     document->implicitOpen();
 
