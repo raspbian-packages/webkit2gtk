@@ -1,54 +1,95 @@
-webkit2gtk (2.24.4-1~deb10u1+rpi1) buster-staging; urgency=medium
+webkit2gtk (2.26.1-3~deb10u1+rpi1) buster-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
- -- Raspbian forward porter <root@raspbian.org>  Fri, 06 Sep 2019 19:28:25 +0000
+ -- Raspbian forward porter <root@raspbian.org>  Tue, 05 Nov 2019 19:28:53 +0000
 
-webkit2gtk (2.24.4-1~deb10u1) buster-security; urgency=high
+webkit2gtk (2.26.1-3~deb10u1) buster-security; urgency=high
 
   * Rebuild for buster-security.
-  * The WebKitGTK security advisory WSA-2019-0004 lists the following
+  * debian/patches/force-single-process.patch:
+    + Force the single-process mode in Evolution and Geary
+  * debian/control:
+    + Remove Breaks for Evolution < 3.34.1.
+  * The WebKitGTK security advisory WSA-2019-0005 lists the following
     security fixes in the latest versions of WebKitGTK:
-    + CVE-2019-8671, CVE-2019-8672, CVE-2019-8677, CVE-2019-8679 and
-      CVE-2019-8686 (fixed in 2.24.2)
-    + CVE-2019-8666, CVE-2019-8673, CVE-2019-8676, CVE-2019-8681,
-      CVE-2019-8687, CVE-2019-8689, and CVE-2019-8690 (fixed in 2.24.3)
-    + CVE-2019-8644, CVE-2019-8649, CVE-2019-8658, CVE-2019-8669,
-      CVE-2019-8678, CVE-2019-8680, CVE-2019-8683, CVE-2019-8684 and
-      CVE-2019-8688 (fixed in 2.24.4)
+    + CVE-2019-8768 (fixed in 2.24.0).
+    + CVE-2019-8735 (fixed in 2.24.2).
+    + CVE-2019-8726 (fixed in 2.24.3).
+    + CVE-2019-8674, CVE-2019-8707, CVE-2019-8719, CVE-2019-8733 and
+      CVE-2019-8763 (fixed in 2.24.4).
+    + CVE-2019-8625, CVE-2019-8720, CVE-2019-8769 and CVE-2019-8771
+      (fixed in 2.26.0).
 
- -- Alberto Garcia <berto@igalia.com>  Wed, 04 Sep 2019 11:41:19 +0300
+ -- Alberto Garcia <berto@igalia.com>  Mon, 04 Nov 2019 11:08:53 +0200
 
-webkit2gtk (2.24.4-1) unstable; urgency=medium
+webkit2gtk (2.26.1-3) unstable; urgency=medium
 
-  * New upstream release (Closes: #931807).
+  * debian/rules:
+    + Use -DWTF_CPU_ARM64_CORTEXA53=OFF to fix the arm64 build.
+  * debian/patches/force-single-process.patch:
+    + Don't use this workaround for Evolution anymore, the fixed version
+      is now in unstable.
+  * debian/control:
+    + Add Breaks for Evolution < 3.34.1.
+    + Update Standards-Version to 4.4.1 (no changes).
+
+ -- Alberto Garcia <berto@igalia.com>  Wed, 09 Oct 2019 12:22:19 +0300
+
+webkit2gtk (2.26.1-2) unstable; urgency=medium
+
+  * debian/patches/force-single-process.patch:
+    + Force the single-process mode in Evolution and Geary.
+  * debian/gbp.conf:
+    + Update upstream branch name.
+
+ -- Alberto Garcia <berto@igalia.com>  Mon, 07 Oct 2019 16:59:20 +0300
+
+webkit2gtk (2.26.1-1) experimental; urgency=medium
+
+  [ Jeremy Bicha ]
+  * Suggest instead of Recommend gstreamer1.0-libav on Ubuntu
+
+  [ Alberto Garcia ]
+  * New upstream release.
+
+ -- Alberto Garcia <berto@igalia.com>  Mon, 23 Sep 2019 15:55:10 +0300
+
+webkit2gtk (2.26.0-1) experimental; urgency=medium
+
+  * New upstream release.
+  * debian/watch:
+    + Scan stable releases only.
+  * debian/copyright:
+    + Remove nonexistent files.
+  * Add a dummy libwebkit2gtk-4.0-37-gtk2 with a transition plan for
+    people who still need to use Flash.
+    + debian/control:
+      - Add the package, suggest browser-plugin-freshplayer-pepperflash.
+    + debian/libwebkit2gtk-4.0-37-gtk2.NEWS:
+      - Add news item about the Flash transition plan.
+
+ -- Alberto Garcia <berto@igalia.com>  Tue, 10 Sep 2019 16:22:11 +0300
+
+webkit2gtk (2.25.92-1) experimental; urgency=medium
+
+  * New upstream development release.
+  * Refresh all patches.
+  * debian/source/lintian-overrides:
+    + Update source-is-missing override.
   * debian/libwebkit2gtk-4.0-37.symbols:
     + Update symbols.
 
- -- Alberto Garcia <berto@igalia.com>  Wed, 28 Aug 2019 14:33:00 +0300
+ -- Alberto Garcia <berto@igalia.com>  Tue, 03 Sep 2019 15:14:06 +0300
 
-webkit2gtk (2.24.3-1) unstable; urgency=medium
+webkit2gtk (2.25.4-1) experimental; urgency=medium
 
-  * New upstream release (Closes: #929749).
-  * debian/control:
-    + Recommend gstreamer1.0-libav. This package allows the user to play
-      most internet videos (Closes: #870814).
-
- -- Alberto Garcia <berto@igalia.com>  Tue, 02 Jul 2019 13:03:13 +0300
-
-webkit2gtk (2.24.2-2) unstable; urgency=high
-
-  * The WebKitGTK security advisory WSA-2019-0003 lists the following
-    security fixes in the latest versions of WebKitGTK+:
-    + CVE-2019-8571, CVE-2019-8583, CVE-2019-8586, CVE-2019-8594,
-      CVE-2019-8609, CVE-2019-8611, CVE-2019-8622 and CVE-2019-8623
-      (fixed in 2.24.0).
-    + CVE-2019-6237, CVE-2019-8584, CVE-2019-8587, CVE-2019-8596,
-      CVE-2019-8597, CVE-2019-8601, CVE-2019-8608, CVE-2019-8610 and
-      CVE-2019-8619 (fixed in 2.24.1).
-    + CVE-2019-8595, CVE-2019-8607 and CVE-2019-8615 (fixed in 2.24.2).
+  * New upstream development release.
+  * Refresh all patches.
+  * debian/source/lintian-overrides:
+    + Update source-is-missing override.
   * Use the CLoop Javascript interpreter in i386 and stop telling gcc to
     use SSE2 instructions (Closes: #930935).
     + debian/rules:
@@ -58,8 +99,54 @@ webkit2gtk (2.24.2-2) unstable; urgency=high
       - Don't check for SSE2 support.
     + debian/NEWS:
       - Remove item about the requirement to have an SSE2-capable CPU.
+  * WebKitGTK 2.25.3 no longer ships the GTK 2 plugin process:
+    + debian/control:
+      - Drop build dependency on libgtk2.0-dev.
+      - Remove the libwebkit2gtk-4.0-37-gtk2 package.
+    + debian/NEWS:
+      - Add item explaining the removal of the GTK 2 plugin process.
+    + debian/libwebkit2gtk-4.0-37-gtk2.install:
+      - Drop this file.
+  * debian/control:
+    + Recommend gstreamer1.0-libav. This package allows the user to play
+      most internet videos (Closes: #870814).
+    + Update Standards-Version to 4.4.0 (no changes).
+  * debian/libwebkit2gtk-4.0-37.symbols:
+    + Update symbols.
 
- -- Alberto Garcia <berto@igalia.com>  Mon, 24 Jun 2019 16:34:09 +0300
+ -- Alberto Garcia <berto@igalia.com>  Fri, 09 Aug 2019 11:52:26 +0200
+
+webkit2gtk (2.25.2-1) experimental; urgency=medium
+
+  * New upstream development release.
+  * debian/patches/webdriver-path.patch,
+    debian/patches/fix-ftbfs-hurd.patch:
+    + Remove.
+  * debian/patches/detect-woff.patch
+    + Refresh.
+  * debian/rules:
+    + Build with -DUSE_WPE_RENDERER=OFF.
+
+ -- Alberto Garcia <berto@igalia.com>  Mon, 17 Jun 2019 23:39:56 +0300
+
+webkit2gtk (2.25.1-1) experimental; urgency=medium
+
+  * New upstream development release.
+  * Refresh all patches.
+  * debian/rules:
+    + Don't add -msse2 manually to CFLAGS, WebKitGTK does this automatically
+      now.
+  * debian/control:
+    + Add build and runtime dependencies on bubblewrap, xdg-dbus-proxy and
+      libseccomp-dev (ENABLE_BUBBLEWRAP_SANDBOX is now on by default).
+  * debian/patches/webdriver-path.patch:
+    + Fix name of the WebKitWebDriver executable.
+  * debian/watch, debian/gbp.conf:
+    + Update for 2.25.x packages in experimental.
+  * debian/libwebkit2gtk-4.0-37.symbols:
+    + Update symbols.
+
+ -- Alberto Garcia <berto@igalia.com>  Mon, 03 Jun 2019 18:35:12 +0300
 
 webkit2gtk (2.24.2-1) unstable; urgency=medium
 

@@ -29,6 +29,11 @@ ifneq (,$(filter $(DEB_HOST_ARCH),i386))
 	EXTRA_CMAKE_ARGUMENTS += -DENABLE_JIT=OFF -DENABLE_C_LOOP=ON
 endif
 
+# See https://bugs.webkit.org/show_bug.cgi?id=197192
+ifneq (,$(filter $(DEB_HOST_ARCH),arm64))
+	EXTRA_CMAKE_ARGUMENTS += -DWTF_CPU_ARM64_CORTEXA53=OFF
+endif
+
 # See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=81426
 ifneq (,$(filter $(DEB_HOST_ARCH),armhf sh3 sh4 powerpc))
 	CFLAGS := $(CFLAGS:-O2=-O1)
@@ -61,9 +66,14 @@ endif
 ifeq ($(shell dpkg-vendor --derives-from Ubuntu && echo yes),yes)
 	EXTRA_CMAKE_ARGUMENTS += -DUSE_OPENJPEG=OFF
 	CPPFLAGS += -DUSER_AGENT_GTK_DISTRIBUTOR_NAME='"Ubuntu"'
+endif
+
+# gstreamer1.0-libav is not in Ubuntu "main"
+override_dh_gencontrol:
+ifeq ($(shell dpkg-vendor --derives-from Ubuntu && echo yes),yes)
+	dh_gencontrol -- -Vgst:Suggests="gstreamer1.0-libav"
 else
-	# gstreamer1.0-libav is not in Ubuntu "main"
-	DEB_DH_GENCONTROL_ARGS += -- -Vgst:Recommends="gstreamer1.0-libav"
+	dh_gencontrol -- -Vgst:Recommends="gstreamer1.0-libav"
 endif
 
 %:
@@ -79,6 +89,7 @@ override_dh_auto_configure:
 	   -DCMAKE_CXX_FLAGS_RELEASE="" \
 	   -DCMAKE_CXX_FLAGS_DEBUG="" \
 	   -DENABLE_MINIBROWSER=ON \
+	   -DUSE_WPE_RENDERER=OFF \
 	   $(EXTRA_CMAKE_ARGUMENTS)
 
 # Create a dummy doc directory in case the "nodoc" build option is set
