@@ -52,7 +52,11 @@ struct SameSizeAsShadowRoot : public DocumentFragment, public TreeScope {
     void* slotAssignment;
 };
 
+#if defined(__m68k__)
+COMPILE_ASSERT(sizeof(ShadowRoot) <= sizeof(SameSizeAsShadowRoot), shadowroot_should_stay_small);
+#else
 COMPILE_ASSERT(sizeof(ShadowRoot) == sizeof(SameSizeAsShadowRoot), shadowroot_should_stay_small);
+#endif
 
 ShadowRoot::ShadowRoot(Document& document, ShadowRootMode type)
     : DocumentFragment(document, CreateShadowRoot)
