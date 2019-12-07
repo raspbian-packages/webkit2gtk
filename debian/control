@@ -57,7 +57,8 @@ Build-Depends: gawk,
                ninja-build,
                libegl1-mesa-dev,
                libgl1-mesa-dev [!armel !armhf !arm64],
-               libgles2-mesa-dev
+               libgles2-mesa-dev,
+               python
 Build-Conflicts: gir-repository-dev
 Standards-Version: 4.4.1
 Vcs-Browser: https://salsa.debian.org/webkit-team/webkit

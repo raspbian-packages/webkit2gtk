@@ -5,6 +5,9 @@ webkit2gtk (2.26.2-1+rpi1) bullseye-staging; urgency=medium
     (previously it failed to build with assembler errors, nowadays it apparently
     builds but does not work)
 
+  [changes introduced in 2.26.2-1+rpi1 by Peter Michael Green]
+  * Add build-depends on python.
+
  -- Peter Michael Green <plugwash@raspbian.org>  Sat, 07 Dec 2019 04:48:23 +0000
 
 webkit2gtk (2.26.2-1) unstable; urgency=medium
