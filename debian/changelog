@@ -1,4 +1,4 @@
-webkit2gtk (2.26.2-1+rpi1) bullseye-staging; urgency=medium
+webkit2gtk (2.26.3-1+rpi1) bullseye-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
@@ -8,7 +8,58 @@ webkit2gtk (2.26.2-1+rpi1) bullseye-staging; urgency=medium
   [changes introduced in 2.26.2-1+rpi1 by Peter Michael Green]
   * Add build-depends on python.
 
- -- Peter Michael Green <plugwash@raspbian.org>  Sat, 07 Dec 2019 04:48:23 +0000
+ -- Raspbian forward porter <root@raspbian.org>  Tue, 28 Jan 2020 17:53:00 +0000
+
+webkit2gtk (2.26.3-1) unstable; urgency=high
+
+  * New upstream release.
+  * The WebKitGTK security advisory WSA-2019-0006 lists the following
+    security fixes in the latest versions of WebKitGTK:
+    + CVE-2019-8765, CVE-2019-8821, CVE-2019-8822 (fixed in 2.24.4)
+    + CVE-2019-8710, CVE-2019-8743, CVE-2019-8764, CVE-2019-8766,
+      CVE-2019-8782, CVE-2019-8808, CVE-2019-8815 (fixed in 2.26.0)
+    + CVE-2019-8783, CVE-2019-8811, CVE-2019-8813, CVE-2019-8816,
+      CVE-2019-8819, CVE-2019-8820, CVE-2019-8823 (fixed in 2.26.1)
+    + CVE-2019-8812, CVE-2019-8814 (fixed in 2.26.2)
+  * Build without the bubblewrap sandbox if the required dependencies are
+    not available (Closes: #944731):
+    + debian/rules:
+      - Pass -DENABLE_BUBBLEWRAP_SANDBOX depending on whether libseccomp
+        is installed.
+      - Add runtime dependencies on bubblewrap and xdg-dbus-proxy
+        conditionally to the status of ENABLE_BUBBLEWRAP_SANDBOX.
+    + debian/control:
+      - Don't require bubblewrap, xdg-dbus-proxy or libseccomp-dev in
+        alpha, ia64, m68k, riscv64, sh4 or sparc64.
+  * Enable USE_WPE_RENDERER:
+    + debian/control:
+      - Add build dependency on libwpebackend-fdo-1.0-dev.
+    + debian/rules:
+      - Set USE_WPE_RENDERER depending on whether wpebackend-fdo is
+        available or not (this allows disabling it by simply removing the
+        build dependency).
+  * debian/rules:
+    + Use -g1 in all builds. The webkit2gtk debug packages are huge and
+      I'm not convinced that they have been very useful for reporting
+      bugs. Using -g1 is enough for a basic backtrace and it makes the
+      packages easier to handle.
+    + Install the NEWS file using debian/libwebkit2gtk-4.0-37.docs.
+  * debian/control:
+    + Switch build dependency from libenchant-dev to libenchant-2-dev
+      (Closes: #948106).
+    + Add build dependency on libx11-xcb-dev (Closes: #949430).
+    + Add Rules-Requires-Root: no.
+  * debian/patches/use-python3.patch:
+    + The unversioned python interpreter (i.e. Python 2) is not installed
+      by default anymore, so use Python 3 instead (Closes: #948839).
+  * debian/patches/user-agent-branding.patch:
+    + Refresh.
+  * debian/libwebkit2gtk-4.0-37.symbols:
+    + Add Build-Depends-Package field.
+  * debian/copyright:
+    + Update copyright years.
+
+ -- Alberto Garcia <berto@igalia.com>  Wed, 22 Jan 2020 13:44:09 +0100
 
 webkit2gtk (2.26.2-1) unstable; urgency=medium
 

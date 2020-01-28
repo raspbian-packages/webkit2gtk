@@ -9,6 +9,7 @@ CFLAGS = $(shell dpkg-buildflags --get CFLAGS)
 LDFLAGS = $(shell dpkg-buildflags --get LDFLAGS) -Wl,--as-needed
 
 EXTRA_CMAKE_ARGUMENTS =
+DH_GENCONTROL_ARGS =
 
 # Sacrifice speed in order to make it more likely resource limits
 # won't be hit.
@@ -17,11 +18,8 @@ ifeq ($(DEB_BUILD_ARCH_BITS),32)
 endif
 
 # The debug packages produced by webkit are huge and cause problems in
-# most buildds, so use -g1 in all architectures except the ones that
-# are known to work fine
-ifeq (,$(filter $(DEB_HOST_ARCH),amd64 ppc64 ppc64el))
-	CFLAGS := $(CFLAGS:-g=-g1)
-endif
+# most buildds. Use -g1 in all architectures to make them smaller.
+CFLAGS := $(CFLAGS:-g=-g1)
 
 # Use the CLoop Javascript interpreter and disable the JIT. This is
 # slow but it is the most compatible solution for old (non-SSE2) CPUs.
@@ -57,6 +55,21 @@ else
 	CPPFLAGS += -DNDEBUG -DG_DISABLE_CAST_CHECKS
 endif
 
+# Disable the bubblewrap sandbox if libseccomp-dev is not available
+ifeq ($(shell pkg-config --exists libseccomp && echo yes),yes)
+	EXTRA_CMAKE_ARGUMENTS += -DENABLE_BUBBLEWRAP_SANDBOX=ON
+	DH_GENCONTROL_ARGS += -Vbwrap:Depends="bubblewrap (>= 0.3.1), xdg-dbus-proxy"
+else
+	EXTRA_CMAKE_ARGUMENTS += -DENABLE_BUBBLEWRAP_SANDBOX=OFF
+endif
+
+# Disable the WPE renderer if libwpebackend-fdo-1.0-dev is not available
+ifeq ($(shell pkg-config --exists wpebackend-fdo-1.0 && echo yes),yes)
+	EXTRA_CMAKE_ARGUMENTS += -DUSE_WPE_RENDERER=ON
+else
+	EXTRA_CMAKE_ARGUMENTS += -DUSE_WPE_RENDERER=OFF
+endif
+
 # openjpeg2 is not in Ubuntu main yet https://launchpad.net/bugs/711061
 ifeq ($(shell dpkg-vendor --derives-from Ubuntu && echo yes),yes)
 	EXTRA_CMAKE_ARGUMENTS += -DUSE_OPENJPEG=OFF
@@ -64,12 +77,14 @@ ifeq ($(shell dpkg-vendor --derives-from Ubuntu && echo yes),yes)
 endif
 
 # gstreamer1.0-libav is not in Ubuntu "main"
-override_dh_gencontrol:
 ifeq ($(shell dpkg-vendor --derives-from Ubuntu && echo yes),yes)
-	dh_gencontrol -- -Vgst:Suggests="gstreamer1.0-libav"
+	DH_GENCONTROL_ARGS += -Vgst:Suggests="gstreamer1.0-libav"
 else
-	dh_gencontrol -- -Vgst:Recommends="gstreamer1.0-libav"
+	DH_GENCONTROL_ARGS += -Vgst:Recommends="gstreamer1.0-libav"
 endif
+
+override_dh_gencontrol:
+	dh_gencontrol -- $(DH_GENCONTROL_ARGS)
 
 %:
 	dh $@ --with gir --buildsystem=cmake+ninja
@@ -84,7 +99,6 @@ override_dh_auto_configure:
 	   -DCMAKE_CXX_FLAGS_RELEASE="" \
 	   -DCMAKE_CXX_FLAGS_DEBUG="" \
 	   -DENABLE_MINIBROWSER=ON \
-	   -DUSE_WPE_RENDERER=OFF \
 	   $(EXTRA_CMAKE_ARGUMENTS)
 
 # Create a dummy doc directory in case the "nodoc" build option is set
@@ -96,9 +110,6 @@ override_dh_install:
 override_dh_makeshlibs:
 	dh_makeshlibs -plibwebkit2gtk-4.0-37 -Xinjected-bundle
 	dh_makeshlibs -plibjavascriptcoregtk-4.0-18
-
-override_dh_installdocs:
-	dh_installdocs -A NEWS
 
 override_dh_missing:
 	dh_missing --fail-missing
