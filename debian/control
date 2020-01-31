@@ -7,9 +7,9 @@ Uploaders: Gustavo Noronha Silva <kov@debian.org>,
            Alberto Garcia <berto@igalia.com>
 X-Ubuntu-Use-Langpack: no
 Build-Depends: gawk,
-               bubblewrap (>= 0.3.1),
-               xdg-dbus-proxy,
-               libseccomp-dev,
+               bubblewrap (>= 0.3.1) [!alpha !ia64 !m68k !riscv64 !sh4 !sparc64],
+               xdg-dbus-proxy [!alpha !ia64 !m68k !riscv64 !sh4 !sparc64],
+               libseccomp-dev [!alpha !ia64 !m68k !riscv64 !sh4 !sparc64],
                cmake (>= 3.3),
                debhelper (>= 11.2~),
                libfile-copy-recursive-perl,
@@ -41,10 +41,11 @@ Build-Depends: gawk,
                libpng-dev,
                libtasn1-6-dev,
                libwebp-dev,
+               libx11-xcb-dev,
                libxt-dev,
                libgstreamer1.0-dev (>= 1.13.1),
                libgstreamer-plugins-base1.0-dev (>= 1.13.1),
-               libenchant-dev (>= 0.22),
+               libenchant-dev,
                gtk-doc-tools,
                libglib2.0-doc,
                libgtk-3-doc,
@@ -60,6 +61,7 @@ Build-Depends: gawk,
                libgles2-mesa-dev
 Build-Conflicts: gir-repository-dev
 Standards-Version: 4.4.1
+Rules-Requires-Root: no
 Vcs-Browser: https://salsa.debian.org/webkit-team/webkit
 Vcs-Git: https://salsa.debian.org/webkit-team/webkit.git
 Homepage: https://webkitgtk.org/
@@ -139,8 +141,7 @@ Architecture: linux-any
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends}
 Depends: libjavascriptcoregtk-4.0-18 (= ${binary:Version}),
-         bubblewrap (>= 0.3.1),
-         xdg-dbus-proxy,
+         ${bwrap:Depends},
          ${shlibs:Depends},
          ${misc:Depends}
 Recommends: gstreamer1.0-plugins-good,
