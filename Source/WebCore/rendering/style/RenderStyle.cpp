@@ -66,7 +66,11 @@ struct SameSizeAsBorderValue {
     int m_restBits;
 };
 
+#if defined(__m68k__)
+COMPILE_ASSERT(sizeof(BorderValue) <= sizeof(SameSizeAsBorderValue), BorderValue_should_not_grow);
+#else
 COMPILE_ASSERT(sizeof(BorderValue) == sizeof(SameSizeAsBorderValue), BorderValue_should_not_grow);
+#endif
 
 struct SameSizeAsRenderStyle {
     void* dataRefs[7];
@@ -84,7 +88,11 @@ struct SameSizeAsRenderStyle {
 #endif
 };
 
+#if defined(__m68k__)
+static_assert(sizeof(RenderStyle) <= sizeof(SameSizeAsRenderStyle), "RenderStyle should stay small");
+#else
 static_assert(sizeof(RenderStyle) == sizeof(SameSizeAsRenderStyle), "RenderStyle should stay small");
+#endif
 
 RenderStyle& RenderStyle::defaultStyle()
 {
