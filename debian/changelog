@@ -1,16 +1,14 @@
-webkit2gtk (2.26.3-1~deb10u1+rpi1) buster-staging; urgency=medium
+webkit2gtk (2.26.4-1~deb10u1+rpi1) buster-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
- -- Raspbian forward porter <root@raspbian.org>  Fri, 31 Jan 2020 13:18:18 +0000
+ -- Peter Michael Green <plugwash@raspbian.org>  Tue, 18 Feb 2020 15:31:56 +0000
 
-webkit2gtk (2.26.3-1~deb10u1) buster-security; urgency=medium
+webkit2gtk (2.26.4-1~deb10u1) buster-security; urgency=medium
 
-  * Rebuild for buster-security.
-    + This fixes CVE-2019-8835, CVE-2019-8844 and CVE-2019-8846.
-      See https://webkitgtk.org/security/WSA-2020-0001.html.
+  * Rebuild for buster-backports.
   * debian/patches/force-single-process.patch:
     + Force the single-process mode in Evolution and Geary
   * debian/control:
@@ -18,7 +16,37 @@ webkit2gtk (2.26.3-1~deb10u1) buster-security; urgency=medium
     + Remove build dependency on libwpebackend-fdo-1.0-dev.
     + Switch build dependency from libenchant-2-dev to libenchant-dev.
 
- -- Alberto Garcia <berto@igalia.com>  Wed, 29 Jan 2020 11:39:55 +0100
+ -- Alberto Garcia <berto@igalia.com>  Mon, 17 Feb 2020 11:02:17 +0100
+
+webkit2gtk (2.26.4-1) unstable; urgency=high
+
+  * New upstream release.
+  * The WebKitGTK security advisory WSA-2020-0001 lists the following
+    security fixes in the latest versions of WebKitGTK:
+    + CVE-2019-8835, CVE-2019-8844, CVE-2019-8846 (fixed in 2.26.3)
+  * The WebKitGTK security advisory WSA-2020-0002 lists the following
+    security fixes in the latest versions of WebKitGTK:
+    + CVE-2020-3862, CVE-2020-3864, CVE-2020-3865, CVE-2020-3867,
+      CVE-2020-3868 (fixed in 2.26.4)
+  * debian/rules:
+    + Don't use the Gold linker on powerpc (Closes: #949618).
+    + Run dh with --builddirectory=build. Some source files are generated
+      inside this directory and are later referenced from the .gir files
+      so their path names should be independent from the architecture.
+  * debian/control:
+    + Mark libwebkit2gtk-4.0-doc and libwebkit2gtk-4.0-37-gtk2 as
+      Multi-Arch: foreign.
+    + Update Standards-Version to 4.5.0 (no changes).
+  * debian/patches/reduce-memory-overheads.patch:
+    + Reduce memory usage when not using the Gold linker
+      (Closes: #949621).
+  * debian/patches/fix-ftbfs-m68k.patch:
+    + Update to make it work with the current release (Closes: #949660).
+  * debian/patches/detect-woff.patch:
+    + Refresh.
+  * Add debian/upstream/metadata.
+
+ -- Alberto Garcia <berto@igalia.com>  Fri, 14 Feb 2020 14:55:40 +0100
 
 webkit2gtk (2.26.3-1) unstable; urgency=high
 
@@ -3260,4 +3288,3 @@ webkit (0~svn24735-1) unstable; urgency=low
   * Initial release. (Closes: #428855)
 
  -- Mike Hommey <glandium@debian.org>  Wed, 15 Aug 2007 14:19:46 +0200
-

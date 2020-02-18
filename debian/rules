@@ -37,6 +37,11 @@ ifneq (,$(filter $(DEB_HOST_ARCH),armel armhf))
 	EXTRA_CMAKE_ARGUMENTS += -DENABLE_JIT=OFF
 endif
 
+# Disable Gold where it causes build problems, see #949618
+ifneq (,$(filter $(DEB_HOST_ARCH),powerpc))
+	EXTRA_CMAKE_ARGUMENTS += -DUSE_LD_GOLD=OFF
+endif
+
 ifneq (,$(filter noopt,$(DEB_BUILD_OPTIONS)))
 	EXTRA_CMAKE_ARGUMENTS += -DUSE_SYSTEM_MALLOC=ON
 	CPPFLAGS += -DRELEASE_WITHOUT_OPTIMIZATIONS
@@ -83,11 +88,11 @@ else
 	DH_GENCONTROL_ARGS += -Vgst:Recommends="gstreamer1.0-libav"
 endif
 
+%:
+	dh $@ --with gir --buildsystem=cmake+ninja --builddirectory=build
+
 override_dh_gencontrol:
 	dh_gencontrol -- $(DH_GENCONTROL_ARGS)
-
-%:
-	dh $@ --with gir --buildsystem=cmake+ninja
 
 override_dh_auto_configure:
 	CXXFLAGS="$(CFLAGS)" \

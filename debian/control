@@ -60,7 +60,7 @@ Build-Depends: gawk,
                libgl1-mesa-dev [!armel !armhf !arm64],
                libgles2-mesa-dev
 Build-Conflicts: gir-repository-dev
-Standards-Version: 4.4.1
+Standards-Version: 4.5.0
 Rules-Requires-Root: no
 Vcs-Browser: https://salsa.debian.org/webkit-team/webkit
 Vcs-Git: https://salsa.debian.org/webkit-team/webkit.git
@@ -195,6 +195,7 @@ Description: Web content engine library for GTK - development files
 Package: libwebkit2gtk-4.0-doc
 Section: doc
 Architecture: all
+Multi-Arch: foreign
 Depends: ${misc:Depends}
 Suggests: devhelp
 Description: Web content engine library for GTK - documentation
@@ -240,6 +241,7 @@ Description: Web content engine library for GTK - GObject introspection data
 Package: libwebkit2gtk-4.0-37-gtk2
 Section: oldlibs
 Architecture: all
+Multi-Arch: foreign
 Depends: ${misc:Depends}
 Suggests: browser-plugin-freshplayer-pepperflash
 Description: Transitional dummy package
