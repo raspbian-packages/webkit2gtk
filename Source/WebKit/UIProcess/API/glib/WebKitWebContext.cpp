@@ -348,16 +348,8 @@ ALLOW_DEPRECATED_DECLARATIONS_END
         configuration.setLocalStorageDirectory(FileSystem::stringFromFileSystemRepresentation(priv->localStorageDirectory.data()));
 
     const char* useSingleWebProcess = getenv("WEBKIT_USE_SINGLE_WEB_PROCESS");
-    if (useSingleWebProcess) {
-        if (strcmp(useSingleWebProcess, "0")) {
-            configuration.setUsesSingleWebProcess(true);
-        }
-    } else {
-        const char* prgname = g_get_prgname();
-        if (!g_strcmp0(prgname, "evolution") || !g_strcmp0(prgname, "geary")) {
-            configuration.setUsesSingleWebProcess(true);
-        }
-    }
+    if (useSingleWebProcess && strcmp(useSingleWebProcess, "0"))
+        configuration.setUsesSingleWebProcess(true);
     priv->processPool = WebProcessPool::create(configuration);
 
     if (!priv->websiteDataManager)

@@ -1,22 +1,10 @@
-webkit2gtk (2.26.4-1~deb10u1+rpi1) buster-staging; urgency=medium
+webkit2gtk (2.26.4-1+rpi2) bullseye-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
- -- Peter Michael Green <plugwash@raspbian.org>  Tue, 18 Feb 2020 15:31:56 +0000
-
-webkit2gtk (2.26.4-1~deb10u1) buster-security; urgency=medium
-
-  * Rebuild for buster-backports.
-  * debian/patches/force-single-process.patch:
-    + Force the single-process mode in Evolution and Geary
-  * debian/control:
-    + Remove Breaks for Evolution < 3.34.1.
-    + Remove build dependency on libwpebackend-fdo-1.0-dev.
-    + Switch build dependency from libenchant-2-dev to libenchant-dev.
-
- -- Alberto Garcia <berto@igalia.com>  Mon, 17 Feb 2020 11:02:17 +0100
+ -- Raspbian forward porter <root@raspbian.org>  Thu, 20 Feb 2020 12:44:22 +0000
 
 webkit2gtk (2.26.4-1) unstable; urgency=high
 
