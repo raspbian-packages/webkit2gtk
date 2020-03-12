@@ -93,6 +93,10 @@ elseif (LOWERCASE_CMAKE_SYSTEM_PROCESSOR MATCHES "^mips64")
     set(WTF_CPU_MIPS64 1)
 elseif (LOWERCASE_CMAKE_SYSTEM_PROCESSOR MATCHES "^mips")
     set(WTF_CPU_MIPS 1)
+elseif (CMAKE_CXX_LIBRARY_ARCHITECTURE MATCHES "(x64|x86_64|amd64)")
+    set(WTF_CPU_X86_64 1)
+elseif (CMAKE_CXX_LIBRARY_ARCHITECTURE MATCHES "(i[3-6]86|x86)")
+    set(WTF_CPU_X86 1)
 elseif (LOWERCASE_CMAKE_SYSTEM_PROCESSOR MATCHES "(x64|x86_64|amd64)")
     # FORCE_32BIT is set in the build script when --32-bit is passed
     # on a Linux/intel 64bit host. This allows us to produce 32bit
