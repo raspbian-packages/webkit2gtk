@@ -1,10 +1,17 @@
-webkit2gtk (2.26.4-1~deb10u2+rpi1) buster-staging; urgency=medium
+webkit2gtk (2.26.4-1~deb10u3+rpi1) buster-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
- -- Raspbian forward porter <root@raspbian.org>  Tue, 17 Mar 2020 02:31:23 +0000
+ -- Raspbian forward porter <root@raspbian.org>  Sat, 18 Apr 2020 12:01:30 +0000
+
+webkit2gtk (2.26.4-1~deb10u3) buster-security; urgency=medium
+
+  * debian/patches/cve-2020-11793-fix.patch:
+    + Cherry-pick fix for CVE-2020-11793.
+
+ -- Alberto Garcia <berto@igalia.com>  Thu, 16 Apr 2020 18:37:24 +0200
 
 webkit2gtk (2.26.4-1~deb10u2) buster-security; urgency=medium
 
