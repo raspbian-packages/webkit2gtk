@@ -58,7 +58,11 @@ struct SameSizeAsShadowRoot : public DocumentFragment, public TreeScope {
     Optional<HashMap<AtomString, AtomString>> partMappings;
 };
 
+#if defined(__m68k__)
+COMPILE_ASSERT(sizeof(ShadowRoot) <= sizeof(SameSizeAsShadowRoot), shadowroot_should_stay_small);
+#else
 COMPILE_ASSERT(sizeof(ShadowRoot) == sizeof(SameSizeAsShadowRoot), shadowroot_should_stay_small);
+#endif
 
 ShadowRoot::ShadowRoot(Document& document, ShadowRootMode type, DelegatesFocus delegatesFocus)
     : DocumentFragment(document, CreateShadowRoot)
