@@ -3,10 +3,7 @@
 export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 
 include /usr/share/dpkg/architecture.mk
-
-CPPFLAGS = $(shell dpkg-buildflags --get CPPFLAGS) -Wall
-CFLAGS = $(shell dpkg-buildflags --get CFLAGS)
-LDFLAGS = $(shell dpkg-buildflags --get LDFLAGS) -Wl,--as-needed
+include /usr/share/dpkg/buildflags.mk
 
 EXTRA_CMAKE_ARGUMENTS =
 DH_GENCONTROL_ARGS =
@@ -42,6 +39,14 @@ ifneq (,$(filter $(DEB_HOST_ARCH),powerpc))
 	EXTRA_CMAKE_ARGUMENTS += -DUSE_LD_GOLD=OFF
 endif
 
+# Enable the new register allocator on SH and
+# disable one particular optimization flag
+# See: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=93876
+# and: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=93877
+ifneq (,$(filter $(DEB_HOST_ARCH),sh3 sh4))
+        CPPFLAGS += -mlra -fno-move-loop-invariants
+endif
+
 ifneq (,$(filter noopt,$(DEB_BUILD_OPTIONS)))
 	EXTRA_CMAKE_ARGUMENTS += -DUSE_SYSTEM_MALLOC=ON
 	CPPFLAGS += -DRELEASE_WITHOUT_OPTIMIZATIONS
@@ -68,8 +73,11 @@ else
 	EXTRA_CMAKE_ARGUMENTS += -DENABLE_BUBBLEWRAP_SANDBOX=OFF
 endif
 
+# Disable WPE on Ubuntu since the required backend is in universe
+ifeq ($(shell dpkg-vendor --derives-from Ubuntu && echo yes),yes)
+	EXTRA_CMAKE_ARGUMENTS += -DUSE_WPE_RENDERER=OFF
 # Disable the WPE renderer if libwpebackend-fdo-1.0-dev is not available
-ifeq ($(shell pkg-config --exists wpebackend-fdo-1.0 && echo yes),yes)
+else ifeq ($(shell pkg-config --exists wpebackend-fdo-1.0 && echo yes),yes)
 	EXTRA_CMAKE_ARGUMENTS += -DUSE_WPE_RENDERER=ON
 else
 	EXTRA_CMAKE_ARGUMENTS += -DUSE_WPE_RENDERER=OFF
@@ -111,6 +119,7 @@ override_dh_install:
 	mkdir -p $(CURDIR)/debian/tmp/usr/share/gtk-doc/html/webkit2gtk-4.0
 	touch $(CURDIR)/debian/tmp/usr/share/gtk-doc/html/webkit2gtk-4.0/index.html
 	dh_install
+	jdupes -rl $(CURDIR)/debian/libwebkit2gtk-4.0-doc/usr
 
 override_dh_makeshlibs:
 	dh_makeshlibs -plibwebkit2gtk-4.0-37 -Xinjected-bundle

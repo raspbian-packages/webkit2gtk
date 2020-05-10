@@ -20,22 +20,22 @@ Index: webkitgtk/Source/WebKit/UIProcess/API/glib/WebKitWebContext.cpp
 ===================================================================
 --- webkitgtk.orig/Source/WebKit/UIProcess/API/glib/WebKitWebContext.cpp
 +++ webkitgtk/Source/WebKit/UIProcess/API/glib/WebKitWebContext.cpp
-@@ -348,8 +348,16 @@ ALLOW_DEPRECATED_DECLARATIONS_END
-         configuration.setLocalStorageDirectory(FileSystem::stringFromFileSystemRepresentation(priv->localStorageDirectory.data()));
- 
-     const char* useSingleWebProcess = getenv("WEBKIT_USE_SINGLE_WEB_PROCESS");
--    if (useSingleWebProcess && strcmp(useSingleWebProcess, "0"))
--        configuration.setUsesSingleWebProcess(true);
-+    if (useSingleWebProcess) {
-+        if (strcmp(useSingleWebProcess, "0")) {
-+            configuration.setUsesSingleWebProcess(true);
+@@ -379,8 +379,16 @@ static void webkitWebContextConstructed(
+     configuration.setProcessSwapsOnNavigation(priv->psonEnabled);
+     if (!priv->psonEnabled) {
+         const char* useSingleWebProcess = getenv("WEBKIT_USE_SINGLE_WEB_PROCESS");
+-        if (useSingleWebProcess && strcmp(useSingleWebProcess, "0"))
+-            configuration.setUsesSingleWebProcess(true);
++        if (useSingleWebProcess) {
++            if (strcmp(useSingleWebProcess, "0")) {
++                configuration.setUsesSingleWebProcess(true);
++            }
++        } else {
++            const char* prgname = g_get_prgname();
++            if (!g_strcmp0(prgname, "evolution") || !g_strcmp0(prgname, "geary")) {
++                configuration.setUsesSingleWebProcess(true);
++            }
 +        }
-+    } else {
-+        const char* prgname = g_get_prgname();
-+        if (!g_strcmp0(prgname, "evolution") || !g_strcmp0(prgname, "geary")) {
-+            configuration.setUsesSingleWebProcess(true);
-+        }
-+    }
-     priv->processPool = WebProcessPool::create(configuration);
+     }
+ #endif
  
-     if (!priv->websiteDataManager)
