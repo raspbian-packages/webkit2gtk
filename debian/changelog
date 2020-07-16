@@ -1,10 +1,40 @@
-webkit2gtk (2.28.2-2+rpi1) bullseye-staging; urgency=medium
+webkit2gtk (2.28.3-2+rpi1) bullseye-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
- -- Raspbian forward porter <root@raspbian.org>  Fri, 01 May 2020 01:09:21 +0000
+ -- Raspbian forward porter <root@raspbian.org>  Thu, 16 Jul 2020 19:13:17 +0000
+
+webkit2gtk (2.28.3-2) unstable; urgency=high
+
+  * The WebKitGTK security advisory WSA-2020-0006 lists the following
+    security fixes in the latest versions of WebKitGTK:
+    + CVE-2020-9802, CVE-2020-9803, CVE-2020-9805, CVE-2020-9806,
+      CVE-2020-9807, CVE-2020-9843, CVE-2020-9850, CVE-2020-13753 (fixed
+      in 2.28.3).
+  * Don't build the documentation in binary-arch builds and with the nodoc
+    build profile (Closes: #962616).
+    + debian/control:
+      - Move gtk-doc-tools and *-doc to Build-Depends-Indep.
+      - Add Build-Profiles: <!nodoc> to libwebkit2gtk-4.0-doc
+    + debian/rules:
+      - Use dh_listpackages to decide whether to build the documentation.
+
+ -- Alberto Garcia <berto@igalia.com>  Fri, 10 Jul 2020 13:26:49 +0200
+
+webkit2gtk (2.28.3-1) unstable; urgency=high
+
+  * New upstream release.
+  * debian/rules:
+    + Remove disabling of openjpeg on Ubuntu, it's in main now (thanks,
+      Sebastien Bacher)
+  * debian/patches/dont-fallback-to-libwpe.patch:
+    + Drop this patch.
+  * debian/copyright:
+    + Update copyright information of all files.
+
+ -- Alberto Garcia <berto@igalia.com>  Thu, 09 Jul 2020 12:20:00 +0200
 
 webkit2gtk (2.28.2-2) unstable; urgency=high
 
