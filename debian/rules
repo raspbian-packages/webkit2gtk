@@ -52,7 +52,9 @@ ifneq (,$(filter noopt,$(DEB_BUILD_OPTIONS)))
 	CPPFLAGS += -DRELEASE_WITHOUT_OPTIMIZATIONS
 endif
 
-ifneq (,$(filter nodoc,$(DEB_BUILD_OPTIONS)))
+ifeq (,$(filter %-doc,$(shell dh_listpackages)))
+	EXTRA_CMAKE_ARGUMENTS += -DENABLE_GTKDOC=OFF
+else ifneq (,$(filter nodoc,$(DEB_BUILD_OPTIONS)))
 	EXTRA_CMAKE_ARGUMENTS += -DENABLE_GTKDOC=OFF
 else
 	EXTRA_CMAKE_ARGUMENTS += -DENABLE_GTKDOC=ON
@@ -83,9 +85,8 @@ else
 	EXTRA_CMAKE_ARGUMENTS += -DUSE_WPE_RENDERER=OFF
 endif
 
-# openjpeg2 is not in Ubuntu main yet https://launchpad.net/bugs/711061
+# set the distributor agent for Ubuntu
 ifeq ($(shell dpkg-vendor --derives-from Ubuntu && echo yes),yes)
-	EXTRA_CMAKE_ARGUMENTS += -DUSE_OPENJPEG=OFF
 	CPPFLAGS += -DUSER_AGENT_GTK_DISTRIBUTOR_NAME='"Ubuntu"'
 endif
 
