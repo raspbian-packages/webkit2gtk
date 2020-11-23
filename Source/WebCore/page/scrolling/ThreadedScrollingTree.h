@@ -58,6 +58,8 @@ public:
 
     Lock& treeMutex() { return m_treeMutex; }
 
+    bool scrollAnimatorEnabled() const { return m_scrollAnimatorEnabled; }
+
 protected:
     explicit ThreadedScrollingTree(AsyncScrollingCoordinator&);
 
@@ -75,6 +77,8 @@ protected:
     void reportExposedUnfilledArea(MonotonicTime, unsigned unfilledArea) override;
     void reportSynchronousScrollingReasonsChanged(MonotonicTime, OptionSet<SynchronousScrollingReason>) override;
 
+    RefPtr<AsyncScrollingCoordinator> m_scrollingCoordinator;
+
 private:
     bool isThreadedScrollingTree() const override { return true; }
     void propagateSynchronousScrollingReasons(const HashSet<ScrollingNodeID>&) override;
@@ -86,8 +90,6 @@ private:
     void delayedRenderingUpdateDetectionTimerFired();
 
     Seconds maxAllowableRenderingUpdateDurationForSynchronization();
-
-    RefPtr<AsyncScrollingCoordinator> m_scrollingCoordinator;
 
     enum class SynchronizationState : uint8_t {
         Idle,
@@ -101,6 +103,8 @@ private:
 
     // Dynamically allocated because it has to use the ScrollingThread's runloop.
     std::unique_ptr<RunLoop::Timer<ThreadedScrollingTree>> m_delayedRenderingUpdateDetectionTimer;
+
+    bool m_scrollAnimatorEnabled { false };
 };
 
 } // namespace WebCore

@@ -1,4 +1,32 @@
 ================
+WebKitGTK 2.30.3
+================
+
+What's new in WebKitGTK 2.30.3?
+
+  - Add new build option USE(64KB_PAGE_BLOCK).
+  - Fix backdrop filters with rounded borders.
+  - Fix scrolling iframes when async scrolling is enabled.
+  - Allow applications to handle drag and drop on the web view again.
+  - Update Outlook user agent quirk.
+  - Fix the build with video support disabled.
+  - Fix several crashes and rendering issues.
+
+================
+WebKitGTK 2.30.2
+================
+
+What's new in WebKitGTK 2.30.2?
+
+  - Fix scrolling when smooth scrolling is enabled in async scrolling mode.
+  - Fix WebSocket requests with same-site cookies.
+  - Fix TLS certificate information for service workers.
+  - Handle chassis type when its value is quoted.
+  - Fix the build with ENABLE_MEDIA_STREAM enabled and ENABLE_WEB_RTC_DISABLED.
+  - Fix the build with ENABLE_GAMEPAD enabled.
+  - Fix several crashes and rendering issues.
+
+================
 WebKitGTK 2.30.1
 ================
 
