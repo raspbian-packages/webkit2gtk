@@ -124,8 +124,8 @@
 #endif
 #endif
 
-/* CPU(ARM64) - Apple */
-#if (defined(__arm64__) && defined(__APPLE__)) || defined(__aarch64__)
+/* CPU(ARM64) */
+#if defined(__arm64__) || defined(__aarch64__)
 #define WTF_CPU_ARM64 1
 #define WTF_CPU_KNOWN 1
 
@@ -320,6 +320,15 @@
 #define WTF_CPU_ADDRESS64 1
 #else
 #define WTF_CPU_ADDRESS32 1
+#endif
+#endif
+
+/* CPU general purpose register width. */
+#if !defined(WTF_CPU_REGISTER64) && !defined(WTF_CPU_REGISTER32)
+#if CPU(ADDRESS64) || CPU(ARM64)
+#define WTF_CPU_REGISTER64 1
+#else
+#define WTF_CPU_REGISTER32 1
 #endif
 #endif
 
