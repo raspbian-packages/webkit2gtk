@@ -1,19 +1,14 @@
-webkit2gtk (2.30.3-1~deb10u1+rpi1) buster-staging; urgency=medium
+webkit2gtk (2.30.4-1~deb10u1+rpi1) buster-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
- -- Raspbian forward porter <root@raspbian.org>  Thu, 26 Nov 2020 14:16:34 +0000
+ -- Raspbian forward porter <root@raspbian.org>  Wed, 23 Dec 2020 05:23:04 +0000
 
-webkit2gtk (2.30.3-1~deb10u1) buster-security; urgency=medium
+webkit2gtk (2.30.4-1~deb10u1) buster-security; urgency=medium
 
   * Rebuild for buster-security.
-  * The WebKitGTK security advisory WSA-2020-0008 lists the following
-    security fixes in the latest versions of WebKitGTK:
-    + CVE-2020-9952 (fixed in 2.28.3).
-    + CVE-2020-9948, CVE-2020-9951 (fixed in 2.30.0).
-    + CVE-2020-9983, CVE-2020-13584 (fixed in 2.30.3).
   * debian/patches/force-single-process.patch:
     + Force the single-process mode in Evolution and Geary
   * debian/control:
@@ -21,7 +16,18 @@ webkit2gtk (2.30.3-1~deb10u1) buster-security; urgency=medium
     + Remove build dependency on libwpebackend-fdo-1.0-dev.
     + Switch build dependency from libenchant-2-dev to libenchant-dev.
 
- -- Alberto Garcia <berto@igalia.com>  Mon, 23 Nov 2020 18:43:07 +0100
+ -- Alberto Garcia <berto@igalia.com>  Mon, 21 Dec 2020 14:01:31 +0100
+
+webkit2gtk (2.30.4-1) unstable; urgency=high
+
+  * New upstream release.
+  * The WebKitGTK security advisory WSA-2020-0008 lists the following
+    security fixes in the latest versions of WebKitGTK:
+    + CVE-2020-9952 (fixed in 2.28.3).
+    + CVE-2020-9948, CVE-2020-9951 (fixed in 2.30.0).
+    + CVE-2020-9983, CVE-2020-13584 (fixed in 2.30.3).
+
+ -- Alberto Garcia <berto@igalia.com>  Tue, 15 Dec 2020 15:23:01 +0100
 
 webkit2gtk (2.30.3-1) unstable; urgency=high
 
