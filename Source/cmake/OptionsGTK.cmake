@@ -33,6 +33,8 @@ if (USER_AGENT_BRANDING)
     add_definitions(-DUSER_AGENT_BRANDING="${USER_AGENT_BRANDING}")
 endif ()
 
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+
 find_package(Cairo 1.14.0 REQUIRED)
 find_package(Fontconfig 2.8.0 REQUIRED)
 find_package(Freetype 2.4.2 REQUIRED)
