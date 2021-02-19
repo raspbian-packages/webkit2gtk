@@ -1,12 +1,12 @@
-webkit2gtk (2.30.4-1~deb10u1+rpi1) buster-staging; urgency=medium
+webkit2gtk (2.30.5-1~deb10u1+rpi1) buster-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
- -- Raspbian forward porter <root@raspbian.org>  Wed, 23 Dec 2020 05:23:04 +0000
+ -- Raspbian forward porter <root@raspbian.org>  Fri, 19 Feb 2021 05:49:23 +0000
 
-webkit2gtk (2.30.4-1~deb10u1) buster-security; urgency=medium
+webkit2gtk (2.30.5-1~deb10u1) buster-security; urgency=medium
 
   * Rebuild for buster-security.
   * debian/patches/force-single-process.patch:
@@ -15,8 +15,46 @@ webkit2gtk (2.30.4-1~deb10u1) buster-security; urgency=medium
     + Remove Breaks for Evolution < 3.34.1.
     + Remove build dependency on libwpebackend-fdo-1.0-dev.
     + Switch build dependency from libenchant-2-dev to libenchant-dev.
+    + Switch build dependencies on libgl-dev and libgles-dev with
+      libgl1-mesa-dev and libgles2-mesa-dev.
 
- -- Alberto Garcia <berto@igalia.com>  Mon, 21 Dec 2020 14:01:31 +0100
+ -- Alberto Garcia <berto@igalia.com>  Wed, 17 Feb 2021 11:07:36 +0100
+
+webkit2gtk (2.30.5-1) unstable; urgency=high
+
+  * New upstream release (Closes: #978042).
+  * Remove some obsolete build dependencies (Closes: #979170):
+    + gawk is not needed since WebKitGTK switched from autotools to CMake.
+    + libgeoclue-2-dev and geoclue-2.0 are not required since WebKitGTK
+      2.25.1 (upstream bug 195994).
+    + libupower-glib-dev is not required since WebKitGTK 2.19.92 (upstream
+      bug 181825).
+    + libfile-copy-recursive-perl is not required since WebKitGTK 2.19.3
+      (upstream bug 180479).
+    + mesa-common-dev used to provide GL/gl.h but this header is now in
+      libgl-dev.
+    + libgles2-mesa-dev used to provide GLES3/gl3.h but this header is now
+      in libgles-dev.
+    + libgl1-mesa-dev and libgles2-mesa-dev are now dummy packages.
+    + libpango1.0-dev is not checked for any specific version at build
+      time so there's no need to list it.
+  * Update the minimum required versions of some packages:
+    + cmake from 3.3 to 3.10
+    + libglib2.0-dev from 2.36.0 to 2.44.0
+    + libgtk-3-dev from 3.10.0 to 3.22.0
+    + libcairo2-dev from 1.10.2 to 1.14.0
+    + libsoup2.4-dev from 2.42.0 to 2.54.0.
+  * debian/patches/fix-mips-page-size.patch:
+    + Increase the page size from 4KB to 16KB on MIPS, this fixes a crash
+      with Loongson CPUs that don't support 4KB pages (Closes: #977779).
+  * debian/copyright:
+    + Update copyright years.
+  * debian/watch:
+    + Set version to 4 (fixes older-debian-watch-file-standard).
+  * debian/control:
+    + Update Standards-Version to 4.5.1 (no changes).
+
+ -- Alberto Garcia <berto@igalia.com>  Thu, 07 Jan 2021 14:23:52 +0100
 
 webkit2gtk (2.30.4-1) unstable; urgency=high
 

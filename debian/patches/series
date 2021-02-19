@@ -5,4 +5,5 @@ fix-ftbfs-x32.patch
 prefer-pthread.patch
 dont-detect-sse2.patch
 reduce-memory-overheads.patch
+fix-mips-page-size.patch
 force-single-process.patch
