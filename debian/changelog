@@ -1,14 +1,19 @@
-webkit2gtk (2.30.5-1~deb10u1+rpi1) buster-staging; urgency=medium
+webkit2gtk (2.30.6-1~deb10u1+rpi1) buster-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
- -- Raspbian forward porter <root@raspbian.org>  Fri, 19 Feb 2021 05:49:23 +0000
+ -- Raspbian forward porter <root@raspbian.org>  Mon, 29 Mar 2021 21:46:33 +0000
 
-webkit2gtk (2.30.5-1~deb10u1) buster-security; urgency=medium
+webkit2gtk (2.30.6-1~deb10u1) buster-security; urgency=medium
 
   * Rebuild for buster-security.
+  * The WebKitGTK security advisory WSA-2021-0002 lists the following
+    security fixes in the latest versions of WebKitGTK:
+    + CVE-2020-9947 (fixed in 2.30.0).
+    + CVE-2020-27918, CVE-2020-29623, CVE-2021-1765, CVE-2021-1789,
+      CVE-2021-1799, CVE-2021-1801, CVE-2021-1870 (fixed in 2.30.6).
   * debian/patches/force-single-process.patch:
     + Force the single-process mode in Evolution and Geary
   * debian/control:
@@ -18,7 +23,18 @@ webkit2gtk (2.30.5-1~deb10u1) buster-security; urgency=medium
     + Switch build dependencies on libgl-dev and libgles-dev with
       libgl1-mesa-dev and libgles2-mesa-dev.
 
- -- Alberto Garcia <berto@igalia.com>  Wed, 17 Feb 2021 11:07:36 +0100
+ -- Alberto Garcia <berto@igalia.com>  Fri, 26 Mar 2021 11:56:39 +0100
+
+webkit2gtk (2.30.6-1) unstable; urgency=high
+
+  * New upstream release.
+  * debian/control:
+    + Remove references to browser-plugin-freshplayer-pepperflash, this
+      package is no longer available, see #966474.
+  * debian/patches/include-libwpe.patch:
+    + Fix build with wpebackend-fdo 1.8.1.
+
+ -- Alberto Garcia <berto@igalia.com>  Thu, 18 Mar 2021 16:05:45 +0100
 
 webkit2gtk (2.30.5-1) unstable; urgency=high
 
