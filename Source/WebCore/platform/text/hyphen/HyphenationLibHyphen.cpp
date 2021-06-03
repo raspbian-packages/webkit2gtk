@@ -67,11 +67,21 @@ static void scanDirectoryForDictionaries(const char* directoryPath, HashMap<Atom
     for (auto& filePath : FileSystem::listDirectory(directoryPath, "hyph_*.dic")) {
         String locale = extractLocaleFromDictionaryFilePath(filePath).convertToASCIILowercase();
 
+#if OS(HURD)
+        char *normalizedPath;
+        normalizedPath = realpath(FileSystem::fileSystemRepresentation(filePath).data(), NULL);
+        if (!normalizedPath)
+            continue;
+
+        filePath = FileSystem::stringFromFileSystemRepresentation(normalizedPath);
+        free(normalizedPath);
+#else
         char normalizedPath[PATH_MAX];
         if (!realpath(FileSystem::fileSystemRepresentation(filePath).data(), normalizedPath))
             continue;
 
         filePath = FileSystem::stringFromFileSystemRepresentation(normalizedPath);
+#endif
         availableLocales.add(locale, Vector<String>()).iterator->value.append(filePath);
 
         String localeReplacingUnderscores = String(locale);
@@ -241,6 +251,8 @@ public:
     {
         return WebCore::HyphenationDictionary::create(FileSystem::fileSystemRepresentation(dictionaryPath.string()));
     }
+
+    static AtomString createKeyForStorage(const AtomString& key) { return key; }
 };
 
 } // namespace WTF
