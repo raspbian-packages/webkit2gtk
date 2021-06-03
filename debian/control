@@ -6,9 +6,9 @@ Uploaders: Gustavo Noronha Silva <kov@debian.org>,
            Emilio Pozuelo Monfort <pochu@debian.org>,
            Alberto Garcia <berto@igalia.com>
 X-Ubuntu-Use-Langpack: no
-Build-Depends: bubblewrap (>= 0.3.1) [!alpha !ia64 !m68k !riscv64 !sh4 !sparc64],
-               xdg-dbus-proxy [!alpha !ia64 !m68k !riscv64 !sh4 !sparc64],
-               libseccomp-dev [!alpha !ia64 !m68k !riscv64 !sh4 !sparc64],
+Build-Depends: bubblewrap (>= 0.3.1) [!alpha !ia64 !m68k !riscv64 !sh4 !sparc64 !hurd-any !kfreebsd-any],
+               xdg-dbus-proxy [!alpha !ia64 !m68k !riscv64 !sh4 !sparc64 !hurd-any !kfreebsd-any],
+               libseccomp-dev [!alpha !ia64 !m68k !riscv64 !sh4 !sparc64 !hurd-any !kfreebsd-any],
                cmake (>= 3.10),
                debhelper (>= 11.2~),
                jdupes,
@@ -26,7 +26,7 @@ Build-Depends: bubblewrap (>= 0.3.1) [!alpha !ia64 !m68k !riscv64 !sh4 !sparc64]
                libxml2-dev (>= 2.8),
                libsoup2.4-dev (>= 2.54.0),
                libsqlite3-dev (>= 3.0),
-               libsystemd-dev,
+               libsystemd-dev [linux-any],
                libgudev-1.0-dev [linux-any],
                libwoff-dev (>= 1.0.2),
                gperf,
@@ -39,8 +39,8 @@ Build-Depends: bubblewrap (>= 0.3.1) [!alpha !ia64 !m68k !riscv64 !sh4 !sparc64]
                libtasn1-6-dev,
                libwebp-dev,
                libxt-dev,
-               libgstreamer1.0-dev (>= 1.13.1),
-               libgstreamer-plugins-base1.0-dev (>= 1.13.1),
+               libgstreamer1.0-dev (>= 1.14.0),
+               libgstreamer-plugins-base1.0-dev (>= 1.14.0),
                libenchant-dev,
                libsecret-1-dev,
                gobject-introspection (>= 1.32.0),
@@ -62,7 +62,7 @@ Homepage: https://webkitgtk.org/
 
 Package: libjavascriptcoregtk-4.0-18
 Section: libs
-Architecture: linux-any
+Architecture: any
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${shlibs:Depends},
@@ -79,7 +79,7 @@ Description: JavaScript engine library from WebKitGTK
 
 Package: libjavascriptcoregtk-4.0-dev
 Section: libdevel
-Architecture: linux-any
+Architecture: any
 Multi-Arch: same
 Depends: libjavascriptcoregtk-4.0-18 (= ${binary:Version}),
          gir1.2-javascriptcoregtk-4.0 (= ${binary:Version}),
@@ -96,7 +96,7 @@ Description: JavaScript engine library from WebKitGTK - development files
 
 Package: libjavascriptcoregtk-4.0-bin
 Section: interpreters
-Architecture: linux-any
+Architecture: any
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${shlibs:Depends},
          ${misc:Depends}
@@ -113,9 +113,10 @@ Description: JavaScript engine library from WebKitGTK - command-line interpreter
 
 Package: gir1.2-javascriptcoregtk-4.0
 Section: introspection
-Architecture: linux-any
+Architecture: any
 Multi-Arch: same
 Depends: ${gir:Depends},
+         libjavascriptcoregtk-4.0-18 (= ${binary:Version}),
          ${misc:Depends}
 Conflicts: gobject-introspection-repository
 Description: JavaScript engine library from WebKitGTK - GObject introspection data
@@ -131,7 +132,7 @@ Description: JavaScript engine library from WebKitGTK - GObject introspection da
 
 Package: libwebkit2gtk-4.0-37
 Section: libs
-Architecture: linux-any
+Architecture: any
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends}
 Depends: libjavascriptcoregtk-4.0-18 (= ${binary:Version}),
@@ -142,6 +143,7 @@ Recommends: gstreamer1.0-plugins-good,
             gstreamer1.0-pulseaudio | gstreamer1.0-alsa,
             gstreamer1.0-gl,
             libgl1-mesa-dri,
+            ${bwrap:Recommends},
             ${gst:Recommends}
 Suggests: ${gst:Suggests}
 Description: Web content engine library for GTK
@@ -162,7 +164,7 @@ Description: Web content engine library for GTK
 
 Package: libwebkit2gtk-4.0-dev
 Section: libdevel
-Architecture: linux-any
+Architecture: any
 Multi-Arch: same
 Depends: libwebkit2gtk-4.0-37 (= ${binary:Version}),
          gir1.2-webkit2-4.0 (= ${binary:Version}),
@@ -211,9 +213,10 @@ Description: Web content engine library for GTK - documentation
 
 Package: gir1.2-webkit2-4.0
 Section: introspection
-Architecture: linux-any
+Architecture: any
 Multi-Arch: same
 Depends: gir1.2-javascriptcoregtk-4.0 (= ${binary:Version}),
+         libwebkit2gtk-4.0-37 (= ${binary:Version}),
          ${gir:Depends},
          ${misc:Depends}
 Description: Web content engine library for GTK - GObject introspection data
@@ -241,10 +244,10 @@ Depends: ${misc:Depends}
 Description: Transitional dummy package
  This is a transitional dummy package, it can be safely removed.
  .
- WebKitGTK no longer supports plugins that depend on GTK 2.
+ Support for NPAPI plugins has been completely removed from WebKitGTK.
 
 Package: webkit2gtk-driver
-Architecture: linux-any
+Architecture: any
 Pre-Depends: ${misc:Pre-Depends}
 Depends: libwebkit2gtk-4.0-37 (= ${binary:Version}),
          ${shlibs:Depends},

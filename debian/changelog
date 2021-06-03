@@ -1,45 +1,105 @@
-webkit2gtk (2.30.6-1~deb10u1+rpi1) buster-staging; urgency=medium
+webkit2gtk (2.32.1-1~deb10u1+rpi1) buster-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
- -- Raspbian forward porter <root@raspbian.org>  Mon, 29 Mar 2021 21:46:33 +0000
+ -- Raspbian forward porter <root@raspbian.org>  Thu, 03 Jun 2021 15:17:55 +0000
 
-webkit2gtk (2.30.6-1~deb10u1) buster-security; urgency=medium
+webkit2gtk (2.32.1-1~deb10u1) buster-security; urgency=medium
 
   * Rebuild for buster-security.
-  * The WebKitGTK security advisory WSA-2021-0002 lists the following
-    security fixes in the latest versions of WebKitGTK:
-    + CVE-2020-9947 (fixed in 2.30.0).
-    + CVE-2020-27918, CVE-2020-29623, CVE-2021-1765, CVE-2021-1789,
-      CVE-2021-1799, CVE-2021-1801, CVE-2021-1870 (fixed in 2.30.6).
   * debian/patches/force-single-process.patch:
     + Force the single-process mode in Evolution and Geary
   * debian/control:
     + Remove Breaks for Evolution < 3.34.1.
-    + Remove build dependency on libwpebackend-fdo-1.0-dev.
+    + Remove build dependency on libwpebackend-fdo-1.0-dev and
+      libmanette-0.2-dev.
     + Switch build dependency from libenchant-2-dev to libenchant-dev.
     + Switch build dependencies on libgl-dev and libgles-dev with
       libgl1-mesa-dev and libgles2-mesa-dev.
+  * debian/rules:
+    + Build with -DENABLE_GAMEPAD=OFF (as libmanette is missing).
 
- -- Alberto Garcia <berto@igalia.com>  Fri, 26 Mar 2021 11:56:39 +0100
+ -- Alberto Garcia <berto@igalia.com>  Sun, 30 May 2021 12:41:38 +0200
 
-webkit2gtk (2.30.6-1) unstable; urgency=high
+webkit2gtk (2.32.1-1) unstable; urgency=medium
 
   * New upstream release.
+  * debian/patches/fix-ftbfs-m68k.patch:
+    + Update patch.
+  * Downgrade dependency on xdg-desktop-portal-gtk to a recommendation.
+    This works around an autopkgtest regression in balsa (see #987686).
+    (Closes: #987428).
+
+ -- Alberto Garcia <berto@igalia.com>  Mon, 10 May 2021 12:20:44 +0200
+
+webkit2gtk (2.32.0-2) unstable; urgency=high
+
+  * The WebKitGTK security advisory WSA-2021-0003 lists the following
+    security fixes in the latest versions of WebKitGTK:
+    + CVE-2021-1788, CVE-2021-1844, CVE-2021-1871 (fixed in 2.32.0).
+  * debian/patches/fix-ftbfs-m68k.patch:
+    + Compile BytecodeGenerator.cpp without optimizations on m68k and sh4,
+      otherwise the build fails due to gcc bugs.
+  * debian/gbp.conf:
+    + Update upstream branch name.
+
+ -- Alberto Garcia <berto@igalia.com>  Thu, 22 Apr 2021 18:42:46 +0200
+
+webkit2gtk (2.32.0-1) experimental; urgency=medium
+
+  * New upstream release (Closes: #984522).
   * debian/control:
-    + Remove references to browser-plugin-freshplayer-pepperflash, this
-      package is no longer available, see #966474.
-  * debian/patches/include-libwpe.patch:
-    + Fix build with wpebackend-fdo 1.8.1.
+    + Make the gir packages require the exact binary versions of
+      libwebkit2gtk-4.0-37 and libjavascriptcoregtk-4.0-18
+  * debian/watch:
+    + Scan stable releases only.
+  * debian/rules:
+    + Add dependency on xdg-desktop-portal-gtk when the bubblewrap sandbox
+      is enabled (see webkit bug #213148) (thanks, Hannes Müller).
 
- -- Alberto Garcia <berto@igalia.com>  Thu, 18 Mar 2021 16:05:45 +0100
+ -- Alberto Garcia <berto@igalia.com>  Fri, 26 Mar 2021 15:15:20 +0100
 
-webkit2gtk (2.30.5-1) unstable; urgency=high
+webkit2gtk (2.31.91-1) experimental; urgency=medium
 
-  * New upstream release (Closes: #978042).
-  * Remove some obsolete build dependencies (Closes: #979170):
+  * New upstream development release.
+  * debian/patches/fix-mips-page-size.patch:
+    + Increase the page size from 4KB to 16KB on MIPS, this fixes a crash
+      with Loongson CPUs that don't support 4KB pages (see #977779).
+  * debian/patches/fix-ftbfs-i386.patch:
+    + Drop this patch.
+
+ -- Alberto Garcia <berto@igalia.com>  Fri, 12 Mar 2021 16:19:15 +0100
+
+webkit2gtk (2.31.90-1) experimental; urgency=medium
+
+  * New upstream development release.
+  * Enable the gamepad support only on Linux (Closes: #980745):
+    + debian/rules:
+      + Pass -DENABLE_GAMEPAD=OFF on non-Linux build.
+    + debian/control:
+      + Depend on libmanette-0.2-dev only on Linux.
+  * debian/patches/fix-ftbfs-x32.patch:
+    + Refresh patch.
+  * debian/control:
+    + Depend on GStreamer >= 1.14.0.
+    + Update Standards-Version to 4.5.1 (no changes).
+  * debian/libwebkit2gtk-4.0-37.symbols:
+    + Update symbols.
+  * debian/copyright:
+    + Update copyright information of all files.
+  * debian/watch:
+    + Set version to 4 (fixes older-debian-watch-file-standard).
+  * debian/patches/fix-ftbfs-i386.patch:
+    + Fix build on i386 (upstream bug #222480).
+
+ -- Alberto Garcia <berto@igalia.com>  Sat, 27 Feb 2021 22:02:35 +0100
+
+webkit2gtk (2.31.1-1) experimental; urgency=medium
+
+  * New upstream development release.
+  * Remove some obsolete build dependencies (see #979170):
     + gawk is not needed since WebKitGTK switched from autotools to CMake.
     + libgeoclue-2-dev and geoclue-2.0 are not required since WebKitGTK
       2.25.1 (upstream bug 195994).
@@ -60,17 +120,32 @@ webkit2gtk (2.30.5-1) unstable; urgency=high
     + libgtk-3-dev from 3.10.0 to 3.22.0
     + libcairo2-dev from 1.10.2 to 1.14.0
     + libsoup2.4-dev from 2.42.0 to 2.54.0.
-  * debian/patches/fix-mips-page-size.patch:
-    + Increase the page size from 4KB to 16KB on MIPS, this fixes a crash
-      with Loongson CPUs that don't support 4KB pages (Closes: #977779).
   * debian/copyright:
-    + Update copyright years.
-  * debian/watch:
-    + Set version to 4 (fixes older-debian-watch-file-standard).
+    + Update copyright information of all files.
+  * debian/watch, debian/gbp.conf:
+    + Update for 2.31.x packages in experimental.
+  * Use -DFORCE_32BIT on 32-bit builds.
+    + This replaces debian/patches/fix-ftbfs-x86.patch.
+  * Refresh all patches.
   * debian/control:
-    + Update Standards-Version to 4.5.1 (no changes).
+    + Add build dependency on libmanette-0.2-dev.
+    + Stop suggesting browser-plugin-freshplayer-pepperflash for
+      libwebkit2gtk-4.0-37-gtk2.
+  * debian/NEWS:
+    - Add item explaining the removal of support for NPAPI plugins.
+  * debian/libwebkit2gtk-4.0-37.symbols:
+    + Update symbols.
+  * Enable the build on non-Linux architectures (Closes: #978098):
+    + debian/rules:
+      - Build with -DUSE_SYSTEMD=OFF if the OS is not Linux.
+    + debian/patches/fix-ftbfs-hurd.patch:
+      - Add alternative implementation of scanDirectoryForDictionaries()
+        that does not use PATH_MAX (for the Hurd).
+    + debian/control:
+      - Set the architecture of all binary packages to 'any' and require
+        bubblewrap, systemd and libwpebackend-fdo on Linux only.
 
- -- Alberto Garcia <berto@igalia.com>  Thu, 07 Jan 2021 14:23:52 +0100
+ -- Alberto Garcia <berto@igalia.com>  Sat, 16 Jan 2021 16:38:36 +0100
 
 webkit2gtk (2.30.4-1) unstable; urgency=high
 
