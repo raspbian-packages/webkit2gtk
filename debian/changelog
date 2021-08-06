@@ -1,12 +1,12 @@
-webkit2gtk (2.32.1-1~deb10u1+rpi1) buster-staging; urgency=medium
+webkit2gtk (2.32.3-1~deb10u1+rpi1) buster-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
- -- Raspbian forward porter <root@raspbian.org>  Thu, 03 Jun 2021 15:17:55 +0000
+ -- Raspbian forward porter <root@raspbian.org>  Fri, 06 Aug 2021 14:09:59 +0000
 
-webkit2gtk (2.32.1-1~deb10u1) buster-security; urgency=medium
+webkit2gtk (2.32.3-1~deb10u1) buster-security; urgency=medium
 
   * Rebuild for buster-security.
   * debian/patches/force-single-process.patch:
@@ -18,10 +18,50 @@ webkit2gtk (2.32.1-1~deb10u1) buster-security; urgency=medium
     + Switch build dependency from libenchant-2-dev to libenchant-dev.
     + Switch build dependencies on libgl-dev and libgles-dev with
       libgl1-mesa-dev and libgles2-mesa-dev.
+  * Downgrade xdg-desktop-portal-gtk from a recommendation to a
+    suggestion (Closes: #989307)
   * debian/rules:
     + Build with -DENABLE_GAMEPAD=OFF (as libmanette is missing).
 
- -- Alberto Garcia <berto@igalia.com>  Sun, 30 May 2021 12:41:38 +0200
+ -- Alberto Garcia <berto@igalia.com>  Wed, 28 Jul 2021 11:01:56 +0200
+
+webkit2gtk (2.32.3-1) unstable; urgency=high
+
+  * New upstream release.
+  * The WebKitGTK security advisory WSA-2021-0004 lists the following
+    security fixes in the latest versions of WebKitGTK:
+    + CVE-2021-30666, CVE-2021-30761 (fixed in 2.26.0).
+    + CVE-2021-30762 (fixed in 2.28.0).
+    + CVE-2021-1817, CVE-2021-1820, CVE-2021-1825, CVE-2021-1826,
+      CVE-2021-30661 (fixed in 2.30.0).
+    + CVE-2021-21806 (fixed in 2.30.6).
+    + CVE-2021-30682 (fixed in 2.32.0).
+    + CVE-2021-30758 (fixed in 2.32.2).
+    + CVE-2021-21775, CVE-2021-21779, CVE-2021-30663, CVE-2021-30665,
+      CVE-2021-30689, CVE-2021-30720, CVE-2021-30734, CVE-2021-30744,
+      CVE-2021-30749, CVE-2021-30795, CVE-2021-30797, CVE-2021-30799
+      (fixed in 2.32.3).
+
+ -- Alberto Garcia <berto@igalia.com>  Sun, 25 Jul 2021 00:25:47 +0200
+
+webkit2gtk (2.32.2-1) unstable; urgency=medium
+
+  * New upstream release.
+  * debian/patches/fix-ftbfs-m68k.patch:
+    + Update patch.
+
+ -- Alberto Garcia <berto@igalia.com>  Fri, 09 Jul 2021 13:41:26 +0200
+
+webkit2gtk (2.32.1-2) unstable; urgency=high
+
+  * debian/control:
+    + Update the dependencies on GStreamer plugins (Closes: #989332):
+      - WebKitGTK really expects at least the -base and -good sets.
+      - For video playback (e.g YouTube) -bad is also recommended.
+      - The pulseaudio plugin was merged into the -good package so it will
+        be always be available now. Move -alsa to Suggests.
+
+ -- Alberto Garcia <berto@igalia.com>  Mon, 07 Jun 2021 10:39:51 +0200
 
 webkit2gtk (2.32.1-1) unstable; urgency=medium
 
