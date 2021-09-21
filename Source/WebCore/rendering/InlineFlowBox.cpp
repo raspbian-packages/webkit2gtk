@@ -53,7 +53,11 @@ struct SameSizeAsInlineFlowBox : public InlineBox {
     void* pointers[5];
 };
 
+#if defined(__m68k__)
+COMPILE_ASSERT(sizeof(InlineFlowBox) >= sizeof(SameSizeAsInlineFlowBox), InlineFlowBox_should_stay_small);
+#else
 COMPILE_ASSERT(sizeof(InlineFlowBox) == sizeof(SameSizeAsInlineFlowBox), InlineFlowBox_should_stay_small);
+#endif
 
 #if !ASSERT_WITH_SECURITY_IMPLICATION_DISABLED
 
