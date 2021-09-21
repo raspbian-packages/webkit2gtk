@@ -393,6 +393,20 @@ static void webkitWebContextConstructed(GObject* object)
     configuration.setUsesWebProcessCache(true);
 #if PLATFORM(GTK)
     configuration.setProcessSwapsOnNavigation(priv->psonEnabled);
+    if (!priv->psonEnabled) {
+        const char* useSingleWebProcess = getenv("WEBKIT_USE_SINGLE_WEB_PROCESS");
+        if (useSingleWebProcess) {
+            if (strcmp(useSingleWebProcess, "0")) {
+                configuration.setUsesSingleWebProcess(true);
+            }
+        } else {
+            const char* prgname = g_get_prgname();
+            if (!g_strcmp0(prgname, "evolution") || !g_strcmp0(prgname, "geary")) {
+                configuration.setUsesSingleWebProcess(true);
+            }
+        }
+     }
+
 #if !USE(GTK4)
     configuration.setUseSystemAppearanceForScrollbars(priv->useSystemAppearanceForScrollbars);
 #endif
