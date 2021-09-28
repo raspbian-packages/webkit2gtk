@@ -54,15 +54,18 @@ struct SameSizeAsShadowRoot : public DocumentFragment, public TreeScope {
     uint8_t mode;
     void* styleScope;
     void* styleSheetList;
-    void* host;
+    WeakPtr<Element> host;
     void* slotAssignment;
-    Optional<HashMap<AtomString, AtomString>> partMappings;
+    std::optional<HashMap<AtomString, AtomString>> partMappings;
 };
 
 #if defined(__m68k__)
 COMPILE_ASSERT(sizeof(ShadowRoot) <= sizeof(SameSizeAsShadowRoot), shadowroot_should_stay_small);
 #else
 COMPILE_ASSERT(sizeof(ShadowRoot) == sizeof(SameSizeAsShadowRoot), shadowroot_should_stay_small);
+#if !ASSERT_ENABLED
+COMPILE_ASSERT(sizeof(WeakPtr<Element>) == sizeof(void*), WeakPtr_should_be_same_size_as_raw_pointer);
+#endif
 #endif
 
 ShadowRoot::ShadowRoot(Document& document, ShadowRootMode type, DelegatesFocus delegatesFocus)
@@ -264,7 +267,7 @@ const Vector<WeakPtr<Node>>* ShadowRoot::assignedNodesForSlot(const HTMLSlotElem
     return m_slotAssignment->assignedNodesForSlot(slot, *this);
 }
 
-static Optional<std::pair<AtomString, AtomString>> parsePartMapping(StringView mappingString)
+static std::optional<std::pair<AtomString, AtomString>> parsePartMapping(StringView mappingString)
 {
     const auto end = mappingString.length();
 
