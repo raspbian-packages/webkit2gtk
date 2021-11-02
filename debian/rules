@@ -45,12 +45,10 @@ ifneq (,$(filter $(DEB_HOST_ARCH),powerpc))
 	EXTRA_CMAKE_ARGUMENTS += -DUSE_LD_GOLD=OFF
 endif
 
-# Enable the new register allocator on SH and
-# disable one particular optimization flag
 # See: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=93876
 # and: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=93877
 ifneq (,$(filter $(DEB_HOST_ARCH),sh3 sh4))
-        CPPFLAGS += -mlra -fno-move-loop-invariants
+	CFLAGS := $(CFLAGS:-O2=-O1)
 endif
 
 ifneq (,$(filter noopt,$(DEB_BUILD_OPTIONS)))
@@ -98,11 +96,11 @@ ifeq ($(shell dpkg-vendor --derives-from Ubuntu && echo yes),yes)
 	EXTRA_CMAKE_ARGUMENTS += -DUSER_AGENT_BRANDING="Ubuntu"
 endif
 
-# gstreamer1.0-libav is not in Ubuntu "main"
+# gstreamer1.0-libav and gstreamer1.0-plugins-bad are not in Ubuntu "main"
 ifeq ($(shell dpkg-vendor --derives-from Ubuntu && echo yes),yes)
-	DH_GENCONTROL_ARGS += -Vgst:Suggests="gstreamer1.0-libav"
+	DH_GENCONTROL_ARGS += -Vgst:Suggests="gstreamer1.0-libav, gstreamer1.0-plugins-bad"
 else
-	DH_GENCONTROL_ARGS += -Vgst:Recommends="gstreamer1.0-libav"
+	DH_GENCONTROL_ARGS += -Vgst:Recommends="gstreamer1.0-libav, gstreamer1.0-plugins-bad"
 endif
 
 %:
@@ -121,6 +119,7 @@ override_dh_auto_configure:
 	   -DCMAKE_CXX_FLAGS_RELEASE="" \
 	   -DCMAKE_CXX_FLAGS_DEBUG="" \
 	   -DENABLE_MINIBROWSER=ON \
+	   -DUSE_SOUP2=ON \
 	   $(EXTRA_CMAKE_ARGUMENTS)
 
 # Create a dummy doc directory in case the "nodoc" build option is set
