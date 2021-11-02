@@ -54,7 +54,7 @@ Build-Depends-Indep: gtk-doc-tools,
                libgtk-3-doc,
                libsoup2.4-doc
 Build-Conflicts: gir-repository-dev
-Standards-Version: 4.5.1
+Standards-Version: 4.6.0.1
 Rules-Requires-Root: no
 Vcs-Browser: https://salsa.debian.org/webkit-team/webkit
 Vcs-Git: https://salsa.debian.org/webkit-team/webkit.git
@@ -141,8 +141,7 @@ Depends: libjavascriptcoregtk-4.0-18 (= ${binary:Version}),
          ${bwrap:Depends},
          ${shlibs:Depends},
          ${misc:Depends}
-Recommends: gstreamer1.0-plugins-bad,
-            gstreamer1.0-gl,
+Recommends: gstreamer1.0-gl,
             libgl1-mesa-dri,
             ${gst:Recommends}
 Suggests: ${gst:Suggests},
@@ -237,16 +236,6 @@ Description: Web content engine library for GTK - GObject introspection data
  .
  This package contains introspection data, which can be used by
  packages using the GIRepository format to generate dynamic bindings.
-
-Package: libwebkit2gtk-4.0-37-gtk2
-Section: oldlibs
-Architecture: all
-Multi-Arch: foreign
-Depends: ${misc:Depends}
-Description: Transitional dummy package
- This is a transitional dummy package, it can be safely removed.
- .
- Support for NPAPI plugins has been completely removed from WebKitGTK.
 
 Package: webkit2gtk-driver
 Architecture: any

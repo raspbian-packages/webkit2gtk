@@ -20,7 +20,7 @@ Index: webkitgtk/Source/WebKit/UIProcess/API/glib/WebKitWebContext.cpp
 ===================================================================
 --- webkitgtk.orig/Source/WebKit/UIProcess/API/glib/WebKitWebContext.cpp
 +++ webkitgtk/Source/WebKit/UIProcess/API/glib/WebKitWebContext.cpp
-@@ -393,6 +393,20 @@ static void webkitWebContextConstructed(
+@@ -405,6 +405,20 @@ static void webkitWebContextConstructed(
      configuration.setUsesWebProcessCache(true);
  #if PLATFORM(GTK)
      configuration.setProcessSwapsOnNavigation(priv->psonEnabled);
