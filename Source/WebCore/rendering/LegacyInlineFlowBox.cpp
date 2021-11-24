@@ -53,7 +53,11 @@ struct SameSizeAsLegacyInlineFlowBox : public LegacyInlineBox {
     void* pointers[5];
 };
 
+#if defined(__m68k__)
+COMPILE_ASSERT(sizeof(LegacyInlineFlowBox) >= sizeof(SameSizeAsLegacyInlineFlowBox), LegacyInlineFlowBox_should_stay_small);
+#else
 COMPILE_ASSERT(sizeof(LegacyInlineFlowBox) == sizeof(SameSizeAsLegacyInlineFlowBox), LegacyInlineFlowBox_should_stay_small);
+#endif
 
 #if !ASSERT_WITH_SECURITY_IMPLICATION_DISABLED
 
