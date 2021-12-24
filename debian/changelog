@@ -1,15 +1,15 @@
-webkit2gtk (2.34.1-1~deb10u1+rpi1) buster-staging; urgency=medium
+webkit2gtk (2.34.3-1~deb10u1+rpi1) buster-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
- -- Raspbian forward porter <root@raspbian.org>  Tue, 02 Nov 2021 11:46:36 +0000
+ -- Raspbian forward porter <root@raspbian.org>  Fri, 24 Dec 2021 07:19:44 +0000
 
-webkit2gtk (2.34.1-1~deb10u1) buster-security; urgency=high
+webkit2gtk (2.34.3-1~deb10u1) buster-security; urgency=high
 
   * Rebuild for buster-security.
-    + Fixes CVE-2021-30846, CVE-2021-30851 and CVE-2021-42762.
+    + Fixes CVE-2021-30887, CVE-2021-30890.
   * debian/patches/force-single-process.patch:
     + Force the single-process mode in Evolution and Geary
   * debian/control:
@@ -24,7 +24,34 @@ webkit2gtk (2.34.1-1~deb10u1) buster-security; urgency=high
   * debian/rules:
     + Build with -DENABLE_GAMEPAD=OFF -DUSE_LCMS=OFF.
 
- -- Alberto Garcia <berto@igalia.com>  Thu, 28 Oct 2021 17:22:55 +0200
+ -- Alberto Garcia <berto@igalia.com>  Thu, 23 Dec 2021 14:10:23 +0100
+
+webkit2gtk (2.34.3-1) unstable; urgency=high
+
+  [ Alberto Garcia ]
+  * New upstream release.
+  * The WebKitGTK security advisory WSA-2021-0007 lists the following
+    security fixes in the latest versions of WebKitGTK:
+    + CVE-2021-30809, CVE-2021-30836 (fixed in 2.32.4).
+    + CVE-2021-30818, CVE-2021-30823, CVE-2021-30884, CVE-2021-30888,
+      CVE-2021-30889, CVE-2021-30897 (fixed in 2.34.0).
+    + CVE-2021-30887, CVE-2021-30890 (fixed in 2.34.3).
+
+  [ Sebastien Bacher ]
+  * debian/rules:
+    + Explicitly disable lto since when it's on the build is failing, that
+      doesn't impact Debian by default but is an issue on Ubuntu.
+      (Closes: #1000598)
+    + Don't recommend xdg-desktop-portal-gtk on Ubuntu i386, it's a partial
+      architecture and the binary doesn't exist (Closes: #1000599).
+
+ -- Alberto Garcia <berto@igalia.com>  Tue, 21 Dec 2021 00:59:40 +0100
+
+webkit2gtk (2.34.2-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Alberto Garcia <berto@igalia.com>  Wed, 24 Nov 2021 15:56:26 +0100
 
 webkit2gtk (2.34.1-1) unstable; urgency=high
 
