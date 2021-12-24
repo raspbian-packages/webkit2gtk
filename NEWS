@@ -1,4 +1,24 @@
 ================
+WebKitGTK 2.34.3
+================
+
+What's new in WebKitGTK 2.34.3?
+
+  - Make audio tools (like mixers) display the actual name of the application
+    producing sound, instead of a generic one.
+  - Fix several crashes and rendering issues.
+
+================
+WebKitGTK 2.34.2
+================
+
+What's new in WebKitGTK 2.34.2?
+
+  - Fix scrolling issues when pressing Home and PgDown keys.
+  - Update effective appearance after web process switch on navigation.
+  - Fix the build with video disabled.
+
+================
 WebKitGTK 2.34.1
 ================
 
