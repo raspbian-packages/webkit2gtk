@@ -1,17 +1,33 @@
-webkit2gtk (2.34.3-1~deb11u1+rpi1) bullseye-staging; urgency=medium
+webkit2gtk (2.34.4-1~deb11u1+rpi1) bullseye-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
- -- Raspbian forward porter <root@raspbian.org>  Fri, 24 Dec 2021 09:54:16 +0000
+ -- Raspbian forward porter <root@raspbian.org>  Fri, 28 Jan 2022 01:56:51 +0000
 
-webkit2gtk (2.34.3-1~deb11u1) bullseye-security; urgency=high
+webkit2gtk (2.34.4-1~deb11u1) bullseye-security; urgency=high
 
   * Rebuild for bullseye-security.
-    + Fixes CVE-2021-30887, CVE-2021-30890.
+    - Fixes CVE-2021-30934, CVE-2021-30936, CVE-2021-30951,
+      CVE-2021-30952, CVE-2021-30953, CVE-2021-30954, CVE-2021-30984.
 
- -- Alberto Garcia <berto@igalia.com>  Thu, 23 Dec 2021 13:59:22 +0100
+ -- Alberto Garcia <berto@igalia.com>  Tue, 25 Jan 2022 09:35:24 +0100
+
+webkit2gtk (2.34.4-1) unstable; urgency=high
+
+  * New upstream release.
+  * Set the debhelper compatibility level to 12:
+    - Get rid of debian/compat.
+    - Add build dependency on debhelper-compat.
+  * debian/rules:
+    - Stop using --builddirectory=build, .gir files no longer seem to
+      contain references to the build directory (see the 2.27.90-1 entry
+      for more details).
+  * debian/copyright:
+    + Update copyright years.
+
+ -- Alberto Garcia <berto@igalia.com>  Fri, 21 Jan 2022 11:44:16 +0100
 
 webkit2gtk (2.34.3-1) unstable; urgency=high
 
