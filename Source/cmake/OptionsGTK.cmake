@@ -8,6 +8,8 @@ SET_PROJECT_VERSION(2 34 6)
 
 set(USER_AGENT_BRANDING "" CACHE STRING "Branding to add to user agent string")
 
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+
 find_package(Cairo 1.14.0 REQUIRED)
 find_package(Fontconfig 2.8.0 REQUIRED)
 find_package(Freetype 2.4.2 REQUIRED)
