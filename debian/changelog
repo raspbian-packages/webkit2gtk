@@ -1,15 +1,14 @@
-webkit2gtk (2.34.3-1~deb10u1+rpi1) buster-staging; urgency=medium
+webkit2gtk (2.34.6-1~deb10u1+rpi1) buster-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
- -- Raspbian forward porter <root@raspbian.org>  Fri, 24 Dec 2021 07:19:44 +0000
+ -- Raspbian forward porter <root@raspbian.org>  Sun, 20 Feb 2022 22:37:18 +0000
 
-webkit2gtk (2.34.3-1~deb10u1) buster-security; urgency=high
+webkit2gtk (2.34.6-1~deb10u1) buster-security; urgency=high
 
   * Rebuild for buster-security.
-    + Fixes CVE-2021-30887, CVE-2021-30890.
   * debian/patches/force-single-process.patch:
     + Force the single-process mode in Evolution and Geary
   * debian/control:
@@ -23,8 +22,46 @@ webkit2gtk (2.34.3-1~deb10u1) buster-security; urgency=high
     suggestion (See #989307)
   * debian/rules:
     + Build with -DENABLE_GAMEPAD=OFF -DUSE_LCMS=OFF.
+  * Set the debhelper compatibility level back to 10. This fixes a dh_dwz
+    error ".debug_info section not present"
+    - Add debian/compat file.
+    - Update build dependency on debhelper.
 
- -- Alberto Garcia <berto@igalia.com>  Thu, 23 Dec 2021 14:10:23 +0100
+ -- Alberto Garcia <berto@igalia.com>  Sat, 19 Feb 2022 14:14:06 +0100
+
+webkit2gtk (2.34.6-1) unstable; urgency=high
+
+  [ Alberto Garcia ]
+  * New upstream release.
+    + Fixes CVE-2022-22620.
+
+  [ Jeremy Bicha ]
+  * debian/rules:
+    + Reduce the number of parallel build jobs on Ubuntu's arm64.
+
+ -- Alberto Garcia <berto@igalia.com>  Thu, 17 Feb 2022 19:52:20 +0100
+
+webkit2gtk (2.34.5-1) unstable; urgency=high
+
+  * New upstream release.
+    + Fixes CVE-2022-22589, CVE-2022-22590 and CVE-2022-22592.
+
+ -- Alberto Garcia <berto@igalia.com>  Wed, 09 Feb 2022 12:10:57 +0100
+
+webkit2gtk (2.34.4-1) unstable; urgency=high
+
+  * New upstream release.
+  * Set the debhelper compatibility level to 12:
+    - Get rid of debian/compat.
+    - Add build dependency on debhelper-compat.
+  * debian/rules:
+    - Stop using --builddirectory=build, .gir files no longer seem to
+      contain references to the build directory (see the 2.27.90-1 entry
+      for more details).
+  * debian/copyright:
+    + Update copyright years.
+
+ -- Alberto Garcia <berto@igalia.com>  Fri, 21 Jan 2022 11:44:16 +0100
 
 webkit2gtk (2.34.3-1) unstable; urgency=high
 
