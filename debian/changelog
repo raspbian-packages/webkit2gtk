@@ -1,10 +1,22 @@
-webkit2gtk (2.34.5-1+rpi1) bookworm-staging; urgency=medium
+webkit2gtk (2.34.6-1+rpi1) bookworm-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
- -- Raspbian forward porter <root@raspbian.org>  Thu, 17 Feb 2022 21:14:30 +0000
+ -- Raspbian forward porter <root@raspbian.org>  Thu, 17 Mar 2022 16:48:36 +0000
+
+webkit2gtk (2.34.6-1) unstable; urgency=high
+
+  [ Alberto Garcia ]
+  * New upstream release.
+    + Fixes CVE-2022-22620.
+
+  [ Jeremy Bicha ]
+  * debian/rules:
+    + Reduce the number of parallel build jobs on Ubuntu's arm64.
+
+ -- Alberto Garcia <berto@igalia.com>  Thu, 17 Feb 2022 19:52:20 +0100
 
 webkit2gtk (2.34.5-1) unstable; urgency=high
 
