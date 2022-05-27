@@ -66,8 +66,8 @@ ifneq (,$(filter $(DEB_HOST_ARCH),powerpc))
 	EXTRA_CMAKE_ARGUMENTS += -DUSE_LD_GOLD=OFF
 endif
 
-# Lower memory requirements on mips/mipsel with only 2 GB address space
-ifneq (,$(filter $(DEB_HOST_ARCH),mips mipsel))
+# Lower memory requirements on architectures with only 2 GB address space
+ifneq (,$(filter $(DEB_HOST_ARCH),mips mipsel sh4))
 	CFLAGS := $(CFLAGS:-g1=-g0)
 	CFLAGS := $(CFLAGS:-O2=-Os)
 	CPPFLAGS += --param ggc-min-expand=10
@@ -124,9 +124,11 @@ else
 	EXTRA_CMAKE_ARGUMENTS += -DUSE_WPE_RENDERER=OFF
 endif
 
-# Lower max parallel jobs on Ubuntu's arm64 builder
-ifeq ($(shell dpkg-vendor --is Ubuntu && echo yes) $(DEB_HOST_ARCH), yes arm64)
+# Lower max parallel jobs on some of Ubuntu's builders
+ifeq ($(shell dpkg-vendor --is Ubuntu && echo yes),yes)
+ifneq (,$(filter $(DEB_HOST_ARCH),amd64 arm64))
 	EXTRA_BUILD_ARGUMENTS += --max-parallel=2
+endif
 endif
 
 # set the distributor agent for Ubuntu
