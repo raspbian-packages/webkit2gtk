@@ -68,8 +68,8 @@ ifneq (,$(filter $(DEB_HOST_ARCH),powerpc))
 	EXTRA_CMAKE_ARGUMENTS += -DUSE_LD_GOLD=OFF
 endif
 
-# Lower memory requirements on mips/mipsel with only 2 GB address space
-ifneq (,$(filter $(DEB_HOST_ARCH),mips mipsel))
+# Lower memory requirements on architectures with only 2 GB address space
+ifneq (,$(filter $(DEB_HOST_ARCH),mips mipsel sh4))
 	CFLAGS := $(CFLAGS:-g1=-g0)
 	CFLAGS := $(CFLAGS:-O2=-Os)
 	CPPFLAGS += --param ggc-min-expand=10
@@ -126,9 +126,11 @@ else
 	EXTRA_CMAKE_ARGUMENTS += -DUSE_WPE_RENDERER=OFF
 endif
 
-# Lower max parallel jobs on Ubuntu's arm64 builder
-ifeq ($(shell dpkg-vendor --is Ubuntu && echo yes) $(DEB_HOST_ARCH), yes arm64)
+# Lower max parallel jobs on some of Ubuntu's builders
+ifeq ($(shell dpkg-vendor --is Ubuntu && echo yes),yes)
+ifneq (,$(filter $(DEB_HOST_ARCH),amd64 arm64))
 	EXTRA_BUILD_ARGUMENTS += --max-parallel=2
+endif
 endif
 
 # set the distributor agent for Ubuntu
@@ -208,8 +210,12 @@ override_dh_auto_configure:
 		-DENABLE_WEBDRIVER=OFF -DENABLE_GTKDOC=OFF
 
 override_dh_auto_build:
-	$(SOUP2_BUILD) dh_auto_build -Bbuild-soup2 $(EXTRA_BUILD_ARGUMENTS)
-	$(SOUP3_BUILD) dh_auto_build -Bbuild-soup3 $(EXTRA_BUILD_ARGUMENTS)
+	$(SOUP2_BUILD) CCACHE_NOHASHDIR=1 CCACHE_DIR=$(CURDIR)/ccache \
+		CCACHE_BASEDIR=$(CURDIR)/build-soup2 \
+		dh_auto_build -Bbuild-soup2 $(EXTRA_BUILD_ARGUMENTS)
+	$(SOUP3_BUILD) CCACHE_NOHASHDIR=1 CCACHE_DIR=$(CURDIR)/ccache \
+		CCACHE_BASEDIR=$(CURDIR)/build-soup3 \
+		dh_auto_build -Bbuild-soup3 $(EXTRA_BUILD_ARGUMENTS)
 
 override_dh_auto_install:
 	$(SOUP2_BUILD) dh_auto_install -Bbuild-soup2
@@ -220,6 +226,7 @@ override_dh_auto_clean:
 	$(SOUP3_BUILD) dh_auto_clean -Bbuild-soup3
 	find Source Tools -type f -name "*.pyc" -exec rm {} \;
 	find Source Tools -depth -type d -name __pycache__ -exec rmdir {} \;
+	rm -rf ccache
 
 # Create a dummy doc directory in case the "nodoc" build option is set
 override_dh_install:

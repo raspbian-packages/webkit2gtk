@@ -1,23 +1,22 @@
-webkit2gtk (2.36.0-3~deb10u1+rpi1) buster-staging; urgency=medium
+webkit2gtk (2.36.3-1~deb10u1+rpi1) buster-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
- -- Raspbian forward porter <root@raspbian.org>  Sat, 09 Apr 2022 05:41:25 +0000
+ -- Raspbian forward porter <root@raspbian.org>  Thu, 09 Jun 2022 19:03:32 +0000
 
-webkit2gtk (2.36.0-3~deb10u1) buster-security; urgency=high
+webkit2gtk (2.36.3-1~deb10u1) buster-security; urgency=high
 
   * Rebuild for buster-security.
-    - This fixes CVE-2022-22624, CVE-2022-22628 and CVE-2022-22629.
+    - This fixes CVE-2022-26700, CVE-2022-26709, CVE-2022-26716,
+      CVE-2022-26717, CVE-2022-26719, CVE-2022-30293 and CVE-2022-30294.
   * debian/patches/force-single-process.patch:
     - Force the single-process mode in Evolution and Geary
-  * debian/patches/support-ruby2.5.patch:
-    - Support building with Ruby 2.5.
   * debian/control:
     - Remove all 4.1 API packages (soup3 build).
     - Remove Breaks for Evolution < 3.34.1.
-    - Remove build dependencies on libwpebackend-fdo-1.0-dev,
+    - Remove build dependencies on ccache, libwpebackend-fdo-1.0-dev,
       libmanette-0.2-dev, liblcms2-dev and libsoup-3.0-dev.
     - Switch build dependency from libenchant-2-dev to libenchant-dev.
     - Switch build dependencies on libgl-dev and libgles-dev with
@@ -31,7 +30,41 @@ webkit2gtk (2.36.0-3~deb10u1) buster-security; urgency=high
     - Add debian/compat file.
     - Update build dependency on debhelper.
 
- -- Alberto Garcia <berto@igalia.com>  Fri, 08 Apr 2022 16:08:46 +0200
+ -- Alberto Garcia <berto@igalia.com>  Tue, 31 May 2022 10:54:46 +0200
+
+webkit2gtk (2.36.3-1) unstable; urgency=high
+
+  * New upstream release.
+  * Use ccache to speed-up the compilation since the majority of the files
+    are identical in both the soup2 and soup3 builds.
+    - debian/control: Add build dependency on ccache.
+    - debian/rules: Set CCACHE_NOHASHDIR and CCACHE_BASEDIR so ccache
+      actually works with different build directories.
+    - debian/rules: Set CCACHE_DIR inside the source directory, otherwise
+      ccache would try to write to the home directory, which is forbidden
+      by the Debian policy.
+
+ -- Alberto Garcia <berto@igalia.com>  Sun, 29 May 2022 13:07:27 +0200
+
+webkit2gtk (2.36.2-1) unstable; urgency=high
+
+  [ Alberto Garcia ]
+  * New upstream release.
+
+  [ Adrian Bunk ]
+  * debian/rules: lower memory requirements on sh4.
+
+ -- Alberto Garcia <berto@igalia.com>  Wed, 18 May 2022 10:13:09 +0200
+
+webkit2gtk (2.36.1-1) unstable; urgency=medium
+
+  [ Alberto Garcia ]
+  * New upstream release.
+
+  [ Jeremy Bicha ]
+  * Reduce the number of parallel build jobs on Ubuntu's amd64
+
+ -- Alberto Garcia <berto@igalia.com>  Thu, 21 Apr 2022 16:47:44 +0200
 
 webkit2gtk (2.36.0-3) unstable; urgency=medium
 
