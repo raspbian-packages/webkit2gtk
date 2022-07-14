@@ -7,7 +7,7 @@ Uploaders: Gustavo Noronha Silva <kov@debian.org>,
            Alberto Garcia <berto@igalia.com>
 X-Ubuntu-Use-Langpack: no
 Build-Depends: debhelper-compat (= 12),
-               ccache,
+               ccache [!i386],
                bubblewrap (>= 0.3.1) [!alpha !ia64 !m68k !riscv64 !sh4 !sparc64 !hurd-any !kfreebsd-any],
                xdg-dbus-proxy [!alpha !ia64 !m68k !riscv64 !sh4 !sparc64 !hurd-any !kfreebsd-any],
                libseccomp-dev [!alpha !ia64 !m68k !riscv64 !sh4 !sparc64 !hurd-any !kfreebsd-any],
@@ -58,7 +58,7 @@ Build-Depends-Indep: gtk-doc-tools,
                libglib2.0-doc,
                libgtk-3-doc,
                libsoup2.4-doc
-Standards-Version: 4.6.0.1
+Standards-Version: 4.6.1.0
 Rules-Requires-Root: no
 Vcs-Browser: https://salsa.debian.org/webkit-team/webkit
 Vcs-Git: https://salsa.debian.org/webkit-team/webkit.git
