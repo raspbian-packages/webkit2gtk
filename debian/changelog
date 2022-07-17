@@ -1,16 +1,14 @@
-webkit2gtk (2.36.3-1~deb10u1+rpi1) buster-staging; urgency=medium
+webkit2gtk (2.36.4-1~deb10u1+rpi1) buster-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
- -- Raspbian forward porter <root@raspbian.org>  Thu, 09 Jun 2022 19:03:32 +0000
+ -- Raspbian forward porter <root@raspbian.org>  Sun, 17 Jul 2022 18:38:01 +0000
 
-webkit2gtk (2.36.3-1~deb10u1) buster-security; urgency=high
+webkit2gtk (2.36.4-1~deb10u1) buster-security; urgency=high
 
   * Rebuild for buster-security.
-    - This fixes CVE-2022-26700, CVE-2022-26709, CVE-2022-26716,
-      CVE-2022-26717, CVE-2022-26719, CVE-2022-30293 and CVE-2022-30294.
   * debian/patches/force-single-process.patch:
     - Force the single-process mode in Evolution and Geary
   * debian/control:
@@ -30,7 +28,23 @@ webkit2gtk (2.36.3-1~deb10u1) buster-security; urgency=high
     - Add debian/compat file.
     - Update build dependency on debhelper.
 
- -- Alberto Garcia <berto@igalia.com>  Tue, 31 May 2022 10:54:46 +0200
+ -- Alberto Garcia <berto@igalia.com>  Thu, 14 Jul 2022 14:14:12 +0200
+
+webkit2gtk (2.36.4-1) unstable; urgency=high
+
+  * New upstream release.
+  * The WebKitGTK security advisory WSA-2022-0006 lists the following
+    security fixes in the latest versions of WebKitGTK:
+    - CVE-2022-22662 (fixed in 2.36.0).
+    - CVE-2022-22677 and CVE-2022-26710 (fixed in 2.36.4).
+  * debian/control:
+    - Don't use ccache in i386 because Ubuntu doesn't have it and Debian
+      can live without it (webkit-team/webkit!14).
+  * Update format of lintian overrides (see #1007002).
+  * debian/control:
+    - Update Standards-Version to 4.6.1.0 (no changes).
+
+ -- Alberto Garcia <berto@igalia.com>  Wed, 06 Jul 2022 13:54:15 +0200
 
 webkit2gtk (2.36.3-1) unstable; urgency=high
 
