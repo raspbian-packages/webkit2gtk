@@ -1,12 +1,12 @@
-webkit2gtk (2.36.4-1~deb10u1+rpi1) buster-staging; urgency=medium
+webkit2gtk (2.36.6-1~deb10u1+rpi1) buster-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
- -- Raspbian forward porter <root@raspbian.org>  Sun, 17 Jul 2022 18:38:01 +0000
+ -- Raspbian forward porter <root@raspbian.org>  Thu, 25 Aug 2022 17:53:21 +0000
 
-webkit2gtk (2.36.4-1~deb10u1) buster-security; urgency=high
+webkit2gtk (2.36.6-1~deb10u1) buster-security; urgency=high
 
   * Rebuild for buster-security.
   * debian/patches/force-single-process.patch:
@@ -28,7 +28,20 @@ webkit2gtk (2.36.4-1~deb10u1) buster-security; urgency=high
     - Add debian/compat file.
     - Update build dependency on debhelper.
 
- -- Alberto Garcia <berto@igalia.com>  Thu, 14 Jul 2022 14:14:12 +0200
+ -- Alberto Garcia <berto@igalia.com>  Tue, 16 Aug 2022 09:57:32 +0200
+
+webkit2gtk (2.36.6-1) unstable; urgency=high
+
+  * New upstream release.
+  * The WebKitGTK security advisory WSA-2022-0007 lists the following
+    security fixes in the latest versions of WebKitGTK:
+    - CVE identifiers: CVE-2022-32792, CVE-2022-32816 and CVE-2022-2294
+      (fixed in 2.36.5).
+  * debian/rules:
+    - Enable wpe on Ubuntu now that the MIR has been accepted (thanks,
+      Sebastien Bacher) (Closes: #1016585).
+
+ -- Alberto Garcia <berto@igalia.com>  Wed, 10 Aug 2022 14:56:32 +0200
 
 webkit2gtk (2.36.4-1) unstable; urgency=high
 
