@@ -1,12 +1,12 @@
-webkit2gtk (2.36.6-1~deb10u1+rpi1) buster-staging; urgency=medium
+webkit2gtk (2.36.7-1~deb10u1+rpi1) buster-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
- -- Raspbian forward porter <root@raspbian.org>  Thu, 25 Aug 2022 17:53:21 +0000
+ -- Raspbian forward porter <root@raspbian.org>  Mon, 29 Aug 2022 10:01:25 +0000
 
-webkit2gtk (2.36.6-1~deb10u1) buster-security; urgency=high
+webkit2gtk (2.36.7-1~deb10u1) buster-security; urgency=high
 
   * Rebuild for buster-security.
   * debian/patches/force-single-process.patch:
@@ -28,7 +28,13 @@ webkit2gtk (2.36.6-1~deb10u1) buster-security; urgency=high
     - Add debian/compat file.
     - Update build dependency on debhelper.
 
- -- Alberto Garcia <berto@igalia.com>  Tue, 16 Aug 2022 09:57:32 +0200
+ -- Alberto Garcia <berto@igalia.com>  Sun, 28 Aug 2022 19:52:24 +0200
+
+webkit2gtk (2.36.7-1) unstable; urgency=high
+
+  * New upstream release.
+
+ -- Alberto Garcia <berto@igalia.com>  Thu, 25 Aug 2022 01:49:31 +0200
 
 webkit2gtk (2.36.6-1) unstable; urgency=high
 
