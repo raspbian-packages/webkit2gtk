@@ -33,7 +33,9 @@ struct SameSizeAsStyleBoxData : public RefCounted<SameSizeAsStyleBoxData> {
     uint32_t bitfields;
 };
 
+#if !defined(__m68k__)
 static_assert(sizeof(StyleBoxData) == sizeof(SameSizeAsStyleBoxData), "StyleBoxData should not grow");
+#endif
 
 DEFINE_ALLOCATOR_WITH_HEAP_IDENTIFIER(StyleBoxData);
 
