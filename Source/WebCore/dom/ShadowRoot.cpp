@@ -38,7 +38,6 @@
 #include "NotImplemented.h"
 #endif
 #include "RenderElement.h"
-#include "RuntimeEnabledFeatures.h"
 #include "SlotAssignment.h"
 #include "StyleResolver.h"
 #include "StyleScope.h"
@@ -61,12 +60,10 @@ struct SameSizeAsShadowRoot : public DocumentFragment, public TreeScope {
     std::optional<HashMap<AtomString, AtomString>> partMappings;
 };
 
-#if defined(__m68k__)
-COMPILE_ASSERT(sizeof(ShadowRoot) <= sizeof(SameSizeAsShadowRoot), shadowroot_should_stay_small);
-#else
-COMPILE_ASSERT(sizeof(ShadowRoot) == sizeof(SameSizeAsShadowRoot), shadowroot_should_stay_small);
+#if !defined(__m68k__)
+static_assert(sizeof(ShadowRoot) == sizeof(SameSizeAsShadowRoot), "shadowroot should stay small");
 #if !ASSERT_ENABLED
-COMPILE_ASSERT(sizeof(WeakPtr<Element>) == sizeof(void*), WeakPtr_should_be_same_size_as_raw_pointer);
+static_assert(sizeof(WeakPtr<Element>) == sizeof(void*), "WeakPtr should be same size as raw pointer");
 #endif
 #endif
 
@@ -77,6 +74,8 @@ ShadowRoot::ShadowRoot(Document& document, ShadowRootMode type, DelegatesFocus d
     , m_type(type)
     , m_styleScope(makeUnique<Style::Scope>(*this))
 {
+    if (type == ShadowRootMode::UserAgent)
+        setNodeFlag(NodeFlag::HasBeenInUserAgentShadowTree);
 }
 
 
@@ -87,6 +86,7 @@ ShadowRoot::ShadowRoot(Document& document, std::unique_ptr<SlotAssignment>&& slo
     , m_styleScope(makeUnique<Style::Scope>(*this))
     , m_slotAssignment(WTFMove(slotAssignment))
 {
+    setNodeFlag(NodeFlag::HasBeenInUserAgentShadowTree);
 }
 
 
@@ -182,7 +182,7 @@ StyleSheetList& ShadowRoot::styleSheets()
 
 String ShadowRoot::innerHTML() const
 {
-    return serializeFragment(*this, SerializedNodes::SubtreesOfChildren);
+    return serializeFragment(*this, SerializedNodes::SubtreesOfChildren, nullptr, ResolveURLs::NoExcludingURLsForPrivacy);
 }
 
 ExceptionOr<void> ShadowRoot::setInnerHTML(const String& markup)

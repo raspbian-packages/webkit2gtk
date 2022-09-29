@@ -77,13 +77,18 @@ set(ANGLE_SOURCES
     ${angle_translator_essl_sources}
     ${angle_translator_glsl_and_vulkan_base_sources}
     ${angle_translator_glsl_sources}
-    ${angle_translator_glsl_symbol_table_sources}
     ${angle_translator_sources}
     ${angle_system_utils_sources}
     src/common/angle_version_info.cpp
     src/libANGLE/capture/FrameCapture_mock.cpp
     src/libANGLE/capture/frame_capture_utils_mock.cpp
 )
+
+if (is_android)
+    list(APPEND ANGLE_SOURCES ${angle_translator_essl_symbol_table_sources})
+else ()
+    list(APPEND ANGLE_SOURCES ${angle_translator_glsl_symbol_table_sources})
+endif ()
 
 if (WIN32)
     # FIXME: DX11 support will not compile if this preprocessor definition is set
@@ -244,6 +249,7 @@ if (COMPILER_IS_GCC_OR_CLANG)
         if (TARGET ${angle_target})
             WEBKIT_ADD_TARGET_CXX_FLAGS(${angle_target}
                 -Wno-cast-align
+                -Wno-dangling-pointer
                 -Wno-extra
                 -Wno-suggest-attribute=format
                 -Wno-undef
