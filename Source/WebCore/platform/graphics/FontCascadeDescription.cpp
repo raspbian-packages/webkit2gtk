@@ -49,10 +49,8 @@ struct SameSizeAsFontCascadeDescription {
     unsigned bitfields3 : 10;
 };
 
-#if defined(__m68k__)
-COMPILE_ASSERT(sizeof(FontCascadeDescription) >= sizeof(SameSizeAsFontCascadeDescription), FontCascadeDescription_should_stay_small);
-#else
-COMPILE_ASSERT(sizeof(FontCascadeDescription) == sizeof(SameSizeAsFontCascadeDescription), FontCascadeDescription_should_stay_small);
+#if !defined(__m68k__)
+static_assert(sizeof(FontCascadeDescription) == sizeof(SameSizeAsFontCascadeDescription), "FontCascadeDescription should stay small");
 #endif
 
 FontCascadeDescription::FontCascadeDescription()

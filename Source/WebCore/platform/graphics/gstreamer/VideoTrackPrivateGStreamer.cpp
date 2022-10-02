@@ -29,6 +29,7 @@
 
 #include "VideoTrackPrivateGStreamer.h"
 
+#include "GStreamerCommon.h"
 #include "MediaPlayerPrivateGStreamer.h"
 #include <gst/pbutils/pbutils.h>
 
@@ -40,8 +41,8 @@ VideoTrackPrivateGStreamer::VideoTrackPrivateGStreamer(WeakPtr<MediaPlayerPrivat
 {
 }
 
-VideoTrackPrivateGStreamer::VideoTrackPrivateGStreamer(WeakPtr<MediaPlayerPrivateGStreamer> player, unsigned index, GRefPtr<GstStream>&& stream)
-    : TrackPrivateBaseGStreamer(TrackPrivateBaseGStreamer::TrackType::Video, this, index, WTFMove(stream))
+VideoTrackPrivateGStreamer::VideoTrackPrivateGStreamer(WeakPtr<MediaPlayerPrivateGStreamer> player, unsigned index, GstStream* stream)
+    : TrackPrivateBaseGStreamer(TrackPrivateBaseGStreamer::TrackType::Video, this, index, stream)
     , m_player(player)
 {
     int kind;
@@ -58,9 +59,12 @@ VideoTrackPrivateGStreamer::VideoTrackPrivateGStreamer(WeakPtr<MediaPlayerPrivat
         });
     }), this);
     g_signal_connect_swapped(m_stream.get(), "notify::tags", G_CALLBACK(+[](VideoTrackPrivateGStreamer* track) {
-        track->m_taskQueue.enqueueTask([track]() {
+        if (isMainThread())
             track->updateConfigurationFromTags();
-        });
+        else
+            track->m_taskQueue.enqueueTask([track]() {
+                track->updateConfigurationFromTags();
+            });
     }), this);
 
     updateConfigurationFromCaps();
@@ -70,6 +74,9 @@ VideoTrackPrivateGStreamer::VideoTrackPrivateGStreamer(WeakPtr<MediaPlayerPrivat
 void VideoTrackPrivateGStreamer::updateConfigurationFromTags()
 {
     ASSERT(isMainThread());
+    if (!m_stream)
+        return;
+
     auto tags = adoptGRef(gst_stream_get_tags(m_stream.get()));
     unsigned bitrate;
     if (!tags || !gst_tag_list_get_uint(tags.get(), GST_TAG_BITRATE, &bitrate))
@@ -83,8 +90,17 @@ void VideoTrackPrivateGStreamer::updateConfigurationFromTags()
 void VideoTrackPrivateGStreamer::updateConfigurationFromCaps()
 {
     ASSERT(isMainThread());
+    if (!m_stream)
+        return;
+
     auto caps = adoptGRef(gst_stream_get_caps(m_stream.get()));
     if (!caps || !gst_caps_is_fixed(caps.get()))
+        return;
+
+    // We might be notified of RTP caps here, when an incoming video track is re-enabled. Since
+    // those caps most likely do not contain the information we need (width, height, colorimetry,
+    // ...), keep previous configuration and return early.
+    if (!doCapsHaveType(caps.get(), GST_VIDEO_CAPS_TYPE_PREFIX))
         return;
 
     auto configuration = this->configuration();
@@ -159,7 +175,7 @@ void VideoTrackPrivateGStreamer::updateConfigurationFromCaps()
 
 #if GST_CHECK_VERSION(1, 20, 0)
     GUniquePtr<char> codec(gst_codec_utils_caps_get_mime_codec(caps.get()));
-    configuration.codec = codec.get();
+    configuration.codec = String::fromLatin1(codec.get());
 #endif
 
     setConfiguration(WTFMove(configuration));
@@ -167,7 +183,7 @@ void VideoTrackPrivateGStreamer::updateConfigurationFromCaps()
 
 VideoTrackPrivate::Kind VideoTrackPrivateGStreamer::kind() const
 {
-    if (m_stream.get() && gst_stream_get_stream_flags(m_stream.get()) & GST_STREAM_FLAG_SELECT)
+    if (m_stream && gst_stream_get_stream_flags(m_stream.get()) & GST_STREAM_FLAG_SELECT)
         return VideoTrackPrivate::Kind::Main;
 
     return VideoTrackPrivate::kind();

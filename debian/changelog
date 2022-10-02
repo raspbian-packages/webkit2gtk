@@ -1,10 +1,66 @@
-webkit2gtk (2.36.7-1+rpi1) bookworm-staging; urgency=medium
+webkit2gtk (2.38.0-3+rpi1) bookworm-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
- -- Raspbian forward porter <root@raspbian.org>  Tue, 30 Aug 2022 17:37:00 +0000
+ -- Raspbian forward porter <root@raspbian.org>  Sun, 02 Oct 2022 13:49:18 +0000
+
+webkit2gtk (2.38.0-3) unstable; urgency=high
+
+  * debian/patches/fix-nonunified-build.patch:
+    - Fix non-unified GTK4 build.
+
+ -- Alberto Garcia <berto@igalia.com>  Wed, 28 Sep 2022 09:20:17 +0200
+
+webkit2gtk (2.38.0-2) unstable; urgency=high
+
+  * The WebKitGTK security advisory WSA-2022-0009 lists the following
+    security fixes in the latest versions of WebKitGTK:
+    - CVE-2022-32891 (fixed in 2.36.5).
+    - CVE-2022-32886 and CVE-2022-32912 (fixed in 2.36.8).
+  * debian/rules:
+    - Build with -DENABLE_UNIFIED_BUILDS=OFF on mips, mipsel and sh4, we
+      are having problems to build webkit due to lack of memory (#1020642).
+
+ -- Alberto Garcia <berto@igalia.com>  Mon, 26 Sep 2022 11:25:41 +0200
+
+webkit2gtk (2.38.0-1) unstable; urgency=high
+
+  * New upstream release (Closes: #986218).
+  * debian/rules:
+    - Add USE_PREBUILT_DOCS variable to allow using the prebuilt
+      documentation included in the upstream tarball when gi-docgen is
+      missing.
+  * Bring all changes from the 2.37 (experimental) branch.
+  * debian/gbp.conf:
+    - Update upstream branch name.
+  * Generate debian/control from debian/control.in and control-common.in
+    depending on whether we're making the soup2 (4.0 API), soup3 (4.1 API)
+    and/or gtk4 (5.0 API) builds.
+  * debian/rules:
+    - Add new target to generate debian/control.
+    - Enable the GTK4 build (Closes: #1016765).
+    - ENABLE_GTKDOC is now ENABLE_DOCUMENTATION.
+    - Make CCACHE_DIR and CCACHE_NOHASHDIR global variables so they also
+      apply to the install target. This fixes a FTBFS if the home dir is not
+      writable (as is the case with buildds)
+  * debian/control.in:
+    - Remove build dependency on libnotify-dev (no longer used by WebKit).
+    - Replace build dependency on gtk-doc-tools with gi-docgen.
+  * The documentation has been renamed from webkitdomgtk to
+    webkit2gtk-web-extension and from jsc-glib to javascriptcoregtk.
+    - Update debian/libwebkit2gtk-4.0-doc.doc-base.* and
+      debian/libwebkit2gtk-4.0-doc.links.
+  * Refresh all patches.
+  * debian/source/lintian-overrides:
+    - Update source-is-missing overrides.
+  * debian/copyright:
+    - Update copyright information of all files.
+  * debian/libwebkit2gtk-4.0-37.symbols:
+    - Update symbols.
+
+ -- Alberto Garcia <berto@igalia.com>  Fri, 16 Sep 2022 16:59:49 +0200
 
 webkit2gtk (2.36.7-1) unstable; urgency=high
 
