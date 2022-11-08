@@ -72,11 +72,21 @@ static void scanDirectoryForDictionaries(const char* directoryPath, HashMap<Atom
             continue;
 
         auto filePath = FileSystem::pathByAppendingComponent(directoryPathString, fileName);
+#if OS(HURD)
+        char *normalizedPath;
+        normalizedPath = realpath(FileSystem::fileSystemRepresentation(filePath).data(), NULL);
+        if (!normalizedPath)
+            continue;
+
+        filePath = FileSystem::stringFromFileSystemRepresentation(normalizedPath);
+        free(normalizedPath);
+#else
         char normalizedPath[PATH_MAX];
         if (!realpath(FileSystem::fileSystemRepresentation(filePath).data(), normalizedPath))
             continue;
 
         filePath = FileSystem::stringFromFileSystemRepresentation(normalizedPath);
+#endif
         availableLocales.add(locale, Vector<String>()).iterator->value.append(filePath);
 
         String localeReplacingUnderscores = makeStringByReplacingAll(locale, '_', '-');
