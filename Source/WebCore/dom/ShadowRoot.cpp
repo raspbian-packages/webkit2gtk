@@ -60,9 +60,11 @@ struct SameSizeAsShadowRoot : public DocumentFragment, public TreeScope {
     std::optional<HashMap<AtomString, AtomString>> partMappings;
 };
 
+#if !defined(__m68k__)
 static_assert(sizeof(ShadowRoot) == sizeof(SameSizeAsShadowRoot), "shadowroot should stay small");
 #if !ASSERT_ENABLED
 static_assert(sizeof(WeakPtr<Element>) == sizeof(void*), "WeakPtr should be same size as raw pointer");
+#endif
 #endif
 
 ShadowRoot::ShadowRoot(Document& document, ShadowRootMode type, DelegatesFocus delegatesFocus)

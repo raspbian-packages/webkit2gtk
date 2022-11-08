@@ -57,7 +57,9 @@ struct SameSizeAsRuleData {
     unsigned d[4];
 };
 
+#if !defined(__m68k__)
 static_assert(sizeof(RuleData) == sizeof(SameSizeAsRuleData), "RuleData should stay small");
+#endif
 
 static inline MatchBasedOnRuleHash computeMatchBasedOnRuleHash(const CSSSelector& selector)
 {
