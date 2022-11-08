@@ -556,45 +556,45 @@ bool isAcceleratedContext(GraphicsContextCairo& platformContext)
 } // namespace State
 
 FillSource::FillSource(const GraphicsContextState& state)
-    : globalAlpha(state.alpha)
-    , fillRule(state.fillRule)
+    : globalAlpha(state.alpha())
+    , fillRule(state.fillRule())
 {
-    if (state.fillPattern) {
-        pattern.object = adoptRef(state.fillPattern->createPlatformPattern(AffineTransform()));
+    if (auto fillPattern = state.fillBrush().pattern()) {
+        pattern.object = adoptRef(fillPattern->createPlatformPattern(AffineTransform()));
 
-        auto& patternImage = state.fillPattern->tileImage();
+        auto& patternImage = fillPattern->tileImage();
         pattern.size = patternImage.size();
-        pattern.transform = state.fillPattern->patternSpaceTransform();
-        pattern.repeatX = state.fillPattern->repeatX();
-        pattern.repeatY = state.fillPattern->repeatY();
-    } else if (state.fillGradient) {
-        gradient.base = state.fillGradient->createPattern(1, state.fillGradientSpaceTransform);
-        if (state.alpha != 1)
-            gradient.alphaAdjusted = state.fillGradient->createPattern(state.alpha, state.fillGradientSpaceTransform);
+        pattern.transform = fillPattern->patternSpaceTransform();
+        pattern.repeatX = fillPattern->repeatX();
+        pattern.repeatY = fillPattern->repeatY();
+    } else if (auto fillGradient = state.fillBrush().gradient()) {
+        gradient.base = fillGradient->createPattern(1, state.fillBrush().gradientSpaceTransform());
+        if (state.alpha() != 1)
+            gradient.alphaAdjusted = fillGradient->createPattern(state.alpha(), state.fillBrush().gradientSpaceTransform());
     } else
-        color = state.fillColor;
+        color = state.fillBrush().color();
 }
 
 StrokeSource::StrokeSource(const GraphicsContextState& state)
-    : globalAlpha(state.alpha)
+    : globalAlpha(state.alpha())
 {
-    if (state.strokePattern)
-        pattern = adoptRef(state.strokePattern->createPlatformPattern(AffineTransform()));
-    else if (state.strokeGradient) {
-        gradient.base = state.strokeGradient->createPattern(1, state.strokeGradientSpaceTransform);
-        if (state.alpha != 1)
-            gradient.alphaAdjusted = state.strokeGradient->createPattern(state.alpha, state.strokeGradientSpaceTransform);
+    if (auto strokePattern = state.strokeBrush().pattern())
+        pattern = adoptRef(strokePattern->createPlatformPattern(AffineTransform()));
+    else if (auto strokeGradient = state.strokeBrush().gradient()) {
+        gradient.base = strokeGradient->createPattern(1, state.strokeBrush().gradientSpaceTransform());
+        if (state.alpha() != 1)
+            gradient.alphaAdjusted = strokeGradient->createPattern(state.alpha(), state.strokeBrush().gradientSpaceTransform());
     } else
-        color = state.strokeColor;
+        color = state.strokeBrush().color();
 }
 
 ShadowState::ShadowState(const GraphicsContextState& state)
-    : offset(state.shadowOffset)
-    , blur(state.shadowBlur)
-    , color(state.shadowColor)
-    , ignoreTransforms(state.shadowsIgnoreTransforms)
-    , globalAlpha(state.alpha)
-    , globalCompositeOperator(state.compositeOperator)
+    : offset(state.dropShadow().offset)
+    , blur(state.dropShadow().blurRadius)
+    , color(state.dropShadow().color)
+    , ignoreTransforms(state.shadowsIgnoreTransforms())
+    , globalAlpha(state.alpha())
+    , globalCompositeOperator(state.compositeMode().operation)
 {
 }
 
@@ -626,13 +626,13 @@ void setLineCap(GraphicsContextCairo& platformContext, LineCap lineCap)
 {
     cairo_line_cap_t cairoCap { };
     switch (lineCap) {
-    case ButtCap:
+    case LineCap::Butt:
         cairoCap = CAIRO_LINE_CAP_BUTT;
         break;
-    case RoundCap:
+    case LineCap::Round:
         cairoCap = CAIRO_LINE_CAP_ROUND;
         break;
-    case SquareCap:
+    case LineCap::Square:
         cairoCap = CAIRO_LINE_CAP_SQUARE;
         break;
     }
@@ -651,13 +651,13 @@ void setLineJoin(GraphicsContextCairo& platformContext, LineJoin lineJoin)
 {
     cairo_line_join_t cairoJoin { };
     switch (lineJoin) {
-    case MiterJoin:
+    case LineJoin::Miter:
         cairoJoin = CAIRO_LINE_JOIN_MITER;
         break;
-    case RoundJoin:
+    case LineJoin::Round:
         cairoJoin = CAIRO_LINE_JOIN_ROUND;
         break;
-    case BevelJoin:
+    case LineJoin::Bevel:
         cairoJoin = CAIRO_LINE_JOIN_BEVEL;
         break;
     }

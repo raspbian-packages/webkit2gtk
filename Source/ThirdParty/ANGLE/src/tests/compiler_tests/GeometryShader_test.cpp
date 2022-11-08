@@ -10,7 +10,6 @@
 #include "GLSLANG/ShaderLang.h"
 #include "angle_gl.h"
 #include "compiler/translator/BaseTypes.h"
-#include "compiler/translator/TranslatorESSL.h"
 #include "gtest/gtest.h"
 #include "tests/test_utils/ShaderCompileTreeTest.h"
 #include "tests/test_utils/compiler_test.h"
@@ -1221,8 +1220,8 @@ TEST_F(GeometryShaderTest, NonArrayInput)
     }
 }
 
-// Verify that it is a compile error to declare an unsized Geometry Shader input before a valid
-// input primitive declaration.
+// Verify that compilation errors do not occur even if declaring an unsized Geometry Shader input
+// before a valid input primitive declaration.
 TEST_F(GeometryShaderTest, DeclareUnsizedInputBeforeInputPrimitive)
 {
     const std::string &shaderString1 =
@@ -1250,9 +1249,9 @@ TEST_F(GeometryShaderTest, DeclareUnsizedInputBeforeInputPrimitive)
             int length = texcoord2.length();
         })";
 
-    if (compile(shaderString1) || compile(shaderString2))
+    if (!compile(shaderString1) || !compile(shaderString2))
     {
-        FAIL() << "Shader compilation succeeded, expecting failure:\n" << mInfoLog;
+        FAIL() << "Shader compilation failed, expecting success:\n" << mInfoLog;
     }
 }
 

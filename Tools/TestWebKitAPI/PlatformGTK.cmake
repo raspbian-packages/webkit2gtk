@@ -14,6 +14,7 @@ set(test_main_SOURCES gtk/main.cpp)
 list(APPEND TestWTF_SOURCES
     ${test_main_SOURCES}
 
+    Tests/WTF/glib/GRefPtr.cpp
     Tests/WTF/glib/GUniquePtr.cpp
     Tests/WTF/glib/WorkQueueGLib.cpp
 
@@ -27,9 +28,6 @@ list(APPEND TestWTF_SYSTEM_INCLUDE_DIRECTORIES
 list(APPEND TestWTF_LIBRARIES
     GTK::GTK
 )
-
-# FIXME: Remove when turning on hidden visibility https://bugs.webkit.org/show_bug.cgi?id=181916
-list(APPEND TestJavaScriptCore_LIBRARIES WTF)
 
 # TestWebCore
 list(APPEND TestWebCore_SOURCES

@@ -31,6 +31,7 @@
 #include "NativeWebKeyboardEvent.h"
 #include "NativeWebMouseEvent.h"
 #include "NativeWebWheelEvent.h"
+#include "WKAPICast.h"
 #include "WebEventFactory.h"
 #include "WebPageProxy.h"
 #include <cairo.h>
@@ -41,7 +42,7 @@ static void drawPageBackground(cairo_t* ctx, const std::optional<WebCore::Color>
     if (!backgroundColor || backgroundColor.value().isVisible())
         return;
 
-    auto [r, g, b, a] = backgroundColor.value().toSRGBALossy<uint8_t>();
+    auto [r, g, b, a] = backgroundColor.value().toColorTypeLossy<WebCore::SRGBA<uint8_t>>().resolved();
 
     cairo_set_source_rgba(ctx, r, g, b, a);
     cairo_rectangle(ctx, rect.x(), rect.y(), rect.width(), rect.height());
@@ -73,7 +74,7 @@ void WKPageHandleKeyboardEvent(WKPageRef pageRef, WKKeyboardEvent event)
     NativeWebKeyboardEvent::HandledByInputMethod handledByInputMethod = NativeWebKeyboardEvent::HandledByInputMethod::No;
     std::optional<Vector<WebCore::CompositionUnderline>> preeditUnderlines;
     std::optional<WebKit::EditingRange> preeditSelectionRange;
-    WebKit::toImpl(pageRef)->handleKeyboardEvent(NativeWebKeyboardEvent(&wpeEvent, "", handledByInputMethod, WTFMove(preeditUnderlines), WTFMove(preeditSelectionRange)));
+    WebKit::toImpl(pageRef)->handleKeyboardEvent(NativeWebKeyboardEvent(&wpeEvent, ""_s, handledByInputMethod, WTFMove(preeditUnderlines), WTFMove(preeditSelectionRange)));
 }
 
 void WKPageHandleMouseEvent(WKPageRef pageRef, WKMouseEvent event)

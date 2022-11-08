@@ -63,6 +63,12 @@
 using namespace WebKit;
 using namespace WebCore;
 
+/**
+ * WebKitWebPage:
+ *
+ * A loaded web page.
+ */
+
 enum {
     DOCUMENT_LOADED,
     SEND_REQUEST,
@@ -227,6 +233,10 @@ private:
             frame.jsContextForWorld(injectedWorld.ptr());
     }
 
+    void serviceWorkerGlobalObjectIsAvailableForFrame(WebPage&, WebFrame&, DOMWrapperWorld&) override
+    {
+    }
+
     WebKitWebPage* m_webPage;
 };
 
@@ -239,17 +249,17 @@ public:
     }
 
 private:
-    void didInitiateLoadForResource(WebPage& page, WebFrame& frame, uint64_t identifier, const ResourceRequest& request, bool) override
+    void didInitiateLoadForResource(WebPage& page, WebFrame& frame, WebCore::ResourceLoaderIdentifier identifier, const ResourceRequest& request, bool) override
     {
         API::Dictionary::MapType message;
         message.set(String::fromUTF8("Page"), &page);
         message.set(String::fromUTF8("Frame"), &frame);
-        message.set(String::fromUTF8("Identifier"), API::UInt64::create(identifier));
+        message.set(String::fromUTF8("Identifier"), API::UInt64::create(identifier.toUInt64()));
         message.set(String::fromUTF8("Request"), API::URLRequest::create(request));
         WebProcess::singleton().injectedBundle()->postMessage(String::fromUTF8("WebPage.DidInitiateLoadForResource"), API::Dictionary::create(WTFMove(message)).ptr());
     }
 
-    void willSendRequestForFrame(WebPage& page, WebFrame&, uint64_t identifier, ResourceRequest& resourceRequest, const ResourceResponse& redirectResourceResponse) override
+    void willSendRequestForFrame(WebPage& page, WebFrame&, WebCore::ResourceLoaderIdentifier identifier, ResourceRequest& resourceRequest, const ResourceResponse& redirectResourceResponse) override
     {
         GRefPtr<WebKitURIRequest> request = adoptGRef(webkitURIRequestCreateForResourceRequest(resourceRequest));
         GRefPtr<WebKitURIResponse> redirectResponse = !redirectResourceResponse.isNull() ? adoptGRef(webkitURIResponseCreateForResourceResponse(redirectResourceResponse)) : nullptr;
@@ -265,18 +275,18 @@ private:
 
         API::Dictionary::MapType message;
         message.set(String::fromUTF8("Page"), &page);
-        message.set(String::fromUTF8("Identifier"), API::UInt64::create(identifier));
+        message.set(String::fromUTF8("Identifier"), API::UInt64::create(identifier.toUInt64()));
         message.set(String::fromUTF8("Request"), API::URLRequest::create(resourceRequest));
         if (!redirectResourceResponse.isNull())
             message.set(String::fromUTF8("RedirectResponse"), API::URLResponse::create(redirectResourceResponse));
         WebProcess::singleton().injectedBundle()->postMessage(String::fromUTF8("WebPage.DidSendRequestForResource"), API::Dictionary::create(WTFMove(message)).ptr());
     }
 
-    void didReceiveResponseForResource(WebPage& page, WebFrame&, uint64_t identifier, const ResourceResponse& response) override
+    void didReceiveResponseForResource(WebPage& page, WebFrame&, WebCore::ResourceLoaderIdentifier identifier, const ResourceResponse& response) override
     {
         API::Dictionary::MapType message;
         message.set(String::fromUTF8("Page"), &page);
-        message.set(String::fromUTF8("Identifier"), API::UInt64::create(identifier));
+        message.set(String::fromUTF8("Identifier"), API::UInt64::create(identifier.toUInt64()));
         message.set(String::fromUTF8("Response"), API::URLResponse::create(response));
         WebProcess::singleton().injectedBundle()->postMessage(String::fromUTF8("WebPage.DidReceiveResponseForResource"), API::Dictionary::create(WTFMove(message)).ptr());
 
@@ -287,28 +297,28 @@ private:
         }
     }
 
-    void didReceiveContentLengthForResource(WebPage& page, WebFrame&, uint64_t identifier, uint64_t contentLength) override
+    void didReceiveContentLengthForResource(WebPage& page, WebFrame&, WebCore::ResourceLoaderIdentifier identifier, uint64_t contentLength) override
     {
         API::Dictionary::MapType message;
         message.set(String::fromUTF8("Page"), &page);
-        message.set(String::fromUTF8("Identifier"), API::UInt64::create(identifier));
+        message.set(String::fromUTF8("Identifier"), API::UInt64::create(identifier.toUInt64()));
         message.set(String::fromUTF8("ContentLength"), API::UInt64::create(contentLength));
         WebProcess::singleton().injectedBundle()->postMessage(String::fromUTF8("WebPage.DidReceiveContentLengthForResource"), API::Dictionary::create(WTFMove(message)).ptr());
     }
 
-    void didFinishLoadForResource(WebPage& page, WebFrame&, uint64_t identifier) override
+    void didFinishLoadForResource(WebPage& page, WebFrame&, WebCore::ResourceLoaderIdentifier identifier) override
     {
         API::Dictionary::MapType message;
         message.set(String::fromUTF8("Page"), &page);
-        message.set(String::fromUTF8("Identifier"), API::UInt64::create(identifier));
+        message.set(String::fromUTF8("Identifier"), API::UInt64::create(identifier.toUInt64()));
         WebProcess::singleton().injectedBundle()->postMessage(String::fromUTF8("WebPage.DidFinishLoadForResource"), API::Dictionary::create(WTFMove(message)).ptr());
     }
 
-    void didFailLoadForResource(WebPage& page, WebFrame&, uint64_t identifier, const ResourceError& error) override
+    void didFailLoadForResource(WebPage& page, WebFrame&, WebCore::ResourceLoaderIdentifier identifier, const ResourceError& error) override
     {
         API::Dictionary::MapType message;
         message.set(String::fromUTF8("Page"), &page);
-        message.set(String::fromUTF8("Identifier"), API::UInt64::create(identifier));
+        message.set(String::fromUTF8("Identifier"), API::UInt64::create(identifier.toUInt64()));
         message.set(String::fromUTF8("Error"), API::Error::create(error));
         WebProcess::singleton().injectedBundle()->postMessage(String::fromUTF8("WebPage.DidFailLoadForResource"), API::Dictionary::create(WTFMove(message)).ptr());
 
@@ -722,11 +732,11 @@ WebKitWebPage* webkitWebPageCreate(WebPage* webPage)
 void webkitWebPageDidReceiveMessage(WebKitWebPage* page, const String& messageName, API::Dictionary& message)
 {
 #if PLATFORM(GTK)
-    if (messageName == String("GetSnapshot")) {
-        SnapshotOptions snapshotOptions = static_cast<SnapshotOptions>(static_cast<API::UInt64*>(message.get("SnapshotOptions"))->value());
-        uint64_t callbackID = static_cast<API::UInt64*>(message.get("CallbackID"))->value();
-        SnapshotRegion region = static_cast<SnapshotRegion>(static_cast<API::UInt64*>(message.get("SnapshotRegion"))->value());
-        bool transparentBackground = static_cast<API::Boolean*>(message.get("TransparentBackground"))->value();
+    if (messageName == "GetSnapshot"_s) {
+        SnapshotOptions snapshotOptions = static_cast<SnapshotOptions>(static_cast<API::UInt64*>(message.get("SnapshotOptions"_s))->value());
+        uint64_t callbackID = static_cast<API::UInt64*>(message.get("CallbackID"_s))->value();
+        SnapshotRegion region = static_cast<SnapshotRegion>(static_cast<API::UInt64*>(message.get("SnapshotRegion"_s))->value());
+        bool transparentBackground = static_cast<API::Boolean*>(message.get("TransparentBackground"_s))->value();
 
         RefPtr<WebImage> snapshotImage;
         WebPage* webPage = page->priv->webPage;
@@ -755,10 +765,10 @@ void webkitWebPageDidReceiveMessage(WebKitWebPage* page, const String& messageNa
         }
 
         API::Dictionary::MapType messageReply;
-        messageReply.set("Page", webPage);
-        messageReply.set("CallbackID", API::UInt64::create(callbackID));
-        messageReply.set("Snapshot", snapshotImage);
-        WebProcess::singleton().injectedBundle()->postMessage("WebPage.DidGetSnapshot", API::Dictionary::create(WTFMove(messageReply)).ptr());
+        messageReply.set("Page"_s, webPage);
+        messageReply.set("CallbackID"_s, API::UInt64::create(callbackID));
+        messageReply.set("Snapshot"_s, snapshotImage);
+        WebProcess::singleton().injectedBundle()->postMessage("WebPage.DidGetSnapshot"_s, API::Dictionary::create(WTFMove(messageReply)).ptr());
     } else
 #endif
         ASSERT_NOT_REACHED();

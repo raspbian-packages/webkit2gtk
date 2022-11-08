@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010-2019 Apple Inc. All rights reserved.
+ * Copyright (C) 2010-2022 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -167,18 +167,16 @@ static RefPtr<WebImage> imageForRect(FrameView* frameView, const IntRect& painti
     if (bitmapSize.isEmpty())
         return nullptr;
 
-    auto snapshot = WebImage::create(bitmapSize, snapshotOptionsToImageOptions(options));
+    auto snapshot = WebImage::create(bitmapSize, snapshotOptionsToImageOptions(options), DestinationColorSpace::SRGB());
     if (!snapshot)
         return nullptr;
 
-    auto graphicsContext = snapshot->bitmap().createGraphicsContext();
-    if (!graphicsContext)
-        return nullptr;
+    auto& graphicsContext = snapshot->context();
 
-    graphicsContext->clearRect(IntRect(IntPoint(), bitmapSize));
-    graphicsContext->applyDeviceScaleFactor(deviceScaleFactor);
-    graphicsContext->scale(bitmapScaleFactor);
-    graphicsContext->translate(-paintingRect.location());
+    graphicsContext.clearRect(IntRect(IntPoint(), bitmapSize));
+    graphicsContext.applyDeviceScaleFactor(deviceScaleFactor);
+    graphicsContext.scale(bitmapScaleFactor);
+    graphicsContext.translate(-paintingRect.location());
 
     FrameView::SelectionInSnapshot shouldPaintSelection = FrameView::IncludeSelection;
     if (options & SnapshotOptionsExcludeSelectionHighlighting)
@@ -192,7 +190,7 @@ static RefPtr<WebImage> imageForRect(FrameView* frameView, const IntRect& painti
 
     auto oldPaintBehavior = frameView->paintBehavior();
     frameView->setPaintBehavior(paintBehavior);
-    frameView->paintContentsForSnapshot(*graphicsContext.get(), paintingRect, shouldPaintSelection, FrameView::DocumentCoordinates);
+    frameView->paintContentsForSnapshot(graphicsContext, paintingRect, shouldPaintSelection, FrameView::DocumentCoordinates);
     frameView->setPaintBehavior(oldPaintBehavior);
 
     return snapshot;
@@ -273,6 +271,14 @@ bool InjectedBundleNodeHandle::isHTMLInputElementAutoFilledAndViewable() const
     return downcast<HTMLInputElement>(*m_node).isAutoFilledAndViewable();
 }
 
+bool InjectedBundleNodeHandle::isHTMLInputElementAutoFilledAndObscured() const
+{
+    if (!is<HTMLInputElement>(m_node))
+        return false;
+
+    return downcast<HTMLInputElement>(*m_node).isAutoFilledAndObscured();
+}
+
 void InjectedBundleNodeHandle::setHTMLInputElementAutoFilled(bool filled)
 {
     if (!is<HTMLInputElement>(m_node))
@@ -287,6 +293,14 @@ void InjectedBundleNodeHandle::setHTMLInputElementAutoFilledAndViewable(bool aut
         return;
 
     downcast<HTMLInputElement>(*m_node).setAutoFilledAndViewable(autoFilledAndViewable);
+}
+
+void InjectedBundleNodeHandle::setHTMLInputElementAutoFilledAndObscured(bool autoFilledAndObscured)
+{
+    if (!is<HTMLInputElement>(m_node))
+        return;
+
+    downcast<HTMLInputElement>(*m_node).setAutoFilledAndObscured(autoFilledAndObscured);
 }
 
 bool InjectedBundleNodeHandle::isHTMLInputElementAutoFillButtonEnabled() const
@@ -382,7 +396,7 @@ bool InjectedBundleNodeHandle::isSelectableTextNode() const
         return false;
 
     auto renderer = m_node->renderer();
-    return renderer && renderer->style().userSelect() != UserSelect::None;
+    return renderer && renderer->style().effectiveUserSelect() != UserSelect::None;
 }
 
 RefPtr<InjectedBundleNodeHandle> InjectedBundleNodeHandle::htmlTableCellElementCellAbove()

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010-2020 Apple Inc. All rights reserved.
+ * Copyright (C) 2010-2021 Apple Inc. All rights reserved.
  * Portions Copyright (c) 2011 Motorola Mobility, Inc.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,7 +31,9 @@
 #include "DebuggableInfoData.h"
 #include "MessageReceiver.h"
 #include "WebInspectorUtilities.h"
+#include "WebPageProxyIdentifier.h"
 #include <JavaScriptCore/InspectorFrontendChannel.h>
+#include <WebCore/Color.h>
 #include <WebCore/FloatRect.h>
 #include <WebCore/InspectorClient.h>
 #include <WebCore/InspectorFrontendClient.h>
@@ -47,6 +49,7 @@
 #include <wtf/RetainPtr.h>
 #include <wtf/RunLoop.h>
 
+OBJC_CLASS NSString;
 OBJC_CLASS NSURL;
 OBJC_CLASS NSView;
 OBJC_CLASS NSWindow;
@@ -129,6 +132,7 @@ public:
 #if PLATFORM(MAC)
     enum class InspectionTargetType { Local, Remote };
     static RetainPtr<NSWindow> createFrontendWindow(NSRect savedWindowFrame, InspectionTargetType);
+    static void showSavePanel(NSWindow *, NSURL *, Vector<WebCore::InspectorFrontendClient::SaveData>&&, bool forceSaveAs, CompletionHandler<void(NSURL *)>&&);
 
     void didBecomeActive();
 
@@ -157,6 +161,7 @@ public:
     void showResources();
     void showMainResourceForFrame(WebFrameProxy*);
     void openURLExternally(const String& url);
+    void revealFileExternally(const String& path);
 
     AttachmentSide attachmentSide() const { return m_attachmentSide; }
     bool isAttached() const { return m_isAttached; }
@@ -225,16 +230,16 @@ private:
     void platformOpenURLExternally(const String&);
     void platformInspectedURLChanged(const String&);
     void platformShowCertificate(const WebCore::CertificateInfo&);
-    unsigned platformInspectedWindowHeight();
-    unsigned platformInspectedWindowWidth();
     void platformAttach();
     void platformDetach();
     void platformSetAttachedWindowHeight(unsigned);
     void platformSetAttachedWindowWidth(unsigned);
     void platformSetSheetRect(const WebCore::FloatRect&);
     void platformStartWindowDrag();
-    void platformSave(const String& filename, const String& content, bool base64Encoded, bool forceSaveAs);
-    void platformAppend(const String& filename, const String& content);
+    void platformRevealFileExternally(const String&);
+    void platformSave(Vector<WebCore::InspectorFrontendClient::SaveData>&&, bool forceSaveAs);
+    void platformLoad(const String& path, CompletionHandler<void(const String&)>&&);
+    void platformPickColorFromScreen(CompletionHandler<void(const std::optional<WebCore::Color>&)>&&);
 
 #if PLATFORM(MAC)
     bool platformCanAttach(bool webProcessCanAttach);
@@ -257,10 +262,15 @@ private:
     void showCertificate(const WebCore::CertificateInfo&);
     void elementSelectionChanged(bool);
     void timelineRecordingChanged(bool);
-    void setDeveloperPreferenceOverride(WebCore::InspectorClient::DeveloperPreference, std::optional<bool>);
 
-    void save(const String& filename, const String& content, bool base64Encoded, bool forceSaveAs);
-    void append(const String& filename, const String& content);
+    void setDeveloperPreferenceOverride(WebCore::InspectorClient::DeveloperPreference, std::optional<bool>);
+#if ENABLE(INSPECTOR_NETWORK_THROTTLING)
+    void setEmulatedConditions(std::optional<int64_t>&& bytesPerSecondLimit);
+#endif
+
+    void save(Vector<WebCore::InspectorFrontendClient::SaveData>&&, bool forceSaveAs);
+    void load(const String& path, CompletionHandler<void(const String&)>&&);
+    void pickColorFromScreen(CompletionHandler<void(const std::optional<WebCore::Color>&)>&&);
 
     bool canAttach() const { return m_canAttach; }
     bool shouldOpenAttached();
@@ -288,6 +298,7 @@ private:
     WebPageProxy* m_inspectedPage { nullptr };
     WebPageProxy* m_inspectorPage { nullptr };
     std::unique_ptr<API::InspectorClient> m_inspectorClient;
+    WebPageProxyIdentifier m_inspectedPageIdentifier;
 
 #if ENABLE(INSPECTOR_EXTENSIONS)
     RefPtr<WebInspectorUIExtensionControllerProxy> m_extensionController;
@@ -303,6 +314,7 @@ private:
     bool m_elementSelectionActive { false };
     bool m_ignoreElementSelectionChange { false };
     bool m_isActiveFrontend { false };
+    bool m_isOpening { false };
     bool m_closing { false };
 
     AttachmentSide m_attachmentSide {AttachmentSide::Bottom};
@@ -323,7 +335,6 @@ private:
     GtkWidget* m_inspectorWindow { nullptr };
     GtkWidget* m_headerBar { nullptr };
     String m_inspectedURLString;
-    bool m_isOpening { false };
 #elif PLATFORM(WIN)
     HWND m_inspectedViewWindow { nullptr };
     HWND m_inspectedViewParentWindow { nullptr };

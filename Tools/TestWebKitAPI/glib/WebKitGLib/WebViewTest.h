@@ -37,7 +37,7 @@ public:
     void platformDestroy();
 
     virtual void loadURI(const char* uri);
-    virtual void loadHtml(const char* html, const char* baseURI);
+    virtual void loadHtml(const char* html, const char* baseURI, WebKitWebView* = nullptr);
     virtual void loadPlainText(const char* plainText);
     virtual void loadRequest(WebKitURIRequest*);
     virtual void loadBytes(GBytes*, const char* mimeType, const char* encoding, const char* baseURI);
@@ -49,11 +49,12 @@ public:
     void quitMainLoop();
     void quitMainLoopAfterProcessingPendingEvents();
     void wait(double seconds);
-    void waitUntilLoadFinished();
+    void waitUntilLoadFinished(WebKitWebView* = nullptr);
     void waitUntilTitleChangedTo(const char* expectedTitle);
     void waitUntilTitleChanged();
-    void waitUntilFileChanged(const char*, GFileMonitorEvent);
     void waitUntilIsWebProcessResponsiveChanged();
+    void assertFileIsCreated(const char*);
+    void assertJavaScriptBecomesTrue(const char*);
     void resizeView(int width, int height);
     void hideView();
     void selectAll();
@@ -72,9 +73,10 @@ public:
     void emitPopupMenuSignal();
 #endif
 
-    WebKitJavascriptResult* runJavaScriptAndWaitUntilFinished(const char* javascript, GError**);
+    WebKitJavascriptResult* runJavaScriptAndWaitUntilFinished(const char* javascript, GError**, WebKitWebView* = nullptr);
     WebKitJavascriptResult* runJavaScriptFromGResourceAndWaitUntilFinished(const char* resource, GError**);
     WebKitJavascriptResult* runJavaScriptInWorldAndWaitUntilFinished(const char* javascript, const char* world, GError**);
+    WebKitJavascriptResult* runAsyncJavaScriptFunctionInWorldAndWaitUntilFinished(const char* body, GVariant* arguments, const char* world, GError**);
     WebKitJavascriptResult* runJavaScriptWithoutForcedUserGesturesAndWaitUntilFinished(const char* javascript, GError**);
 
     // Javascript result helpers.
@@ -109,8 +111,6 @@ public:
     size_t m_resourceDataSize { 0 };
     cairo_surface_t* m_surface { nullptr };
     bool m_expectedWebProcessCrash { false };
-    GRefPtr<GFile> m_monitoredFile;
-    GFileMonitorEvent m_expectedFileChangeEvent;
 
 #if PLATFORM(GTK)
     GtkWidget* m_parentWindow { nullptr };

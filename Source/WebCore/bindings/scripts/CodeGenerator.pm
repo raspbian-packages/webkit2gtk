@@ -195,7 +195,7 @@ sub ProcessDocument
         return;
     }
 
-    die "Processing document " . $useDocument->fileName . " did not generate anything.";
+    # die "Processing document " . $useDocument->fileName . " did not generate anything.";
 }
 
 sub GenerateEmptyHeaderAndCpp
@@ -488,12 +488,15 @@ sub ProcessDictionarySupplementalDependencies
 }
 
 # Attributes / Operations / Constants of supplemental interfaces can have an [Exposed=XX] attribute which restricts
-# on which global contexts they should be exposed.
+# on which global contexts they should be exposed. [Exposed=*] will expose the attribute on the interface for all
+# supported global contexts.
 sub shouldPropertyBeExposed
 {
     my ($context, $target) = @_;
 
     my $exposedAttribute = $target->extendedAttributes->{"Exposed"} || "Window";
+    return 1 if $exposedAttribute eq "*";
+
     $exposedAttribute = substr($exposedAttribute, 1, -1) if substr($exposedAttribute, 0, 1) eq "(";
     my @targetGlobalContexts = split(",", $exposedAttribute);
 
@@ -1098,13 +1101,17 @@ sub GetterExpression
 
     my $functionName;
     if ($attribute->extendedAttributes->{"URL"}) {
-        $functionName = "getURLAttribute";
+        $functionName = "getURLAttributeForBindings";
     } elsif ($attributeType->name eq "boolean") {
         $functionName = "hasAttributeWithoutSynchronization";
     } elsif ($attributeType->name eq "long") {
         $functionName = "getIntegralAttribute";
     } elsif ($attributeType->name eq "unsigned long") {
         $functionName = "getUnsignedIntegralAttribute";
+    } elsif ($attributeType->name eq "Element") {
+        $functionName = "getElementAttribute";
+    } elsif ($attributeType->name eq "FrozenArray" && scalar @{$attributeType->subtypes} == 1 && @{$attributeType->subtypes}[0]->name eq "Element") {
+        $functionName = "getElementsArrayAttribute";
     } else {
         if ($contentAttributeName eq "WebCore::HTMLNames::idAttr") {
             $functionName = "getIdAttribute";
@@ -1115,6 +1122,7 @@ sub GetterExpression
         } elsif ($generator->IsSVGAnimatedType($attributeType)) {
             $functionName = "getAttribute";
         } else {
+            $implIncludes->{"ElementInlines.h"} = 1;
             $functionName = "attributeWithoutSynchronization";
         }
     }
@@ -1141,6 +1149,10 @@ sub SetterExpression
         $functionName = "setIntegralAttribute";
     } elsif ($attributeType->name eq "unsigned long") {
         $functionName = "setUnsignedIntegralAttribute";
+    } elsif ($attributeType->name eq "Element") {
+        $functionName = "setElementAttribute";
+    } elsif ($attributeType->name eq "FrozenArray" && scalar @{$attributeType->subtypes} == 1 && @{$attributeType->subtypes}[0]->name eq "Element") {
+        $functionName = "setElementsArrayAttribute";
     } elsif ($generator->IsSVGAnimatedType($attributeType)) {
         $functionName = "setAttribute";
     } else {
@@ -1209,7 +1221,7 @@ sub InterfaceHasRegularToJSONOperation
     return 0;
 }
 
-# https://heycam.github.io/webidl/#dfn-json-types
+# https://webidl.spec.whatwg.org/#dfn-json-types
 sub IsJSONType
 {
     my ($object, $interface, $type) = @_;
@@ -1418,13 +1430,14 @@ sub GenerateCompileTimeCheckForEnumsIfNeeded
 
     return () if $interface->extendedAttributes->{"DoNotCheckConstants"} || !@{$interface->constants};
 
-    my $baseScope = $interface->extendedAttributes->{"ConstantsScope"} || $interface->type->name;
+    my $enum = $interface->extendedAttributes->{"ConstantsEnum"};
+    my $baseScope = $enum || $interface->extendedAttributes->{"ConstantsScope"} || $interface->type->name;
 
     my @checks = ();
     foreach my $constant (@{$interface->constants}) {
         my $scope = $constant->extendedAttributes->{"ImplementedBy"} || $baseScope;
         my $name = $constant->extendedAttributes->{"ImplementedAs"} || $constant->name;
-        my $value = $constant->value;
+        my $value = $enum ? "static_cast<" . $enum . ">(" . $constant->value . ")" : $constant->value;
         my $conditional = $constant->extendedAttributes->{"Conditional"};
         push(@checks, "#if " . $generator->GenerateConditionalStringFromAttributeValue($conditional) . "\n") if $conditional;
         push(@checks, "static_assert(${scope}::${name} == ${value}, \"${name} in ${scope} does not match value from IDL\");\n");
@@ -1442,6 +1455,7 @@ sub ExtendedAttributeContains
     my $keyword = shift;
 
     my @extendedAttributeKeywords = split /\s*\&\s*/, $extendedAttribute;
+    return grep { /$keyword/ } @extendedAttributeKeywords if ref($keyword) eq "Regexp";
     return grep { $_ eq $keyword } @extendedAttributeKeywords;
 }
 

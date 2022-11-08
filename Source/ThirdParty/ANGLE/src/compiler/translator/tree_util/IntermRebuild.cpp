@@ -251,7 +251,7 @@ bool TIntermRebuild::traverseAnyAs(TIntermNode &node, Node *&out)
         return true;
     }
     out = asNode<Node>(result.mSingle);
-    return out;
+    return out != nullptr;
 }
 
 bool TIntermRebuild::traverseAggregateBaseChildren(TIntermAggregateBase &node)
@@ -286,6 +286,10 @@ bool TIntermRebuild::traverseAggregateBaseChildren(TIntermAggregateBase &node)
 
             case Action::Fail:
                 return false;
+
+            default:
+                ASSERT(false);
+                return false;
         }
     }
 
@@ -300,9 +304,11 @@ struct TIntermRebuild::NodeStackGuard
 {
     ConsList<TIntermNode *> oldNodeStack;
     ConsList<TIntermNode *> &nodeStack;
-    NodeStackGuard(ConsList<TIntermNode *> &nodeStack)
+    NodeStackGuard(ConsList<TIntermNode *> &nodeStack, TIntermNode *node)
         : oldNodeStack(nodeStack), nodeStack(nodeStack)
-    {}
+    {
+        nodeStack = {node, &oldNodeStack};
+    }
     ~NodeStackGuard() { nodeStack = oldNodeStack; }
 };
 
@@ -335,8 +341,7 @@ PreResult TIntermRebuild::traversePre(TIntermNode &originalNode)
         return {originalNode, VisitBits::Both};
     }
 
-    NodeStackGuard guard(mNodeStack);
-    mNodeStack = {&originalNode, &guard.oldNodeStack};
+    NodeStackGuard guard(mNodeStack, &originalNode);
 
     const NodeType originalNodeType = getNodeType(originalNode);
 
@@ -382,6 +387,9 @@ PreResult TIntermRebuild::traversePre(TIntermNode &originalNode)
             return visitLoopPre(*originalNode.getAsLoopNode());
         case NodeType::Branch:
             return visitBranchPre(*originalNode.getAsBranchNode());
+        default:
+            ASSERT(false);
+            return Fail();
     }
 }
 
@@ -400,8 +408,7 @@ TIntermNode *TIntermRebuild::traverseChildren(NodeType currNodeType,
         return &currNode;
     }
 
-    NodeStackGuard guard(mNodeStack);
-    mNodeStack = {&currNode, &guard.oldNodeStack};
+    NodeStackGuard guard(mNodeStack, &currNode);
 
     switch (currNodeType)
     {
@@ -445,6 +452,9 @@ TIntermNode *TIntermRebuild::traverseChildren(NodeType currNodeType,
             return traverseLoopChildren(*currNode.getAsLoopNode());
         case NodeType::Branch:
             return traverseBranchChildren(*currNode.getAsBranchNode());
+        default:
+            ASSERT(false);
+            return nullptr;
     }
 }
 
@@ -468,8 +478,7 @@ PostResult TIntermRebuild::traversePost(NodeType currNodeType,
         return currNode;
     }
 
-    NodeStackGuard guard(mNodeStack);
-    mNodeStack = {&currNode, &guard.oldNodeStack};
+    NodeStackGuard guard(mNodeStack, &currNode);
 
     switch (currNodeType)
     {
@@ -513,6 +522,9 @@ PostResult TIntermRebuild::traversePost(NodeType currNodeType,
             return visitLoopPost(*currNode.getAsLoopNode());
         case NodeType::Branch:
             return visitBranchPost(*currNode.getAsBranchNode());
+        default:
+            ASSERT(false);
+            return Fail();
     }
 }
 
@@ -781,6 +793,9 @@ TIntermNode *TIntermRebuild::traverseLoopChildren(TIntermLoop &node)
             ASSERT(cond);
             ASSERT(!init && !expr);
             break;
+        default:
+            ASSERT(false);
+            break;
     }
 #endif
 
@@ -813,6 +828,9 @@ TIntermNode *TIntermRebuild::traverseLoopChildren(TIntermLoop &node)
             case TLoopType::ELoopDoWhile:
                 GUARD(newCond && newBody);
                 GUARD(!newInit && !newExpr);
+                break;
+            default:
+                ASSERT(false);
                 break;
         }
         return new TIntermLoop(loopType, newInit, newCond, newExpr, newBody);

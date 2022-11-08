@@ -65,6 +65,8 @@ public:
     void didReceiveMessage(IPC::Connection&, IPC::Decoder&) final;
     bool didReceiveSyncMessage(IPC::Connection&, IPC::Decoder&, UniqueRef<IPC::Encoder>&) final;
 
+    GPUConnectionToWebProcess& gpuConnectionToWebProcess() const { return m_gpuConnection; }
+
 private:
     friend UniqueRef<RemoteAudioSessionProxy> WTF::makeUniqueRefWithoutFastMallocCheck<RemoteAudioSessionProxy>(GPUConnectionToWebProcess&);
     explicit RemoteAudioSessionProxy(GPUConnectionToWebProcess&);
@@ -75,6 +77,8 @@ private:
     using SetActiveCompletion = CompletionHandler<void(bool)>;
     void tryToSetActive(bool, SetActiveCompletion&&);
     void setIsPlayingToBluetoothOverride(std::optional<bool>&& value);
+    void triggerBeginInterruptionForTesting();
+    void triggerEndInterruptionForTesting();
 
     RemoteAudioSessionProxyManager& audioSessionManager();
     IPC::Connection& connection();

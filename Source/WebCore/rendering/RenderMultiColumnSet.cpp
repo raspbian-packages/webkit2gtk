@@ -543,7 +543,7 @@ std::pair<unsigned, unsigned> RenderMultiColumnSet::firstAndLastColumnsFromOffse
             return 0;
 
         auto columnIndex = static_cast<float>(offset - fragmentedFlowLogicalTop) / columnHeight;
-        if (isBottom && WTF::isIntegral(columnIndex) && columnIndex > 0)
+        if (isBottom && WTF::isIntegral(columnIndex) && bottomOffset > topOffset && columnIndex > 0)
             columnIndex -= 1;
 
         return static_cast<unsigned>(columnIndex);
@@ -1046,9 +1046,9 @@ void RenderMultiColumnSet::updateHitTestResult(HitTestResult& result, const Layo
     }
 }
 
-const char* RenderMultiColumnSet::renderName() const
+ASCIILiteral RenderMultiColumnSet::renderName() const
 {    
-    return "RenderMultiColumnSet";
+    return "RenderMultiColumnSet"_s;
 }
 
 }

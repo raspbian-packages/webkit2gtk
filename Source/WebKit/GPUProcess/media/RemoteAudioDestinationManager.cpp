@@ -30,6 +30,7 @@
 
 #include "GPUConnectionToWebProcess.h"
 #include "GPUProcess.h"
+#include "Logging.h"
 #include <WebCore/AudioUtilities.h>
 #include <wtf/ThreadSafeRefCounted.h>
 
@@ -40,6 +41,25 @@
 #include <WebCore/CARingBuffer.h>
 #include <WebCore/WebAudioBufferList.h>
 #endif
+
+#if ENABLE(IPC_TESTING_API)
+#define WEB_PROCESS_TERMINATE_CONDITION !m_gpuConnectionToWebProcess.connection().ignoreInvalidMessageForTesting()
+#else
+#define WEB_PROCESS_TERMINATE_CONDITION true
+#endif
+
+#define TERMINATE_WEB_PROCESS_WITH_MESSAGE(message) \
+    if (WEB_PROCESS_TERMINATE_CONDITION) { \
+        RELEASE_LOG_FAULT(IPC, "Requesting termination of web process %" PRIu64 " for reason: %" PUBLIC_LOG_STRING, m_gpuConnectionToWebProcess.webProcessIdentifier().toUInt64(), #message); \
+        m_gpuConnectionToWebProcess.terminateWebProcess(); \
+    }
+
+#define MESSAGE_CHECK(assertion, message) do { \
+    if (UNLIKELY(!(assertion))) { \
+        TERMINATE_WEB_PROCESS_WITH_MESSAGE(message); \
+        return; \
+    } \
+} while (0)
 
 namespace WebKit {
 
@@ -73,9 +93,9 @@ public:
     }
 
 #if PLATFORM(COCOA)
-    void audioSamplesStorageChanged(const SharedMemory::IPCHandle& ipcHandle, const WebCore::CAAudioStreamDescription& description, uint64_t numberOfFrames)
+    void audioSamplesStorageChanged(const SharedMemory::Handle& handle, const WebCore::CAAudioStreamDescription& description, uint64_t numberOfFrames)
     {
-        m_ringBuffer = WebCore::CARingBuffer::adoptStorage(makeUniqueRef<ReadOnlySharedRingBufferStorage>(ipcHandle.handle), description, numberOfFrames);
+        m_ringBuffer = WebCore::CARingBuffer::adoptStorage(makeUniqueRef<ReadOnlySharedRingBufferStorage>(handle), description, numberOfFrames);
     }
 #endif
 
@@ -113,10 +133,12 @@ private:
             status = noErr;
         }
 
-        for (unsigned i = 0; i < numberOfFrames; i += WebCore::AudioUtilities::renderQuantumSize) {
+        unsigned requestedSamplesCount = m_extraRequestedFrames;
+        for (; requestedSamplesCount < numberOfFrames; requestedSamplesCount += WebCore::AudioUtilities::renderQuantumSize) {
             // Ask the audio thread in the WebContent process to render a quantum.
             m_renderSemaphore.signal();
         }
+        m_extraRequestedFrames = requestedSamplesCount - numberOfFrames;
 
         return status;
     }
@@ -129,6 +151,7 @@ private:
 
     UniqueRef<WebCore::CARingBuffer> m_ringBuffer;
     uint64_t m_startFrame { 0 };
+    unsigned m_extraRequestedFrames { 0 };
 #endif
     IPC::Semaphore m_renderSemaphore;
 
@@ -144,6 +167,8 @@ RemoteAudioDestinationManager::~RemoteAudioDestinationManager() = default;
 
 void RemoteAudioDestinationManager::createAudioDestination(const String& inputDeviceId, uint32_t numberOfInputChannels, uint32_t numberOfOutputChannels, float sampleRate, float hardwareSampleRate, IPC::Semaphore&& renderSemaphore, CompletionHandler<void(const WebKit::RemoteAudioDestinationIdentifier)>&& completionHandler)
 {
+    MESSAGE_CHECK(!m_gpuConnectionToWebProcess.isCaptivePortalModeEnabled(), "Received a createAudioDestination() message from a CaptivePortal.");
+
     auto newID = RemoteAudioDestinationIdentifier::generateThreadSafe();
     auto destination = makeUniqueRef<RemoteAudioDestination>(m_gpuConnectionToWebProcess, newID, inputDeviceId, numberOfInputChannels, numberOfOutputChannels, sampleRate, hardwareSampleRate, WTFMove(renderSemaphore));
     m_audioDestinations.add(newID, WTFMove(destination));
@@ -152,6 +177,8 @@ void RemoteAudioDestinationManager::createAudioDestination(const String& inputDe
 
 void RemoteAudioDestinationManager::deleteAudioDestination(RemoteAudioDestinationIdentifier identifier, CompletionHandler<void()>&& completionHandler)
 {
+    MESSAGE_CHECK(!m_gpuConnectionToWebProcess.isCaptivePortalModeEnabled(), "Received a deleteAudioDestination() message from a CaptivePortal.");
+
     m_audioDestinations.remove(identifier);
     completionHandler();
 
@@ -161,6 +188,8 @@ void RemoteAudioDestinationManager::deleteAudioDestination(RemoteAudioDestinatio
 
 void RemoteAudioDestinationManager::startAudioDestination(RemoteAudioDestinationIdentifier identifier, CompletionHandler<void(bool)>&& completionHandler)
 {
+    MESSAGE_CHECK(!m_gpuConnectionToWebProcess.isCaptivePortalModeEnabled(), "Received a startAudioDestination() message from a CaptivePortal.");
+
     bool isPlaying = false;
     if (auto* item = m_audioDestinations.get(identifier)) {
         item->start();
@@ -171,6 +200,8 @@ void RemoteAudioDestinationManager::startAudioDestination(RemoteAudioDestination
 
 void RemoteAudioDestinationManager::stopAudioDestination(RemoteAudioDestinationIdentifier identifier, CompletionHandler<void(bool)>&& completionHandler)
 {
+    MESSAGE_CHECK(!m_gpuConnectionToWebProcess.isCaptivePortalModeEnabled(), "Received a stopAudioDestination() message from a CaptivePortal.");
+
     bool isPlaying = false;
     if (auto* item = m_audioDestinations.get(identifier)) {
         item->stop();
@@ -180,10 +211,10 @@ void RemoteAudioDestinationManager::stopAudioDestination(RemoteAudioDestinationI
 }
 
 #if PLATFORM(COCOA)
-void RemoteAudioDestinationManager::audioSamplesStorageChanged(RemoteAudioDestinationIdentifier identifier, const SharedMemory::IPCHandle& ipcHandle, const WebCore::CAAudioStreamDescription& description, uint64_t numberOfFrames)
+void RemoteAudioDestinationManager::audioSamplesStorageChanged(RemoteAudioDestinationIdentifier identifier, const SharedMemory::Handle& handle, const WebCore::CAAudioStreamDescription& description, uint64_t numberOfFrames)
 {
     if (auto* item = m_audioDestinations.get(identifier))
-        item->audioSamplesStorageChanged(ipcHandle, description, numberOfFrames);
+        item->audioSamplesStorageChanged(handle, description, numberOfFrames);
 }
 #endif
 
@@ -197,5 +228,9 @@ bool RemoteAudioDestinationManager::allowsExitUnderMemoryPressure() const
 }
 
 } // namespace WebKit
+
+#undef MESSAGE_CHECK
+#undef TERMINATE_WEB_PROCESS_WITH_MESSAGE
+#undef WEB_PROCESS_TERMINATE_CONDITION
 
 #endif // ENABLE(GPU_PROCESS) && ENABLE(WEB_AUDIO)

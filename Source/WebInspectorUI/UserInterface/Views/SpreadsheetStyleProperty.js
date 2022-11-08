@@ -52,6 +52,7 @@ WI.SpreadsheetStyleProperty = class SpreadsheetStyleProperty extends WI.Object
         this._selected = false;
         this._hasInvalidVariableValue = false;
         this._cssDocumentationPopover = null;
+        this._activeInlineSwatch = null;
 
         this.update();
         property.addEventListener(WI.CSSProperty.Event.OverriddenStatusChanged, this.updateStatus, this);
@@ -134,6 +135,12 @@ WI.SpreadsheetStyleProperty = class SpreadsheetStyleProperty extends WI.Object
 
         if (this._valueTextField)
             this._valueTextField.detached();
+
+        this._activeInlineSwatch?.dismissPopover();
+        this._activeInlineSwatch = null;
+
+        this._cssDocumentationPopover?.dismiss();
+        this._cssDocumentationPopover = null;
     }
 
     remove(replacement = null)
@@ -144,7 +151,7 @@ WI.SpreadsheetStyleProperty = class SpreadsheetStyleProperty extends WI.Object
         this.element.remove();
 
         if (replacement)
-            this._property.replaceWithText(replacement);
+            this._property.text = replacement;
         else
             this._property.remove();
 
@@ -300,13 +307,9 @@ WI.SpreadsheetStyleProperty = class SpreadsheetStyleProperty extends WI.Object
         if (!this._property.valid && this._property.hasOtherVendorNameOrKeyword())
             classNames.push("other-vendor");
         else if (this._hasInvalidVariableValue || (!this._property.valid && this._property.value !== "")) {
-            let propertyNameIsValid = false;
-            if (WI.CSSCompletions.cssNameCompletions)
-                propertyNameIsValid = WI.CSSCompletions.cssNameCompletions.isValidPropertyName(this._property.name);
-
             classNames.push("has-warning");
 
-            if (!propertyNameIsValid) {
+            if (!WI.cssManager.propertyNameCompletions?.isValidPropertyName(this._property.name)) {
                 classNames.push("invalid-name");
                 elementTitle = WI.UIString("Unsupported property name");
             } else {
@@ -365,6 +368,13 @@ WI.SpreadsheetStyleProperty = class SpreadsheetStyleProperty extends WI.Object
         textField.value = isEditingName ? this._property.name : this._property.rawValue;
     }
 
+    spreadsheetTextFieldInitialCompletionIndex(textField, completions)
+    {
+        if (textField === this._nameTextField && WI.settings.experimentalCSSSortPropertyNameAutocompletionByUsage.value)
+            return WI.CSSProperty.indexOfCompletionForMostUsedPropertyName(completions);
+        return 0;
+    }
+
     spreadsheetTextFieldAllowsNewlines(textField)
     {
         return textField === this._valueTextField;
@@ -390,6 +400,7 @@ WI.SpreadsheetStyleProperty = class SpreadsheetStyleProperty extends WI.Object
             this._renderValue(this._property.rawValue);
 
         this._cssDocumentationPopover?.dismiss();
+        this._cssDocumentationPopover = null;
 
         if (direction === "forward") {
             if (isEditingName && !willRemoveProperty) {
@@ -458,7 +469,6 @@ WI.SpreadsheetStyleProperty = class SpreadsheetStyleProperty extends WI.Object
 
     willDismissPopover()
     {
-        this._valueElement.classList.remove(WI.Popover.IgnoreAutoDismissClassName);
         this._cssDocumentationPopover = null;
     }
 
@@ -486,6 +496,7 @@ WI.SpreadsheetStyleProperty = class SpreadsheetStyleProperty extends WI.Object
     _renderValue(value)
     {
         this._hasInvalidVariableValue = false;
+        this._activeInlineSwatch = null;
 
         const maxValueLength = 150;
         let tokens = WI.tokenizeCSSValue(value);
@@ -539,7 +550,7 @@ WI.SpreadsheetStyleProperty = class SpreadsheetStyleProperty extends WI.Object
         if (this.property.isVariable)
             return;
 
-        if (!WI.CSSCompletions.cssNameCompletions.isValidPropertyName(this._property.name))
+        if (!WI.cssManager.propertyNameCompletions?.isValidPropertyName(this._property.name))
             return;
 
         if (!CSSDocumentation.hasOwnProperty(this._property.name) && !CSSDocumentation.hasOwnProperty(this._property.canonicalName))
@@ -569,8 +580,6 @@ WI.SpreadsheetStyleProperty = class SpreadsheetStyleProperty extends WI.Object
     {
         this._cssDocumentationPopover ??= new WI.CSSDocumentationPopover(this._property, this);
         this._cssDocumentationPopover.show(this._nameElement);
-        if (this._isEditable())
-            this._valueElement.classList.add(WI.Popover.IgnoreAutoDismissClassName);
     }
 
     _createInlineSwatch(type, contents, valueObject)
@@ -586,8 +595,7 @@ WI.SpreadsheetStyleProperty = class SpreadsheetStyleProperty extends WI.Object
                 innerElement.append(item);
         }
 
-        let readOnly = !this._isEditable();
-        let swatch = new WI.InlineSwatch(type, valueObject, readOnly);
+        let swatch = new WI.InlineSwatch(type, valueObject, {readOnly: !this._isEditable()});
 
         swatch.addEventListener(WI.InlineSwatch.Event.ValueChanged, function(event) {
             let value = event.data.value && event.data.value.toString();
@@ -607,11 +615,10 @@ WI.SpreadsheetStyleProperty = class SpreadsheetStyleProperty extends WI.Object
             };
         }
 
-        if (this._delegate && typeof this._delegate.stylePropertyInlineSwatchActivated === "function") {
-            swatch.addEventListener(WI.InlineSwatch.Event.Activated, function(event) {
-                this._delegate.stylePropertyInlineSwatchActivated();
-            }, this);
-        }
+        swatch.addEventListener(WI.InlineSwatch.Event.Activated, function(event) {
+            this._activeInlineSwatch = swatch;
+            this._delegate?.stylePropertyInlineSwatchActivated?.();
+        }, this);
 
         if (this._delegate && typeof this._delegate.stylePropertyInlineSwatchDeactivated === "function") {
             swatch.addEventListener(WI.InlineSwatch.Event.Deactivated, function(event) {
@@ -627,9 +634,13 @@ WI.SpreadsheetStyleProperty = class SpreadsheetStyleProperty extends WI.Object
     _replaceSpecialTokens(tokens)
     {
         // FIXME: <https://webkit.org/b/178636> Web Inspector: Styles: Make inline widgets work with CSS functions (var(), calc(), etc.)
+        // FIXME: <https://webkit.org/b/233055> Web Inspector: Add a swatch for justify-content, justify-items, and justify-self
 
         if (this._property.name === "box-shadow")
             return this._addBoxShadowTokens(tokens);
+
+        if (WI.AlignmentData.isAlignmentAwarePropertyName(this._property.name))
+            return this._addAlignmentTokens(tokens, this._property.name);
 
         if (this._property.isVariable || WI.CSSKeywordCompletions.isColorAwareProperty(this._property.name)) {
             tokens = this._addGradientTokens(tokens);
@@ -648,7 +659,7 @@ WI.SpreadsheetStyleProperty = class SpreadsheetStyleProperty extends WI.Object
 
     _addGradientTokens(tokens)
     {
-        let gradientRegex = /^(repeating-)?(linear|radial)-gradient$/i;
+        let gradientRegex = /^(repeating-)?(linear|radial|conic)-gradient$/i;
         let newTokens = [];
         let gradientStartIndex = NaN;
         let openParenthesis = 0;
@@ -740,6 +751,9 @@ WI.SpreadsheetStyleProperty = class SpreadsheetStyleProperty extends WI.Object
 
     _addTimingFunctionTokens(tokens, tokenType)
     {
+        if (!this._isEditable())
+            return tokens;
+
         let newTokens = [];
         let startIndex = NaN;
         let openParenthesis = 0;
@@ -789,6 +803,9 @@ WI.SpreadsheetStyleProperty = class SpreadsheetStyleProperty extends WI.Object
 
     _addBoxShadowTokens(tokens)
     {
+        if (!this._isEditable())
+            return tokens;
+
         let newTokens = [];
         let startIndex = 0;
         let openParentheses = 0;
@@ -844,6 +861,14 @@ WI.SpreadsheetStyleProperty = class SpreadsheetStyleProperty extends WI.Object
         return newTokens;
     }
 
+    _addAlignmentTokens(tokens, propertyName)
+    {
+        // FIXME: <https://webkit.org/b/233281> Web Inspector: Alignment swatch should handle multi-token values better
+        let text = this._resolveVariables(tokens.map((token) => token.value).join(""));
+        let swatch = this._createInlineSwatch(WI.InlineSwatch.Type.Alignment, this._addVariableTokens(tokens), new WI.AlignmentData(propertyName, text));
+        return [swatch];
+    }
+
     _addVariableTokens(tokens)
     {
         let newTokens = [];
@@ -865,13 +890,12 @@ WI.SpreadsheetStyleProperty = class SpreadsheetStyleProperty extends WI.Object
                     continue;
 
                 let rawTokens = tokens.slice(startIndex, i + 1);
-                let variableNameIndex = rawTokens.findIndex((token) => token.value.startsWith("--") && /\bvariable-2\b/.test(token.type));
+                let variableNameIndex = rawTokens.findIndex((token) => WI.CSSProperty.isVariable(token.value) && /\bvariable-2\b/.test(token.type));
                 if (variableNameIndex !== -1) {
                     let contents = rawTokens.slice(0, variableNameIndex + 1);
 
                     if (WI.settings.experimentalEnableStylesJumpToVariableDeclaration.value && this._property.ownerStyle.type !== WI.CSSStyleDeclaration.Type.Computed && this._delegate && this._delegate.spreadsheetStylePropertySelectByProperty) {
-                        const dontCreateIfMissing = true;
-                        let effectiveVariableProperty = this._property.ownerStyle.nodeStyles.effectivePropertyForName(rawTokens[variableNameIndex].value, dontCreateIfMissing);
+                        let effectiveVariableProperty = this._property.ownerStyle.nodeStyles.effectivePropertyForName(rawTokens[variableNameIndex].value);
                         if (effectiveVariableProperty) {
                             let arrowElement = WI.createGoToArrowButton();
                             arrowElement.classList.add("select-variable-property");
@@ -924,12 +948,12 @@ WI.SpreadsheetStyleProperty = class SpreadsheetStyleProperty extends WI.Object
 
     _handleNameChange()
     {
-        this._property.name = this._nameElement.textContent.trim();
+        this._property.name = this._nameTextField.value;
     }
 
     _handleValueChange()
     {
-        let value = this._valueElement.textContent;
+        let value = this._valueTextField.value;
 
         this._property.rawValue = value.trim();
 
@@ -963,9 +987,9 @@ WI.SpreadsheetStyleProperty = class SpreadsheetStyleProperty extends WI.Object
         }
     }
 
-    _nameCompletionDataProvider(text, {allowEmptyPrefix} = {})
+    _nameCompletionDataProvider(text, options = {})
     {
-        return WI.CSSKeywordCompletions.forPartialPropertyName(text, {allowEmptyPrefix});
+        return WI.CSSKeywordCompletions.forPartialPropertyName(text, options);
     }
 
     _handleValueBeforeInput(event)
@@ -987,10 +1011,10 @@ WI.SpreadsheetStyleProperty = class SpreadsheetStyleProperty extends WI.Object
         this.spreadsheetTextFieldDidCommit(this._valueTextField, {direction: "forward"});
     }
 
-    _valueCompletionDataProvider(text, {allowEmptyPrefix} = {})
+    _valueCompletionDataProvider(text, options = {})
     {
-        // FIXME: <webkit.org/b/227411> Styles sidebar panel should support midline and multiline completions.
-        return WI.CSSKeywordCompletions.forPartialPropertyValue(text, this._nameElement.textContent.trim(), {additionalFunctionValueCompletionsProvider: this.additionalFunctionValueCompletionsProvider.bind(this)});
+        options.additionalFunctionValueCompletionsProvider = this.additionalFunctionValueCompletionsProvider.bind(this);
+        return WI.CSSKeywordCompletions.forPartialPropertyValue(text, this._nameElement.textContent.trim(), options);
     }
 
     _setupJumpToSymbol(element)

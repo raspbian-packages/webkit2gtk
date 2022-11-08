@@ -85,13 +85,15 @@ void RemoteAudioSessionProxy::setCategory(AudioSession::CategoryType category, R
 void RemoteAudioSessionProxy::setPreferredBufferSize(uint64_t size)
 {
     m_preferredBufferSize = size;
-    audioSessionManager().setPreferredBufferSizeForProcess(*this, size);
+    audioSessionManager().updatePreferredBufferSizeForProcess();
 }
 
 void RemoteAudioSessionProxy::tryToSetActive(bool active, SetActiveCompletion&& completion)
 {
     m_active = audioSessionManager().tryToSetActiveForProcess(*this, active);
     completion(m_active);
+
+    audioSessionManager().updatePresentingProcesses();
 }
 
 void RemoteAudioSessionProxy::setIsPlayingToBluetoothOverride(std::optional<bool>&& value)
@@ -123,6 +125,16 @@ RemoteAudioSessionProxyManager& RemoteAudioSessionProxy::audioSessionManager()
 IPC::Connection& RemoteAudioSessionProxy::connection()
 {
     return m_gpuConnection.connection();
+}
+
+void RemoteAudioSessionProxy::triggerBeginInterruptionForTesting()
+{
+    AudioSession::sharedSession().beginInterruptionForTesting();
+}
+
+void RemoteAudioSessionProxy::triggerEndInterruptionForTesting()
+{
+    AudioSession::sharedSession().endInterruptionForTesting();
 }
 
 }

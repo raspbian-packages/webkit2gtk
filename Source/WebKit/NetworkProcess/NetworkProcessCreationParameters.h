@@ -25,9 +25,12 @@
 
 #pragma once
 
+#include "AuxiliaryProcessCreationParameters.h"
 #include "CacheModel.h"
 #include "SandboxExtension.h"
 #include <WebCore/Cookie.h>
+#include <WebCore/ProcessIdentifier.h>
+#include <WebCore/RegistrableDomain.h>
 #include <wtf/ProcessID.h>
 #include <wtf/Vector.h>
 #include <wtf/text/WTFString.h>
@@ -55,16 +58,12 @@ struct NetworkProcessCreationParameters {
     void encode(IPC::Encoder&) const;
     static WARN_UNUSED_RETURN bool decode(IPC::Decoder&, NetworkProcessCreationParameters&);
 
+    AuxiliaryProcessCreationParameters auxiliaryProcessParameters;
+
     CacheModel cacheModel { CacheModel::DocumentViewer };
 
 #if PLATFORM(MAC) || PLATFORM(MACCATALYST)
     Vector<uint8_t> uiProcessCookieStorageIdentifier;
-#endif
-#if PLATFORM(IOS_FAMILY)
-    SandboxExtension::Handle cookieStorageDirectoryExtensionHandle;
-    SandboxExtension::Handle containerCachesDirectoryExtensionHandle;
-    SandboxExtension::Handle parentBundleDirectoryExtensionHandle;
-    SandboxExtension::Handle tempDirectoryExtensionHandle;
 #endif
     bool shouldSuppressMemoryPressureHandler { false };
 
@@ -87,7 +86,7 @@ struct NetworkProcessCreationParameters {
     Vector<String> urlSchemesRegisteredAsNoAccess;
 
     bool enablePrivateClickMeasurement { true };
-    bool enablePrivateClickMeasurementDebugMode { false };
+    bool ftpEnabled { false };
 
     Vector<WebsiteDataStoreParameters> websiteDataStoreParameters;
 };

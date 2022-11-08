@@ -21,7 +21,7 @@ void TestCacheProgram(PlatformMethods *platform,
                       size_t programSize,
                       const uint8_t *programBytes);
 
-class EGLProgramCacheControlTest : public ANGLETest
+class EGLProgramCacheControlTest : public ANGLETest<>
 {
   public:
     void onCache(const ProgramKeyType &key, size_t programSize, const uint8_t *programBytes)
@@ -261,6 +261,7 @@ TEST_P(EGLProgramCacheControlTest, LinkProgramWithBadShaders)
     glDeleteProgram(program);
 }
 
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(EGLProgramCacheControlTest);
 ANGLE_INSTANTIATE_TEST(EGLProgramCacheControlTest,
                        ES2_D3D9(),
                        ES2_D3D11(),

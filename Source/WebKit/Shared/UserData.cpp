@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013 Apple Inc. All rights reserved.
+ * Copyright (C) 2013-2022 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,7 +33,6 @@
 #include "APIFrameHandle.h"
 #include "APIGeometry.h"
 #include "APINumber.h"
-#include "APIPageGroupHandle.h"
 #include "APIPageHandle.h"
 #include "APISerializedScriptValue.h"
 #include "APIString.h"
@@ -102,15 +101,11 @@ static RefPtr<API::Object> transformGraph(API::Object& object, const UserData::T
     if (object.type() == API::Object::Type::Array) {
         auto& array = static_cast<API::Array&>(object);
 
-        Vector<RefPtr<API::Object>> elements;
-        elements.reserveInitialCapacity(array.elements().size());
-        for (const auto& element : array.elements()) {
+        auto elements = array.elements().map([&](auto& element) -> RefPtr<API::Object> {
             if (!element)
-                elements.uncheckedAppend(nullptr);
-            else
-                elements.uncheckedAppend(transformGraph(*element, transformer));
-        }
-
+                return nullptr;
+            return transformGraph(*element, transformer);
+        });
         return API::Array::create(WTFMove(elements));
     }
 
@@ -216,9 +211,8 @@ void UserData::encode(IPC::Encoder& encoder, const API::Object& object)
     case API::Object::Type::Image: {
         auto& image = static_cast<const WebImage&>(object);
 
-        ShareableBitmap::Handle handle;
-        ASSERT(image.bitmap().isBackedBySharedMemory());
-        if (!image.bitmap().isBackedBySharedMemory() || !image.bitmap().createHandle(handle)) {
+        auto handle = image.createHandle();
+        if (handle.isNull()) {
             // Initial false indicates no allocated bitmap or is not shareable.
             encoder << false;
             break;
@@ -226,13 +220,10 @@ void UserData::encode(IPC::Encoder& encoder, const API::Object& object)
 
         // Initial true indicates a bitmap was allocated and is shareable.
         encoder << true;
+        encoder << image.parameters();
         encoder << handle;
         break;
     }
-
-    case API::Object::Type::PageGroupHandle:
-        static_cast<const API::PageGroupHandle&>(object).encode(encoder);
-        break;
 
     case API::Object::Type::PageHandle:
         static_cast<const API::PageHandle&>(object).encode(encoder);
@@ -399,25 +390,21 @@ bool UserData::decode(IPC::Decoder& decoder, RefPtr<API::Object>& result)
         if (!didEncode)
             break;
 
+        std::optional<WebCore::ImageBufferBackend::Parameters> parameters;
+        decoder >> parameters;
+        if (!parameters)
+            return false;
+
         ShareableBitmap::Handle handle;
         if (!decoder.decode(handle))
             return false;
 
-        auto bitmap = ShareableBitmap::create(handle);
-        if (!bitmap)
-            return false;
-
-        result = WebImage::create(bitmap.releaseNonNull());
+        result = WebImage::create(*parameters, WTFMove(handle));
         break;
     }
 
     case API::Object::Type::Null:
         result = nullptr;
-        break;
-
-    case API::Object::Type::PageGroupHandle:
-        if (!API::PageGroupHandle::decode(decoder, result))
-            return false;
         break;
 
     case API::Object::Type::PageHandle:
@@ -440,7 +427,7 @@ bool UserData::decode(IPC::Decoder& decoder, RefPtr<API::Object>& result)
         if (!decoder.decode(dataReference))
             return false;
 
-        result = API::SerializedScriptValue::adopt(dataReference.vector());
+        result = API::SerializedScriptValue::createFromWireBytes({ dataReference });
         break;
     }
 

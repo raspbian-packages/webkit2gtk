@@ -29,6 +29,7 @@
 #include "ArgumentCoders.h"
 #include "WebProcess.h"
 #include <WebCore/Frame.h>
+#include <WebCore/FrameDestructionObserverInlines.h>
 #include <WebCore/Page.h>
 
 namespace WebKit {
@@ -36,6 +37,7 @@ namespace WebKit {
 void WebsitePoliciesData::encode(IPC::Encoder& encoder) const
 {
     encoder << contentBlockersEnabled;
+    encoder << activeContentRuleListActionPatterns;
     encoder << autoplayPolicy;
 #if ENABLE(DEVICE_ORIENTATION)
     encoder << deviceOrientationAndMotionAccessState;
@@ -53,6 +55,8 @@ void WebsitePoliciesData::encode(IPC::Encoder& encoder) const
     encoder << allowContentChangeObserverQuirk;
     encoder << allowsContentJavaScript;
     encoder << mouseEventPolicy;
+    encoder << modalContainerObservationPolicy;
+    encoder << colorSchemePreference;
     encoder << idempotentModeAutosizingOnlyHonorsPercentages;
 }
 
@@ -62,7 +66,12 @@ std::optional<WebsitePoliciesData> WebsitePoliciesData::decode(IPC::Decoder& dec
     decoder >> contentBlockersEnabled;
     if (!contentBlockersEnabled)
         return std::nullopt;
-    
+
+    std::optional<HashMap<WTF::String, Vector<WTF::String>>> activeContentRuleListActionPatterns;
+    decoder >> activeContentRuleListActionPatterns;
+    if (!activeContentRuleListActionPatterns)
+        return std::nullopt;
+
     std::optional<WebsiteAutoplayPolicy> autoplayPolicy;
     decoder >> autoplayPolicy;
     if (!autoplayPolicy)
@@ -140,6 +149,16 @@ std::optional<WebsitePoliciesData> WebsitePoliciesData::decode(IPC::Decoder& dec
     if (!mouseEventPolicy)
         return std::nullopt;
 
+    std::optional<WebCore::ModalContainerObservationPolicy> modalContainerObservationPolicy;
+    decoder >> modalContainerObservationPolicy;
+    if (!modalContainerObservationPolicy)
+        return std::nullopt;
+
+    std::optional<WebCore::ColorSchemePreference> colorSchemePreference;
+    decoder >> colorSchemePreference;
+    if (!colorSchemePreference)
+        return std::nullopt;
+
     std::optional<bool> idempotentModeAutosizingOnlyHonorsPercentages;
     decoder >> idempotentModeAutosizingOnlyHonorsPercentages;
     if (!idempotentModeAutosizingOnlyHonorsPercentages)
@@ -147,6 +166,7 @@ std::optional<WebsitePoliciesData> WebsitePoliciesData::decode(IPC::Decoder& dec
 
     return { {
         WTFMove(*contentBlockersEnabled),
+        WTFMove(*activeContentRuleListActionPatterns),
         WTFMove(*allowedAutoplayQuirks),
         WTFMove(*autoplayPolicy),
 #if ENABLE(DEVICE_ORIENTATION)
@@ -164,6 +184,8 @@ std::optional<WebsitePoliciesData> WebsitePoliciesData::decode(IPC::Decoder& dec
         WTFMove(*allowContentChangeObserverQuirk),
         WTFMove(*allowsContentJavaScript),
         WTFMove(*mouseEventPolicy),
+        WTFMove(*modalContainerObservationPolicy),
+        WTFMove(*colorSchemePreference),
         WTFMove(*idempotentModeAutosizingOnlyHonorsPercentages),
     } };
 }
@@ -182,6 +204,8 @@ void WebsitePoliciesData::applyToDocumentLoader(WebsitePoliciesData&& websitePol
     // Only setUserContentExtensionsEnabled if it hasn't already been disabled by reloading without content blockers.
     if (documentLoader.userContentExtensionsEnabled())
         documentLoader.setUserContentExtensionsEnabled(websitePolicies.contentBlockersEnabled);
+
+    documentLoader.setActiveContentRuleListActionPatterns(websitePolicies.activeContentRuleListActionPatterns);
 
     OptionSet<WebCore::AutoplayQuirk> quirks;
     const auto& allowedQuirks = websitePolicies.allowedAutoplayQuirks;
@@ -286,6 +310,8 @@ void WebsitePoliciesData::applyToDocumentLoader(WebsitePoliciesData&& websitePol
 #endif
     }
 
+    documentLoader.setModalContainerObservationPolicy(websitePolicies.modalContainerObservationPolicy);
+    documentLoader.setColorSchemePreference(websitePolicies.colorSchemePreference);
     documentLoader.setAllowContentChangeObserverQuirk(websitePolicies.allowContentChangeObserverQuirk);
     documentLoader.setIdempotentModeAutosizingOnlyHonorsPercentages(websitePolicies.idempotentModeAutosizingOnlyHonorsPercentages);
 

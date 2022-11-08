@@ -27,58 +27,71 @@
 
 #if ENABLE(GPU_PROCESS)
 
+#include "WebCoreArgumentCoders.h"
+#include <WebCore/ProcessIdentity.h>
 #include <wtf/MachSendRight.h>
 
 namespace WebKit {
 
 struct GPUProcessConnectionParameters {
-#if HAVE(TASK_IDENTITY_TOKEN)
-    MachSendRight webProcessIdentityToken;
-#endif
+    WebCore::ProcessIdentity webProcessIdentity;
     Vector<String> overrideLanguages;
+    bool isCaptivePortalModeEnabled { false };
 #if ENABLE(IPC_TESTING_API)
     bool ignoreInvalidMessageForTesting { false };
+#endif
+#if HAVE(AUDIT_TOKEN)
+    std::optional<audit_token_t> presentingApplicationAuditToken;
+#endif
+#if ENABLE(VP9)
+    std::optional<bool> hasVP9HardwareDecoder;
 #endif
 
     void encode(IPC::Encoder& encoder) const
     {
-#if HAVE(TASK_IDENTITY_TOKEN)
-        encoder << webProcessIdentityToken;
-#endif
+        encoder << webProcessIdentity;
         encoder << overrideLanguages;
+        encoder << isCaptivePortalModeEnabled;
 #if ENABLE(IPC_TESTING_API)
         encoder << ignoreInvalidMessageForTesting;
+#endif
+#if HAVE(AUDIT_TOKEN)
+        encoder << presentingApplicationAuditToken;
+#endif
+#if ENABLE(VP9)
+        encoder << hasVP9HardwareDecoder;
 #endif
     }
 
     static std::optional<GPUProcessConnectionParameters> decode(IPC::Decoder& decoder)
     {
-#if HAVE(TASK_IDENTITY_TOKEN)
-        std::optional<MachSendRight> webProcessIdentityToken;
-        decoder >> webProcessIdentityToken;
-        if (!webProcessIdentityToken)
-            return std::nullopt;
-#endif
-
-        std::optional<Vector<String>> overrideLanguages;
-        decoder >> overrideLanguages;
-        if (!overrideLanguages)
-            return std::nullopt;
-
+        auto webProcessIdentity = decoder.decode<WebCore::ProcessIdentity>();
+        auto overrideLanguages = decoder.decode<Vector<String>>();
+        auto isCaptivePortalModeEnabled = decoder.decode<bool>();
 #if ENABLE(IPC_TESTING_API)
-        std::optional<bool> ignoreInvalidMessageForTesting;
-        decoder >> ignoreInvalidMessageForTesting;
-        if (!ignoreInvalidMessageForTesting)
-            return std::nullopt;
+        auto ignoreInvalidMessageForTesting = decoder.decode<bool>();
 #endif
+#if HAVE(AUDIT_TOKEN)
+        auto presentingApplicationAuditToken = decoder.decode<std::optional<audit_token_t>>();
+#endif
+#if ENABLE(VP9)
+        auto hasVP9HardwareDecoder = decoder.decode<std::optional<bool>>();
+#endif
+        if (!decoder.isValid())
+            return std::nullopt;
 
         return GPUProcessConnectionParameters {
-#if HAVE(TASK_IDENTITY_TOKEN)
-            WTFMove(*webProcessIdentityToken),
-#endif
+            WTFMove(*webProcessIdentity),
             WTFMove(*overrideLanguages),
+            *isCaptivePortalModeEnabled,
 #if ENABLE(IPC_TESTING_API)
             *ignoreInvalidMessageForTesting,
+#endif
+#if HAVE(AUDIT_TOKEN)
+            WTFMove(*presentingApplicationAuditToken),
+#endif
+#if ENABLE(VP9)
+            WTFMove(*hasVP9HardwareDecoder),
 #endif
         };
     }

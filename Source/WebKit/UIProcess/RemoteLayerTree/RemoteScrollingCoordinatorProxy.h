@@ -35,6 +35,7 @@
 #include <WebCore/ScrollSnapOffsetsInfo.h>
 #include <wtf/Noncopyable.h>
 #include <wtf/RefPtr.h>
+#include <wtf/WeakPtr.h>
 
 OBJC_CLASS UIScrollView;
 
@@ -50,7 +51,7 @@ class RemoteScrollingCoordinatorTransaction;
 class RemoteScrollingTree;
 class WebPageProxy;
 
-class RemoteScrollingCoordinatorProxy {
+class RemoteScrollingCoordinatorProxy : public CanMakeWeakPtr<RemoteScrollingCoordinatorProxy> {
     WTF_MAKE_FAST_ALLOCATED;
     WTF_MAKE_NONCOPYABLE(RemoteScrollingCoordinatorProxy);
 public:
@@ -59,9 +60,10 @@ public:
 
     // Inform the web process that the scroll position changed (called from the scrolling tree)
     void scrollingTreeNodeDidScroll(WebCore::ScrollingNodeID, const WebCore::FloatPoint& newScrollPosition, const std::optional<WebCore::FloatPoint>& layoutViewportOrigin, WebCore::ScrollingLayerPositionAction);
-    void scrollingTreeNodeRequestsScroll(WebCore::ScrollingNodeID, const WebCore::FloatPoint& scrollPosition, WebCore::ScrollType, WebCore::ScrollClamping);
+    bool scrollingTreeNodeRequestsScroll(WebCore::ScrollingNodeID, const WebCore::RequestedScrollData&);
+    void scrollingTreeNodeDidStopAnimatedScroll(WebCore::ScrollingNodeID);
 
-    WebCore::TrackingType eventTrackingTypeForPoint(const AtomString& eventName, WebCore::IntPoint) const;
+    WebCore::TrackingType eventTrackingTypeForPoint(WebCore::EventTrackingRegions::EventType, WebCore::IntPoint) const;
 
     // Called externally when native views move around.
     void viewportChangedViaDelegatedScrolling(const WebCore::FloatPoint& scrollPosition, const WebCore::FloatRect& layoutViewport, double scale);
@@ -79,12 +81,7 @@ public:
     const RemoteLayerTreeHost* layerTreeHost() const;
     WebPageProxy& webPageProxy() const { return m_webPageProxy; }
 
-    struct RequestedScrollInfo {
-        bool requestsScrollPositionUpdate { };
-        bool requestIsProgrammaticScroll { };
-        WebCore::FloatPoint requestedScrollPosition;
-    };
-    void commitScrollingTreeState(const RemoteScrollingCoordinatorTransaction&, RequestedScrollInfo&);
+    std::optional<WebCore::RequestedScrollData> commitScrollingTreeState(const RemoteScrollingCoordinatorTransaction&);
 
     void setPropagatesMainFrameScrolls(bool propagatesMainFrameScrolls) { m_propagatesMainFrameScrolls = propagatesMainFrameScrolls; }
     bool propagatesMainFrameScrolls() const { return m_propagatesMainFrameScrolls; }
@@ -103,6 +100,7 @@ public:
     bool hasActiveSnapPoint() const;
     CGPoint nearestActiveContentInsetAdjustedSnapOffset(CGFloat topInset, const CGPoint&) const;
     bool shouldSetScrollViewDecelerationRateFast() const;
+    void setRootNodeIsInUserScroll(bool);
 #endif
 
     String scrollingTreeAsText() const;
@@ -112,6 +110,12 @@ public:
     void clearTouchActionsForTouchIdentifier(unsigned);
     
     void resetStateAfterProcessExited();
+    WebCore::ScrollingTreeScrollingNode* rootNode() const;
+
+#if ENABLE(OVERLAY_REGIONS_IN_EVENT_REGION)
+    void removeFixedScrollingNodeLayerIDs(const Vector<WebCore::GraphicsLayer::PlatformLayerID>&);
+    const HashSet<WebCore::GraphicsLayer::PlatformLayerID>& fixedScrollingNodeLayerIDs() const { return m_fixedScrollingNodeLayerIDs; }
+#endif
 
 private:
     void connectStateNodeLayers(WebCore::ScrollingStateTree&, const RemoteLayerTreeHost&);
@@ -121,16 +125,22 @@ private:
     std::pair<float, std::optional<unsigned>> closestSnapOffsetForMainFrameScrolling(WebCore::ScrollEventAxis, float currentScrollOffset, WebCore::FloatPoint scrollDestination, float velocity) const;
 
     void sendUIStateChangedIfNecessary();
+    void sendScrollingTreeNodeDidScroll();
+    void receivedLastScrollingTreeNodeDidScrollReply();
 
     WebPageProxy& m_webPageProxy;
     RefPtr<RemoteScrollingTree> m_scrollingTree;
     HashMap<unsigned, OptionSet<WebCore::TouchAction>> m_touchActionsByTouchIdentifier;
-    RequestedScrollInfo* m_requestedScrollInfo { nullptr };
+    std::optional<WebCore::RequestedScrollData> m_requestedScroll;
     RemoteScrollingUIState m_uiState;
     std::optional<unsigned> m_currentHorizontalSnapPointIndex;
     std::optional<unsigned> m_currentVerticalSnapPointIndex;
     bool m_propagatesMainFrameScrolls { true };
+    bool m_waitingForDidScrollReply { false };
     HashSet<WebCore::GraphicsLayer::PlatformLayerID> m_layersWithScrollingRelations;
+#if ENABLE(OVERLAY_REGIONS_IN_EVENT_REGION)
+    HashSet<WebCore::GraphicsLayer::PlatformLayerID> m_fixedScrollingNodeLayerIDs;
+#endif
 };
 
 } // namespace WebKit

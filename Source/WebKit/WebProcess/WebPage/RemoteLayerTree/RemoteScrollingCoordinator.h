@@ -78,7 +78,8 @@ private:
     void didReceiveMessage(IPC::Connection&, IPC::Decoder&) override;
     
     // Respond to UI process changes.
-    void scrollPositionChangedForNode(WebCore::ScrollingNodeID, const WebCore::FloatPoint& scrollPosition, bool syncLayerPosition);
+    void scrollPositionChangedForNode(WebCore::ScrollingNodeID, const WebCore::FloatPoint& scrollPosition, bool syncLayerPosition, CompletionHandler<void()>&&);
+    void animatedScrollDidEndForNode(WebCore::ScrollingNodeID);
     void currentSnapPointIndicesChangedForNode(WebCore::ScrollingNodeID, std::optional<unsigned> horizontal, std::optional<unsigned> vertical);
 
     WebPage* m_webPage;

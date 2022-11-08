@@ -56,9 +56,10 @@ extern "C" {
     M(Fullscreen) \
     M(Gamepad) \
     M(IPC) \
+    M(IPCMessages) \
     M(ITPDebug) \
     M(IconDatabase) \
-    M(Images) \
+    M(ImageAnalysis) \
     M(IncrementalPDF) \
     M(IncrementalPDFVerbose) \
     M(IndexedDB) \
@@ -68,7 +69,6 @@ extern "C" {
     M(Layers) \
     M(Layout) \
     M(Loading) \
-    M(LocalStorageDatabaseTracker) \
     M(Media) \
     M(MemoryPressure) \
     M(ModelElement) \
@@ -79,6 +79,7 @@ extern "C" {
     M(NetworkCacheStorage) \
     M(NetworkScheduling) \
     M(NetworkSession) \
+    M(Notifications) \
     M(PerformanceLogging) \
     M(Plugins) \
     M(Printing) \
@@ -86,17 +87,23 @@ extern "C" {
     M(ProcessSuspension) \
     M(ProcessSwapping) \
     M(ProximityNetworking) \
+    M(Push) \
+    M(RemoteRenderingBufferVolatility) \
     M(RemoteLayerTree) \
     M(Resize) \
     M(ResourceLoadStatistics) \
+    M(Sandbox) \
+    M(ScrollAnimations) \
     M(Scrolling) \
     M(Selection) \
     M(ServiceWorker) \
     M(SessionState) \
     M(SharedDisplayLists) \
+    M(SharedWorker) \
     M(Storage) \
     M(StorageAPI) \
     M(TextInput) \
+    M(Translation) \
     M(UIHitTesting) \
     M(ViewGestures) \
     M(ViewState) \
@@ -107,6 +114,7 @@ extern "C" {
     M(WebGL) \
     M(WebRTC) \
     M(WheelEvents) \
+    M(Worker) \
     M(XR) \
 
 WEBKIT2_LOG_CHANNELS(DECLARE_LOG_CHANNEL)

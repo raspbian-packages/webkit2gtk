@@ -49,7 +49,7 @@ public:
     static void registerMediaEngine(MediaEngineRegistrar);
 
     void load(const String&) override;
-    void load(const URL&, const ContentType&, MediaSourcePrivateClient*) override;
+    void load(const URL&, const ContentType&, MediaSourcePrivateClient&) override;
 
     void updateDownloadBufferingFlag() override { };
 
@@ -67,6 +67,11 @@ public:
     MediaTime maxMediaTimeSeekable() const override;
 
     void sourceSetup(GstElement*) override;
+
+    // return false to avoid false-positive "stalled" event - it should be soon addressed in the spec
+    // see: https://github.com/w3c/media-source/issues/88
+    // see: https://w3c.github.io/media-source/#h-note-19
+    bool supportsProgressMonitoring() const override { return false; }
 
     void setReadyState(MediaPlayer::ReadyState);
     MediaSourcePrivateClient* mediaSourcePrivateClient() { return m_mediaSource.get(); }
@@ -100,9 +105,9 @@ private:
 
     void propagateReadyStateToPlayer();
 
-    RefPtr<MediaSourcePrivateClient> m_mediaSource;
+    WeakPtr<MediaSourcePrivateClient> m_mediaSource;
     RefPtr<MediaSourcePrivateGStreamer> m_mediaSourcePrivate;
-    MediaTime m_mediaTimeDuration;
+    MediaTime m_mediaTimeDuration { MediaTime::invalidTime() };
     bool m_areDurationChangesBlocked = false;
     bool m_shouldReportDurationWhenUnblocking = false;
     bool m_isPipelinePlaying = true;

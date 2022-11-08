@@ -38,7 +38,7 @@
 namespace WebKit {
 
 WebDeviceOrientationUpdateProvider::WebDeviceOrientationUpdateProvider(WebPage& page)
-    : m_page(makeWeakPtr(page))
+    : m_page(page)
     , m_pageIdentifier(page.identifier())
 {
     WebProcess::singleton().addMessageReceiver(Messages::WebDeviceOrientationUpdateProvider::messageReceiverName(), page.identifier(), *this);
@@ -83,11 +83,7 @@ void WebDeviceOrientationUpdateProvider::stopUpdatingDeviceMotion(WebCore::Motio
 
 void WebDeviceOrientationUpdateProvider::deviceOrientationChanged(double alpha, double beta, double gamma, double compassHeading, double compassAccuracy)
 {
-    Vector<WeakPtr<WebCore::MotionManagerClient>> clients;
-    for (auto& client : m_deviceOrientationClients)
-        clients.append(makeWeakPtr(&client));
-
-    for (auto& client : clients) {
+    for (auto& client : copyToVectorOf<WeakPtr<WebCore::MotionManagerClient>>(m_deviceOrientationClients)) {
         if (client)
             client->orientationChanged(alpha, beta, gamma, compassHeading, compassAccuracy);
     }
@@ -95,11 +91,7 @@ void WebDeviceOrientationUpdateProvider::deviceOrientationChanged(double alpha, 
 
 void WebDeviceOrientationUpdateProvider::deviceMotionChanged(double xAcceleration, double yAcceleration, double zAcceleration, double xAccelerationIncludingGravity, double yAccelerationIncludingGravity, double zAccelerationIncludingGravity, std::optional<double> xRotationRate, std::optional<double> yRotationRate, std::optional<double> zRotationRate)
 {
-    Vector<WeakPtr<WebCore::MotionManagerClient>> clients;
-    for (auto& client : m_deviceMotionClients)
-        clients.append(makeWeakPtr(&client));
-    
-    for (auto& client : clients) {
+    for (auto& client : copyToVectorOf<WeakPtr<WebCore::MotionManagerClient>>(m_deviceMotionClients)) {
         if (client)
             client->motionChanged(xAcceleration, yAcceleration, zAcceleration, xAccelerationIncludingGravity, yAccelerationIncludingGravity,  zAccelerationIncludingGravity, xRotationRate, yRotationRate, zRotationRate);
     }

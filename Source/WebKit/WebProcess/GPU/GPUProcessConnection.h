@@ -53,26 +53,31 @@ class RemoteAudioSourceProviderManager;
 class RemoteMediaPlayerManager;
 class SampleBufferDisplayLayerManager;
 class WebPage;
+struct GPUProcessConnectionInfo;
 struct OverrideScreenDataForTesting;
 struct WebPageCreationParameters;
 
+#if ENABLE(VIDEO)
+class RemoteVideoFrameObjectHeapProxy;
+#endif
+
 class GPUProcessConnection : public RefCounted<GPUProcessConnection>, public IPC::Connection::Client {
 public:
-    static Ref<GPUProcessConnection> create(IPC::Connection::Identifier connectionIdentifier)
-    {
-        return adoptRef(*new GPUProcessConnection(connectionIdentifier));
-    }
+    static RefPtr<GPUProcessConnection> create(IPC::Connection& parentConnection);
     ~GPUProcessConnection();
     
     IPC::Connection& connection() { return m_connection.get(); }
     IPC::MessageReceiverMap& messageReceiverMap() { return m_messageReceiverMap; }
 
 #if HAVE(AUDIT_TOKEN)
-    void setAuditToken(std::optional<audit_token_t> auditToken) { m_auditToken = auditToken; }
-    std::optional<audit_token_t> auditToken() const { return m_auditToken; }
+    std::optional<audit_token_t> auditToken();
 #endif
 #if PLATFORM(COCOA) && ENABLE(MEDIA_STREAM)
     SampleBufferDisplayLayerManager& sampleBufferDisplayLayerManager();
+    void resetAudioMediaStreamTrackRendererInternalUnit(AudioMediaStreamTrackRendererInternalUnitIdentifier);
+#endif
+#if ENABLE(VIDEO)
+    RemoteVideoFrameObjectHeapProxy& videoFrameObjectHeapProxy();
 #endif
 
     RemoteMediaPlayerManager& mediaPlayerManager();
@@ -89,6 +94,7 @@ public:
     bool isVP8DecoderEnabled() const { return m_enableVP8Decoder; }
     bool isVP9DecoderEnabled() const { return m_enableVP9Decoder; }
     bool isVPSWDecoderEnabled() const { return m_enableVP9SWDecoder; }
+    bool hasVP9HardwareDecoder();
 #endif
 
 #if HAVE(VISIBILITY_PROPAGATION_VIEW)
@@ -107,8 +113,11 @@ public:
     void addClient(const Client& client) { m_clients.add(client); }
     void removeClient(const Client& client) { m_clients.remove(client); }
 
+    static constexpr Seconds defaultTimeout = 3_s;
 private:
-    GPUProcessConnection(IPC::Connection::Identifier);
+    GPUProcessConnection(IPC::Connection::Identifier&&);
+    bool waitForDidInitialize();
+    void invalidate();
 
     // IPC::Connection::Client
     void didClose(IPC::Connection&) override;
@@ -119,7 +128,9 @@ private:
     bool dispatchMessage(IPC::Connection&, IPC::Decoder&);
     bool dispatchSyncMessage(IPC::Connection&, IPC::Decoder&, UniqueRef<IPC::Encoder>&);
 
+    // Messages.
     void didReceiveRemoteCommand(WebCore::PlatformMediaSession::RemoteControlCommandType, const WebCore::PlatformMediaSession::RemoteCommandArgument&);
+    void didInitialize(std::optional<GPUProcessConnectionInfo>&&);
 
 #if ENABLE(ROUTING_ARBITRATION)
     void beginRoutingArbitrationWithCategory(WebCore::AudioSession::CategoryType, WebCore::AudioSessionRoutingArbitrationClient::ArbitrationCallback&&);
@@ -129,12 +140,15 @@ private:
     // The connection from the web process to the GPU process.
     Ref<IPC::Connection> m_connection;
     IPC::MessageReceiverMap m_messageReceiverMap;
-
+    bool m_hasInitialized { false };
 #if HAVE(AUDIT_TOKEN)
     std::optional<audit_token_t> m_auditToken;
 #endif
 #if PLATFORM(COCOA) && ENABLE(MEDIA_STREAM)
     std::unique_ptr<SampleBufferDisplayLayerManager> m_sampleBufferDisplayLayerManager;
+#endif
+#if ENABLE(VIDEO)
+    RefPtr<RemoteVideoFrameObjectHeapProxy> m_videoFrameObjectHeapProxy;
 #endif
 #if PLATFORM(COCOA) && ENABLE(WEB_AUDIO)
     RefPtr<RemoteAudioSourceProviderManager> m_audioSourceProviderManager;
@@ -143,6 +157,7 @@ private:
     bool m_enableVP8Decoder { false };
     bool m_enableVP9Decoder { false };
     bool m_enableVP9SWDecoder { false };
+    bool m_hasVP9HardwareDecoder { false };
 #endif
 
 #if PLATFORM(COCOA)

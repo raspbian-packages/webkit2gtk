@@ -48,22 +48,21 @@ struct WebsiteData {
         WebsiteDataType type;
         uint64_t size;
 
-        Entry isolatedCopy() const;
+        Entry isolatedCopy() const &;
+        Entry isolatedCopy() &&;
 
         void encode(IPC::Encoder&) const;
         static std::optional<WebsiteData::Entry> decode(IPC::Decoder&);
     };
 
-    WebsiteData isolatedCopy() const;
+    WebsiteData isolatedCopy() const &;
+    WebsiteData isolatedCopy() &&;
 
     Vector<Entry> entries;
     HashSet<String> hostNamesWithCookies;
 
-#if ENABLE(NETSCAPE_PLUGIN_API)
-    HashSet<String> hostNamesWithPluginData;
-#endif
     HashSet<String> hostNamesWithHSTSCache;
-#if ENABLE(RESOURCE_LOAD_STATISTICS)
+#if ENABLE(INTELLIGENT_TRACKING_PREVENTION)
     HashSet<WebCore::RegistrableDomain> registrableDomainsWithResourceLoadStatistics;
 #endif
 

@@ -65,12 +65,12 @@ private:
     ConnectStatus connect(const URL&, const String& protocol) final;
     String subprotocol() final;
     String extensions() final;
-    SendResult send(const String& message) final;
+    SendResult send(CString&&) final;
     SendResult send(const JSC::ArrayBuffer&, unsigned byteOffset, unsigned byteLength) final;
     SendResult send(WebCore::Blob&) final;
     unsigned bufferedAmount() const final;
     void close(int code, const String& reason) final;
-    void fail(const String& reason) final;
+    void fail(String&& reason) final;
     void disconnect() final;
     void suspend() final;
     void resume() final;
@@ -96,9 +96,9 @@ private:
     bool increaseBufferedAmount(size_t);
     void decreaseBufferedAmount(size_t);
     template<typename T> void sendMessage(T&&, size_t byteLength);
-    void enqueueTask(Function<void()>&&);
 
-    unsigned long progressIdentifier() const final { return m_inspector.progressIdentifier(); }
+    const WebCore::WebSocketChannelInspector* channelInspector() const final { return &m_inspector; }
+    WebCore::WebSocketChannelIdentifier progressIdentifier() const final { return m_inspector.progressIdentifier(); }
     bool hasCreatedHandshake() const final { return !m_url.isNull(); }
     bool isConnected() const final { return !m_handshakeResponse.isNull(); }
     WebCore::ResourceRequest clientHandshakeRequest(const CookieGetter&) const final { return m_handshakeRequest; }
@@ -111,8 +111,6 @@ private:
     String m_extensions;
     size_t m_bufferedAmount { 0 };
     bool m_isClosing { false };
-    bool m_isSuspended { false };
-    Deque<Function<void()>> m_pendingTasks;
     WebCore::NetworkSendQueue m_messageQueue;
     WebCore::WebSocketChannelInspector m_inspector;
     WebCore::ResourceRequest m_handshakeRequest;

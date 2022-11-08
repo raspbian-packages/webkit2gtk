@@ -42,7 +42,7 @@ namespace WebKit {
 using namespace WebCore;
 
 RemoteLegacyCDMFactoryProxy::RemoteLegacyCDMFactoryProxy(GPUConnectionToWebProcess& connection)
-    : m_gpuConnectionToWebProcess(makeWeakPtr(connection))
+    : m_gpuConnectionToWebProcess(connection)
 {
 }
 
@@ -70,7 +70,7 @@ void RemoteLegacyCDMFactoryProxy::createCDM(const String& keySystem, std::option
     if (optionalPlayerId)
         playerId = WTFMove(optionalPlayerId.value());
 
-    auto proxy = RemoteLegacyCDMProxy::create(makeWeakPtr(this), WTFMove(playerId), WTFMove(privateCDM));
+    auto proxy = RemoteLegacyCDMProxy::create(*this, WTFMove(playerId), WTFMove(privateCDM));
     auto identifier = RemoteLegacyCDMIdentifier::generate();
     addProxy(identifier, WTFMove(proxy));
     completion(WTFMove(identifier));
@@ -169,6 +169,18 @@ bool RemoteLegacyCDMFactoryProxy::allowsExitUnderMemoryPressure() const
 {
     return m_sessions.isEmpty();
 }
+
+#if !RELEASE_LOG_DISABLED
+const Logger& RemoteLegacyCDMFactoryProxy::logger() const
+{
+    if (!m_logger) {
+        m_logger = Logger::create(this);
+        m_logger->setEnabled(this, m_gpuConnectionToWebProcess ? m_gpuConnectionToWebProcess->sessionID().isAlwaysOnLoggingAllowed() : false);
+    }
+
+    return *m_logger;
+}
+#endif
 
 }
 

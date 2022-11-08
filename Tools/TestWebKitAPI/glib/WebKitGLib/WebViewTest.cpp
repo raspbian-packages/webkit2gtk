@@ -22,7 +22,7 @@
 #include "WebViewTest.h"
 
 #include <JavaScriptCore/JSRetainPtr.h>
-#include <WebKit/WebKitWebViewInternal.h>
+#include <WebKitWebViewInternal.h>
 
 bool WebViewTest::shouldInitializeWebViewInConstructor = true;
 bool WebViewTest::shouldCreateEphemeralWebView = false;
@@ -85,15 +85,19 @@ void WebViewTest::loadURI(const char* uri)
     g_assert_cmpstr(webkit_web_view_get_uri(m_webView), ==, m_activeURI.data());
 }
 
-void WebViewTest::loadHtml(const char* html, const char* baseURI)
+void WebViewTest::loadHtml(const char* html, const char* baseURI, WebKitWebView* webView)
 {
     if (!baseURI)
         m_activeURI = "about:blank";
     else
         m_activeURI = baseURI;
-    webkit_web_view_load_html(m_webView, html, baseURI);
-    g_assert_true(webkit_web_view_is_loading(m_webView));
-    g_assert_cmpstr(webkit_web_view_get_uri(m_webView), ==, m_activeURI.data());
+
+    if (!webView)
+        webView = m_webView;
+
+    webkit_web_view_load_html(webView, html, baseURI);
+    g_assert_true(webkit_web_view_is_loading(webView));
+    g_assert_cmpstr(webkit_web_view_get_uri(webView), ==, m_activeURI.data());
 }
 
 void WebViewTest::loadPlainText(const char* plainText)
@@ -195,9 +199,11 @@ static void loadChanged(WebKitWebView* webView, WebKitLoadEvent loadEvent, WebVi
     g_main_loop_quit(test->m_mainLoop);
 }
 
-void WebViewTest::waitUntilLoadFinished()
+void WebViewTest::waitUntilLoadFinished(WebKitWebView* webView)
 {
-    g_signal_connect(m_webView, "load-changed", G_CALLBACK(loadChanged), this);
+    if (!webView)
+        webView = m_webView;
+    g_signal_connect(webView, "load-changed", G_CALLBACK(loadChanged), this);
     g_main_loop_run(m_mainLoop);
 }
 
@@ -253,22 +259,30 @@ void WebViewTest::setEditable(bool editable)
     webkit_web_view_set_editable(m_webView, editable);
 }
 
-static void directoryChangedCallback(GFileMonitor*, GFile* file, GFile*, GFileMonitorEvent event, WebViewTest* test)
+void WebViewTest::assertFileIsCreated(const char *filename)
 {
-    if (event == test->m_expectedFileChangeEvent && g_file_equal(file, test->m_monitoredFile.get()))
-        test->quitMainLoop();
+    constexpr double intervalInSeconds = 0.25;
+    unsigned tries = 4;
+    while (!g_file_test(filename, G_FILE_TEST_EXISTS) && --tries)
+        wait(intervalInSeconds);
+    g_assert_true(g_file_test(filename, G_FILE_TEST_EXISTS));
 }
 
-void WebViewTest::waitUntilFileChanged(const char* filename, GFileMonitorEvent event)
+void WebViewTest::assertJavaScriptBecomesTrue(const char* javascript)
 {
-    m_monitoredFile = adoptGRef(g_file_new_for_path(filename));
-    m_expectedFileChangeEvent = event;
-    GRefPtr<GFile> directory = adoptGRef(g_file_get_parent(m_monitoredFile.get()));
-    GRefPtr<GFileMonitor> monitor = adoptGRef(g_file_monitor_directory(directory.get(), G_FILE_MONITOR_NONE, nullptr, nullptr));
-    g_assert(monitor.get());
-    g_signal_connect(monitor.get(), "changed", G_CALLBACK(directoryChangedCallback), this);
-    if (!g_file_query_exists(m_monitoredFile.get(), nullptr))
-        g_main_loop_run(m_mainLoop);
+    unsigned triesCount = 4;
+    bool becameTrue = false;
+    while (!becameTrue && triesCount--) {
+        auto jsResult = runJavaScriptAndWaitUntilFinished(javascript, nullptr);
+        auto jsValue = webkit_javascript_result_get_js_value(jsResult);
+        if (jsc_value_is_boolean(jsValue) && jsc_value_to_boolean(jsValue)) {
+            becameTrue = true;
+            break;
+        }
+
+        wait(0.25);
+    }
+    g_assert_true(becameTrue);
 }
 
 static void resourceGetDataCallback(GObject* object, GAsyncResult* result, gpointer userData)
@@ -298,9 +312,9 @@ const char* WebViewTest::mainResourceData(size_t& mainResourceDataSize)
     return m_resourceData.get();
 }
 
-static void runJavaScriptReadyCallback(GObject*, GAsyncResult* result, WebViewTest* test)
+static void runJavaScriptReadyCallback(GObject* object, GAsyncResult* result, WebViewTest* test)
 {
-    test->m_javascriptResult = webkit_web_view_run_javascript_finish(test->m_webView, result, test->m_javascriptError);
+    test->m_javascriptResult = webkit_web_view_run_javascript_finish(WEBKIT_WEB_VIEW(object), result, test->m_javascriptError);
     g_main_loop_quit(test->m_mainLoop);
 }
 
@@ -316,13 +330,15 @@ static void runJavaScriptInWorldReadyCallback(GObject*, GAsyncResult* result, We
     g_main_loop_quit(test->m_mainLoop);
 }
 
-WebKitJavascriptResult* WebViewTest::runJavaScriptAndWaitUntilFinished(const char* javascript, GError** error)
+WebKitJavascriptResult* WebViewTest::runJavaScriptAndWaitUntilFinished(const char* javascript, GError** error, WebKitWebView* webView)
 {
     if (m_javascriptResult)
         webkit_javascript_result_unref(m_javascriptResult);
     m_javascriptResult = 0;
     m_javascriptError = error;
-    webkit_web_view_run_javascript(m_webView, javascript, 0, reinterpret_cast<GAsyncReadyCallback>(runJavaScriptReadyCallback), this);
+    if (!webView)
+        webView = m_webView;
+    webkit_web_view_run_javascript(webView, javascript, 0, reinterpret_cast<GAsyncReadyCallback>(runJavaScriptReadyCallback), this);
     g_main_loop_run(m_mainLoop);
 
     return m_javascriptResult;
@@ -347,6 +363,18 @@ WebKitJavascriptResult* WebViewTest::runJavaScriptInWorldAndWaitUntilFinished(co
     m_javascriptResult = 0;
     m_javascriptError = error;
     webkit_web_view_run_javascript_in_world(m_webView, javascript, world, nullptr, reinterpret_cast<GAsyncReadyCallback>(runJavaScriptInWorldReadyCallback), this);
+    g_main_loop_run(m_mainLoop);
+
+    return m_javascriptResult;
+}
+
+WebKitJavascriptResult* WebViewTest::runAsyncJavaScriptFunctionInWorldAndWaitUntilFinished(const char* body, GVariant* arguments, const char* world, GError** error)
+{
+    if (m_javascriptResult)
+        webkit_javascript_result_unref(m_javascriptResult);
+    m_javascriptResult = 0;
+    m_javascriptError = error;
+    webkit_web_view_run_async_javascript_function_in_world(m_webView, body, arguments, world, nullptr, reinterpret_cast<GAsyncReadyCallback>(runJavaScriptInWorldReadyCallback), this);
     g_main_loop_run(m_mainLoop);
 
     return m_javascriptResult;

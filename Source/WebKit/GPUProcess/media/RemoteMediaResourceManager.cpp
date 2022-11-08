@@ -31,8 +31,10 @@
 #include "Connection.h"
 #include "RemoteMediaResource.h"
 #include "RemoteMediaResourceIdentifier.h"
+#include "SharedBufferReference.h"
 #include "WebCoreArgumentCoders.h"
 #include <WebCore/ResourceRequest.h>
+#include <wtf/Scope.h>
 
 namespace WebKit {
 
@@ -61,7 +63,7 @@ void RemoteMediaResourceManager::removeMediaResource(RemoteMediaResourceIdentifi
 void RemoteMediaResourceManager::responseReceived(RemoteMediaResourceIdentifier identifier, const ResourceResponse& response, bool didPassAccessControlCheck, CompletionHandler<void(ShouldContinuePolicyCheck)>&& completionHandler)
 {
     auto* resource = m_remoteMediaResources.get(identifier);
-    if (!resource || !resource->ready()) {
+    if (!resource) {
         completionHandler(ShouldContinuePolicyCheck::No);
         return;
     }
@@ -72,7 +74,7 @@ void RemoteMediaResourceManager::responseReceived(RemoteMediaResourceIdentifier 
 void RemoteMediaResourceManager::redirectReceived(RemoteMediaResourceIdentifier identifier, ResourceRequest&& request, const ResourceResponse& response, CompletionHandler<void(WebCore::ResourceRequest&&)>&& completionHandler)
 {
     auto* resource = m_remoteMediaResources.get(identifier);
-    if (!resource || !resource->ready()) {
+    if (!resource) {
         completionHandler({ });
         return;
     }
@@ -83,25 +85,36 @@ void RemoteMediaResourceManager::redirectReceived(RemoteMediaResourceIdentifier 
 void RemoteMediaResourceManager::dataSent(RemoteMediaResourceIdentifier identifier, uint64_t bytesSent, uint64_t totalBytesToBeSent)
 {
     auto* resource = m_remoteMediaResources.get(identifier);
-    if (!resource || !resource->ready())
+    if (!resource)
         return;
 
     resource->dataSent(bytesSent, totalBytesToBeSent);
 }
 
-void RemoteMediaResourceManager::dataReceived(RemoteMediaResourceIdentifier identifier, const IPC::DataReference& data)
+void RemoteMediaResourceManager::dataReceived(RemoteMediaResourceIdentifier identifier, IPC::SharedBufferReference&& buffer, CompletionHandler<void(std::optional<SharedMemory::Handle>&&)>&& completionHandler)
 {
+    SharedMemory::Handle handle;
+
+    auto invokeCallbackAtScopeExit = makeScopeExit([&] {
+        completionHandler(WTFMove(handle));
+    });
+
     auto* resource = m_remoteMediaResources.get(identifier);
-    if (!resource || !resource->ready())
+    if (!resource)
         return;
 
-    resource->dataReceived(data.data(), data.size());
+    auto sharedMemory = buffer.sharedCopy();
+    if (!sharedMemory)
+        return;
+    sharedMemory->createHandle(handle, SharedMemory::Protection::ReadOnly);
+
+    resource->dataReceived(sharedMemory->createSharedBuffer(buffer.size()));
 }
 
 void RemoteMediaResourceManager::accessControlCheckFailed(RemoteMediaResourceIdentifier identifier, const ResourceError& error)
 {
     auto* resource = m_remoteMediaResources.get(identifier);
-    if (!resource || !resource->ready())
+    if (!resource)
         return;
 
     resource->accessControlCheckFailed(error);
@@ -110,7 +123,7 @@ void RemoteMediaResourceManager::accessControlCheckFailed(RemoteMediaResourceIde
 void RemoteMediaResourceManager::loadFailed(RemoteMediaResourceIdentifier identifier, const ResourceError& error)
 {
     auto* resource = m_remoteMediaResources.get(identifier);
-    if (!resource || !resource->ready())
+    if (!resource)
         return;
 
     resource->loadFailed(error);
@@ -119,7 +132,7 @@ void RemoteMediaResourceManager::loadFailed(RemoteMediaResourceIdentifier identi
 void RemoteMediaResourceManager::loadFinished(RemoteMediaResourceIdentifier identifier, const NetworkLoadMetrics& metrics)
 {
     auto* resource = m_remoteMediaResources.get(identifier);
-    if (!resource || !resource->ready())
+    if (!resource)
         return;
 
     resource->loadFinished(metrics);

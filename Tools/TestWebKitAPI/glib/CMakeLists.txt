@@ -29,7 +29,6 @@ set(WebKitGLibAPITests_SYSTEM_INCLUDE_DIRECTORIES
 )
 
 set(WebKitAPITest_LIBRARIES
-    WebKit::JavaScriptCore
     WebKit::WebKit
 )
 
@@ -46,7 +45,6 @@ set(WebKitGLibAPITest_LIBRARIES
 
 set(WebKitGLibAPITestExtension_LIBRARIES
     ${GLIB_LIBRARIES}
-    WebKit::JavaScriptCore
     WebKit::WebKit
 )
 
@@ -121,13 +119,16 @@ if (COMPILER_IS_GCC_OR_CLANG)
 endif ()
 
 add_custom_command(
-    OUTPUT ${TEST_RESOURCES_DIR}/webkitglib-tests-resources.gresource
+    OUTPUT ${TEST_RESOURCES_DIR}/webkitglib-tests-resources.gresource ${TEST_RESOURCES_DIR}/webkitglib-tests-resources.deps
     DEPENDS ${TOOLS_DIR}/TestWebKitAPI/Tests/WebKitGLib/resources/webkitglib-tests.gresource.xml
             ${TOOLS_DIR}/TestWebKitAPI/Tests/WebKitGLib/resources/link-title.js
+    DEPFILE ${TEST_RESOURCES_DIR}/webkitglib-tests-resources.deps
     COMMAND glib-compile-resources
             --target=${TEST_RESOURCES_DIR}/webkitglib-tests-resources.gresource
             --sourcedir=${CMAKE_SOURCE_DIR}
+            --dependency-file=${TEST_RESOURCES_DIR}/webkitglib-tests-resources.deps
             ${TOOLS_DIR}/TestWebKitAPI/Tests/WebKitGLib/resources/webkitglib-tests.gresource.xml
+    VERBATIM
 )
 
 add_custom_target(test-gresource-bundle
@@ -192,6 +193,8 @@ endmacro()
 if (PORT STREQUAL "WPE" AND ENABLE_WPE_QT_API)
     set(WPEQtAPITests_INCLUDE_DIRECTORIES
         ${CMAKE_BINARY_DIR}
+        ${JavaScriptCoreGLib_DERIVED_SOURCES_DIR}
+        ${JavaScriptCoreGLib_FRAMEWORK_HEADERS_DIR}
         ${GLIB_INCLUDE_DIRS}
         ${LIBSOUP_INCLUDE_DIRS}
         ${Qt5Test_INCLUDE_DIRS}

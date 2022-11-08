@@ -44,6 +44,9 @@ void WebPageCreationParameters::encode(IPC::Encoder& encoder) const
     encoder << underlayColor;
     encoder << useFixedLayout;
     encoder << fixedLayoutSize;
+    encoder << defaultUnobscuredSize;
+    encoder << minimumUnobscuredSize;
+    encoder << maximumUnobscuredSize;
     encoder << viewExposedRect;
     encoder << alwaysShowsHorizontalScroller;
     encoder << alwaysShowsVerticalScroller;
@@ -65,6 +68,7 @@ void WebPageCreationParameters::encode(IPC::Encoder& encoder) const
     encoder << topContentInset;
     encoder << mediaVolume;
     encoder << muted;
+    encoder << openedByDOM;
     encoder << mayStartMediaWhenInWindow;
     encoder << mediaPlaybackIsSuspended;
     encoder << minimumSizeForAutoLayout;
@@ -96,16 +100,11 @@ void WebPageCreationParameters::encode(IPC::Encoder& encoder) const
     encoder << overrideViewportArguments;
 #endif
 
-#if ENABLE(ATTACHMENT_ELEMENT)
-    encoder << attachmentElementExtensionHandles;
-#endif
-
 #if PLATFORM(IOS_FAMILY)
     encoder << screenSize;
     encoder << availableScreenSize;
     encoder << overrideScreenSize;
     encoder << textAutosizingWidth;
-    encoder << maximumUnobscuredSize;
     encoder << deviceOrientation;
     encoder << keyboardIsAttached;
     encoder << canShowWhileLocked;
@@ -114,9 +113,6 @@ void WebPageCreationParameters::encode(IPC::Encoder& encoder) const
 #if PLATFORM(COCOA)
     encoder << smartInsertDeleteEnabled;
     encoder << additionalSupportedImageTypes;
-    // FIXME(207716): The following should be removed when the GPU process is complete.
-    encoder << mediaExtensionHandles;
-    encoder << mediaIOKitExtensionHandles;
     encoder << gpuIOKitExtensionHandles;
     encoder << gpuMachExtensionHandles;
 #endif
@@ -131,6 +127,9 @@ void WebPageCreationParameters::encode(IPC::Encoder& encoder) const
 #endif
 #if PLATFORM(WIN)
     encoder << nativeWindowHandle;
+#endif
+#if USE(GRAPHICS_LAYER_WC)
+    encoder << usesOffscreenRendering;
 #endif
     encoder << shouldScaleViewToFitDocument;
     encoder << userInterfaceLayoutDirection;
@@ -150,6 +149,7 @@ void WebPageCreationParameters::encode(IPC::Encoder& encoder) const
     encoder << oldPageID;
     encoder << overriddenMediaType;
     encoder << corsDisablingPatterns;
+    encoder << maskedURLSchemes;
     encoder << loadsSubresources;
     encoder << allowedNetworkHosts;
     encoder << userScriptsShouldWaitUntilNotification;
@@ -161,6 +161,7 @@ void WebPageCreationParameters::encode(IPC::Encoder& encoder) const
     encoder << shouldCaptureVideoInUIProcess;
     encoder << shouldCaptureVideoInGPUProcess;
     encoder << shouldCaptureDisplayInUIProcess;
+    encoder << shouldCaptureDisplayInGPUProcess;
     encoder << shouldRenderCanvasInGPUProcess;
     encoder << shouldRenderDOMInGPUProcess;
     encoder << shouldPlayMediaInGPUProcess;
@@ -177,10 +178,6 @@ void WebPageCreationParameters::encode(IPC::Encoder& encoder) const
     encoder << shouldRelaxThirdPartyCookieBlocking;
     encoder << canUseCredentialStorage;
 
-#if PLATFORM(GTK)
-    encoder << gtkSettings;
-#endif
-    
     encoder << httpsUpgradeEnabled;
 #if PLATFORM(IOS)
     encoder << allowsDeprecatedSynchronousXMLHttpRequestDuringUnload;
@@ -189,6 +186,16 @@ void WebPageCreationParameters::encode(IPC::Encoder& encoder) const
 #if ENABLE(APP_HIGHLIGHTS)
     encoder << appHighlightsVisible;
 #endif
+
+#if HAVE(TOUCH_BAR)
+    encoder << requiresUserActionForEditingControlsManager;
+#endif
+
+#if HAVE(UIKIT_RESIZABLE_WINDOWS)
+    encoder << hasResizableWindows;
+#endif
+
+    encoder << contentSecurityPolicyModeForExtension;
 }
 
 std::optional<WebPageCreationParameters> WebPageCreationParameters::decode(IPC::Decoder& decoder)
@@ -225,6 +232,12 @@ std::optional<WebPageCreationParameters> WebPageCreationParameters::decode(IPC::
     if (!decoder.decode(parameters.useFixedLayout))
         return std::nullopt;
     if (!decoder.decode(parameters.fixedLayoutSize))
+        return std::nullopt;
+    if (!decoder.decode(parameters.defaultUnobscuredSize))
+        return std::nullopt;
+    if (!decoder.decode(parameters.minimumUnobscuredSize))
+        return std::nullopt;
+    if (!decoder.decode(parameters.maximumUnobscuredSize))
         return std::nullopt;
     if (!decoder.decode(parameters.viewExposedRect))
         return std::nullopt;
@@ -280,12 +293,14 @@ std::optional<WebPageCreationParameters> WebPageCreationParameters::decode(IPC::
     if (!decoder.decode(parameters.mediaVolume))
         return std::nullopt;
 
-    std::optional<WebCore::MediaProducer::MutedStateFlags> mutedStateFlags;
+    std::optional<WebCore::MediaProducerMutedStateFlags> mutedStateFlags;
     decoder >> mutedStateFlags;
     if (!mutedStateFlags)
         return std::nullopt;
     parameters.muted = *mutedStateFlags;
 
+    if (!decoder.decode(parameters.openedByDOM))
+        return std::nullopt;
     if (!decoder.decode(parameters.mayStartMediaWhenInWindow))
         return std::nullopt;
     if (!decoder.decode(parameters.mediaPlaybackIsSuspended))
@@ -329,7 +344,7 @@ std::optional<WebPageCreationParameters> WebPageCreationParameters::decode(IPC::
     parameters.hasResourceLoadClient = WTFMove(*hasResourceLoadClient);
 
 #if PLATFORM(MAC)
-    std::optional<std::optional<DestinationColorSpace>> colorSpace;
+    std::optional<std::optional<WebCore::DestinationColorSpace>> colorSpace;
     decoder >> colorSpace;
     if (!colorSpace)
         return std::nullopt;
@@ -356,14 +371,6 @@ std::optional<WebPageCreationParameters> WebPageCreationParameters::decode(IPC::
     parameters.overrideViewportArguments = WTFMove(*overrideViewportArguments);
 #endif
 
-#if ENABLE(ATTACHMENT_ELEMENT)
-    std::optional<std::optional<Vector<SandboxExtension::Handle>>> attachmentElementExtensionHandles;
-    decoder >> attachmentElementExtensionHandles;
-    if (!attachmentElementExtensionHandles)
-        return std::nullopt;
-    parameters.attachmentElementExtensionHandles = WTFMove(*attachmentElementExtensionHandles);
-#endif
-
 #if PLATFORM(IOS_FAMILY)
     if (!decoder.decode(parameters.screenSize))
         return std::nullopt;
@@ -372,8 +379,6 @@ std::optional<WebPageCreationParameters> WebPageCreationParameters::decode(IPC::
     if (!decoder.decode(parameters.overrideScreenSize))
         return std::nullopt;
     if (!decoder.decode(parameters.textAutosizingWidth))
-        return std::nullopt;
-    if (!decoder.decode(parameters.maximumUnobscuredSize))
         return std::nullopt;
     if (!decoder.decode(parameters.deviceOrientation))
         return std::nullopt;
@@ -390,20 +395,6 @@ std::optional<WebPageCreationParameters> WebPageCreationParameters::decode(IPC::
         return std::nullopt;
     if (!decoder.decode(parameters.additionalSupportedImageTypes))
         return std::nullopt;
-
-    // FIXME(207716): The following should be removed when the GPU process is complete.
-    std::optional<Vector<SandboxExtension::Handle>> mediaExtensionHandles;
-    decoder >> mediaExtensionHandles;
-    if (!mediaExtensionHandles)
-        return std::nullopt;
-    parameters.mediaExtensionHandles = WTFMove(*mediaExtensionHandles);
-
-    std::optional<Vector<SandboxExtension::Handle>> mediaIOKitExtensionHandles;
-    decoder >> mediaIOKitExtensionHandles;
-    if (!mediaIOKitExtensionHandles)
-        return std::nullopt;
-    parameters.mediaIOKitExtensionHandles = WTFMove(*mediaIOKitExtensionHandles);
-    // FIXME(207716): End region to remove.
 
     std::optional<Vector<SandboxExtension::Handle>> gpuIOKitExtensionHandles;
     decoder >> gpuIOKitExtensionHandles;
@@ -438,6 +429,10 @@ std::optional<WebPageCreationParameters> WebPageCreationParameters::decode(IPC::
 
 #if PLATFORM(WIN)
     if (!decoder.decode(parameters.nativeWindowHandle))
+        return std::nullopt;
+#endif
+#if USE(GRAPHICS_LAYER_WC)
+    if (!decoder.decode(parameters.usesOffscreenRendering))
         return std::nullopt;
 #endif
 
@@ -510,13 +505,19 @@ std::optional<WebPageCreationParameters> WebPageCreationParameters::decode(IPC::
         return std::nullopt;
     parameters.corsDisablingPatterns = WTFMove(*corsDisablingPatterns);
 
+    std::optional<HashSet<String>> maskedURLSchemes;
+    decoder >> maskedURLSchemes;
+    if (!maskedURLSchemes)
+        return std::nullopt;
+    parameters.maskedURLSchemes = WTFMove(*maskedURLSchemes);
+
     std::optional<bool> loadsSubresources;
     decoder >> loadsSubresources;
     if (!loadsSubresources)
         return std::nullopt;
     parameters.loadsSubresources = *loadsSubresources;
 
-    std::optional<std::optional<HashSet<String>>> allowedNetworkHosts;
+    std::optional<std::optional<MemoryCompactLookupOnlyRobinHoodHashSet<String>>> allowedNetworkHosts;
     decoder >> allowedNetworkHosts;
     if (!allowedNetworkHosts)
         return std::nullopt;
@@ -555,6 +556,9 @@ std::optional<WebPageCreationParameters> WebPageCreationParameters::decode(IPC::
     if (!decoder.decode(parameters.shouldCaptureDisplayInUIProcess))
         return std::nullopt;
 
+    if (!decoder.decode(parameters.shouldCaptureDisplayInGPUProcess))
+        return std::nullopt;
+
     if (!decoder.decode(parameters.shouldRenderCanvasInGPUProcess))
         return std::nullopt;
 
@@ -590,11 +594,6 @@ std::optional<WebPageCreationParameters> WebPageCreationParameters::decode(IPC::
     if (!decoder.decode(parameters.canUseCredentialStorage))
         return std::nullopt;
 
-#if PLATFORM(GTK)
-    if (!decoder.decode(parameters.gtkSettings))
-        return std::nullopt;
-#endif
-
     if (!decoder.decode(parameters.httpsUpgradeEnabled))
         return std::nullopt;
 
@@ -607,6 +606,19 @@ std::optional<WebPageCreationParameters> WebPageCreationParameters::decode(IPC::
     if (!decoder.decode(parameters.appHighlightsVisible))
         return std::nullopt;
 #endif
+
+#if HAVE(TOUCH_BAR)
+    if (!decoder.decode(parameters.requiresUserActionForEditingControlsManager))
+        return std::nullopt;
+#endif
+
+#if HAVE(UIKIT_RESIZABLE_WINDOWS)
+    if (!decoder.decode(parameters.hasResizableWindows))
+        return std::nullopt;
+#endif
+
+    if (!decoder.decode(parameters.contentSecurityPolicyModeForExtension))
+        return std::nullopt;
 
     return parameters;
 }

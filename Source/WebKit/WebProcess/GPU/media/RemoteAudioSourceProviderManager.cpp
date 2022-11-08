@@ -39,7 +39,7 @@ namespace WebKit {
 using namespace WebCore;
 
 RemoteAudioSourceProviderManager::RemoteAudioSourceProviderManager()
-    : m_queue(WorkQueue::create("RemoteAudioSourceProviderManager", WorkQueue::Type::Serial, WorkQueue::QOS::UserInteractive))
+    : m_queue(WorkQueue::create("RemoteAudioSourceProviderManager", WorkQueue::QOS::UserInteractive))
 {
 }
 
@@ -64,7 +64,7 @@ void RemoteAudioSourceProviderManager::setConnection(IPC::Connection* connection
     m_connection = WTFMove(connection);
 
     if (m_connection)
-        m_connection->addWorkQueueMessageReceiver(Messages::RemoteAudioSourceProviderManager::messageReceiverName(), m_queue, this);
+        m_connection->addWorkQueueMessageReceiver(Messages::RemoteAudioSourceProviderManager::messageReceiverName(), m_queue, *this);
 }
 
 void RemoteAudioSourceProviderManager::addProvider(Ref<RemoteAudioSourceProvider>&& provider)
@@ -72,7 +72,7 @@ void RemoteAudioSourceProviderManager::addProvider(Ref<RemoteAudioSourceProvider
     ASSERT(WTF::isMainRunLoop());
     setConnection(&WebProcess::singleton().ensureGPUProcessConnection().connection());
 
-    m_queue->dispatch([this, protectedThis = makeRef(*this), provider = WTFMove(provider)]() mutable {
+    m_queue->dispatch([this, protectedThis = Ref { *this }, provider = WTFMove(provider)]() mutable {
         auto identifier = provider->identifier();
 
         ASSERT(!m_providers.contains(identifier));
@@ -84,13 +84,13 @@ void RemoteAudioSourceProviderManager::removeProvider(MediaPlayerIdentifier iden
 {
     ASSERT(WTF::isMainRunLoop());
 
-    m_queue->dispatch([this, protectedThis = makeRef(*this), identifier] {
+    m_queue->dispatch([this, protectedThis = Ref { *this }, identifier] {
         ASSERT(m_providers.contains(identifier));
         m_providers.remove(identifier);
     });
 }
 
-void RemoteAudioSourceProviderManager::audioStorageChanged(MediaPlayerIdentifier identifier, const SharedMemory::IPCHandle& ipcHandle, const WebCore::CAAudioStreamDescription& description, uint64_t numberOfFrames)
+void RemoteAudioSourceProviderManager::audioStorageChanged(MediaPlayerIdentifier identifier, const SharedMemory::Handle& handle, const WebCore::CAAudioStreamDescription& description, uint64_t numberOfFrames)
 {
     ASSERT(!WTF::isMainRunLoop());
 
@@ -99,7 +99,7 @@ void RemoteAudioSourceProviderManager::audioStorageChanged(MediaPlayerIdentifier
         RELEASE_LOG_ERROR(Media, "Unable to find provider %llu for storageChanged", identifier.toUInt64());
         return;
     }
-    iterator->value->setStorage(ipcHandle.handle, description, numberOfFrames);
+    iterator->value->setStorage(handle, description, numberOfFrames);
 }
 
 void RemoteAudioSourceProviderManager::audioSamplesAvailable(MediaPlayerIdentifier identifier, uint64_t startFrame, uint64_t numberOfFrames)

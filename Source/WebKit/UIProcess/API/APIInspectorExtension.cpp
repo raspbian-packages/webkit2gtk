@@ -37,7 +37,7 @@ namespace API {
 
 InspectorExtension::InspectorExtension(const WTF::String& identifier, WebKit::WebInspectorUIExtensionControllerProxy& extensionControllerProxy)
     : m_identifier(identifier)
-    , m_extensionControllerProxy(makeWeakPtr(extensionControllerProxy))
+    , m_extensionControllerProxy(extensionControllerProxy)
 {
 }
 
@@ -71,6 +71,16 @@ void InspectorExtension::evaluateScript(const WTF::String& scriptSource, const s
     m_extensionControllerProxy->evaluateScriptForExtension(m_identifier, scriptSource, frameURL, contextSecurityOrigin, useContentScriptContext, WTFMove(completionHandler));
 }
 
+void InspectorExtension::navigateTab(const Inspector::ExtensionTabID& extensionTabID, const WTF::URL& sourceURL, WTF::CompletionHandler<void(const std::optional<Inspector::ExtensionError>)>&& completionHandler)
+{
+    if (!m_extensionControllerProxy) {
+        completionHandler(Inspector::ExtensionError::ContextDestroyed);
+        return;
+    }
+
+    m_extensionControllerProxy->navigateTabForExtension(extensionTabID, sourceURL, WTFMove(completionHandler));
+}
+
 void InspectorExtension::reloadIgnoringCache(const std::optional<bool>& ignoreCache, const std::optional<WTF::String>& userAgent, const std::optional<WTF::String>& injectedScript,  WTF::CompletionHandler<void(Inspector::ExtensionEvaluationResult)>&& completionHandler)
 {
     if (!m_extensionControllerProxy) {
@@ -79,6 +89,18 @@ void InspectorExtension::reloadIgnoringCache(const std::optional<bool>& ignoreCa
     }
 
     m_extensionControllerProxy->reloadForExtension(m_identifier, ignoreCache, userAgent, injectedScript, WTFMove(completionHandler));
+}
+
+// For testing.
+
+void InspectorExtension::evaluateScriptInExtensionTab(const Inspector::ExtensionTabID& extensionTabID, const WTF::String& scriptSource, WTF::CompletionHandler<void(Inspector::ExtensionEvaluationResult)>&& completionHandler)
+{
+    if (!m_extensionControllerProxy) {
+        completionHandler(makeUnexpected(Inspector::ExtensionError::ContextDestroyed));
+        return;
+    }
+
+    m_extensionControllerProxy->evaluateScriptInExtensionTab(extensionTabID, scriptSource, WTFMove(completionHandler));
 }
 
 } // namespace API

@@ -48,6 +48,13 @@ struct hash<egl::BlobCacheKey>
 namespace egl
 {
 
+bool CompressBlobCacheData(const size_t cacheSize,
+                           const uint8_t *cacheData,
+                           angle::MemoryBuffer *compressedData);
+bool DecompressBlobCacheData(const uint8_t *compressedData,
+                             const size_t compressedSize,
+                             angle::MemoryBuffer *uncompressedData);
+
 class BlobCache final : angle::NonCopyable
 {
   public:
@@ -100,15 +107,15 @@ class BlobCache final : angle::NonCopyable
 
     // Check if the cache contains the blob corresponding to this key.  If application callbacks are
     // set, those will be used.  Otherwise they key is looked up in this object's cache.
-    ANGLE_NO_DISCARD bool get(angle::ScratchBuffer *scratchBuffer,
-                              const BlobCache::Key &key,
-                              BlobCache::Value *valueOut,
-                              size_t *bufferSizeOut);
+    [[nodiscard]] bool get(angle::ScratchBuffer *scratchBuffer,
+                           const BlobCache::Key &key,
+                           BlobCache::Value *valueOut,
+                           size_t *bufferSizeOut);
 
     // For querying the contents of the cache.
-    ANGLE_NO_DISCARD bool getAt(size_t index,
-                                const BlobCache::Key **keyOut,
-                                BlobCache::Value *valueOut);
+    [[nodiscard]] bool getAt(size_t index,
+                             const BlobCache::Key **keyOut,
+                             BlobCache::Value *valueOut);
 
     // Evict a blob from the binary cache.
     void remove(const BlobCache::Key &key);
@@ -143,6 +150,8 @@ class BlobCache final : angle::NonCopyable
   private:
     // This internal cache is used only if the application is not providing caching callbacks
     using CacheEntry = std::pair<angle::MemoryBuffer, CacheSource>;
+
+    std::mutex mBlobCacheMutex;
     angle::SizedMRUCache<BlobCache::Key, CacheEntry> mBlobCache;
 
     EGLSetBlobFuncANDROID mSetBlobFunc;

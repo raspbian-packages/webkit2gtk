@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2021 Apple Inc. All rights reserved.
+ * Copyright (C) 2018-2022 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,6 +31,7 @@
 #include "CtapDriver.h"
 #include "CtapHidDriver.h"
 #include "U2fAuthenticator.h"
+#include <WebCore/AuthenticationExtensionsClientOutputs.h>
 #include <WebCore/AuthenticatorAttachment.h>
 #include <WebCore/CryptoKeyAES.h>
 #include <WebCore/CryptoKeyEC.h>
@@ -46,6 +47,8 @@
 namespace WebKit {
 using namespace WebCore;
 using namespace fido;
+
+using UVAvailability = AuthenticatorSupportedOptions::UserVerificationAvailability;
 
 namespace {
 WebAuthenticationStatus toStatus(const CtapDeviceResponseCode& error)
@@ -71,6 +74,7 @@ bool isPinError(const CtapDeviceResponseCode& error)
     case CtapDeviceResponseCode::kCtap2ErrPinAuthBlocked:
     case CtapDeviceResponseCode::kCtap2ErrPinInvalid:
     case CtapDeviceResponseCode::kCtap2ErrPinBlocked:
+    case CtapDeviceResponseCode::kCtap2ErrPinRequired:
         return true;
     default:
         return false;
@@ -91,12 +95,17 @@ void CtapAuthenticator::makeCredential()
     if (processGoogleLegacyAppIdSupportExtension())
         return;
     Vector<uint8_t> cborCmd;
-    auto& options = WTF::get<PublicKeyCredentialCreationOptions>(requestData().options);
-    if (m_info.options().clientPinAvailability() == AuthenticatorSupportedOptions::ClientPinAvailability::kSupportedAndPinSet)
-        cborCmd = encodeMakeCredenitalRequestAsCBOR(requestData().hash, options, m_info.options().userVerificationAvailability(), PinParameters { pin::kProtocolVersion, m_pinAuth });
+    auto& options = std::get<PublicKeyCredentialCreationOptions>(requestData().options);
+    auto internalUVAvailability = m_info.options().userVerificationAvailability();
+    auto residentKeyAvailability = m_info.options().residentKeyAvailability();
+    // If UV is required, then either built-in uv or a pin will work.
+    if (internalUVAvailability == UVAvailability::kSupportedAndConfigured && (!options.authenticatorSelection || options.authenticatorSelection->userVerification != UserVerificationRequirement::Discouraged) && m_pinAuth.isEmpty())
+        cborCmd = encodeMakeCredenitalRequestAsCBOR(requestData().hash, options, internalUVAvailability, residentKeyAvailability);
+    else if (m_info.options().clientPinAvailability() == AuthenticatorSupportedOptions::ClientPinAvailability::kSupportedAndPinSet)
+        cborCmd = encodeMakeCredenitalRequestAsCBOR(requestData().hash, options, internalUVAvailability, residentKeyAvailability, PinParameters { pin::kProtocolVersion, m_pinAuth });
     else
-        cborCmd = encodeMakeCredenitalRequestAsCBOR(requestData().hash, options, m_info.options().userVerificationAvailability());
-    driver().transact(WTFMove(cborCmd), [weakThis = makeWeakPtr(*this)](Vector<uint8_t>&& data) {
+        cborCmd = encodeMakeCredenitalRequestAsCBOR(requestData().hash, options, internalUVAvailability, residentKeyAvailability);
+    driver().transact(WTFMove(cborCmd), [weakThis = WeakPtr { *this }](Vector<uint8_t>&& data) {
         ASSERT(RunLoop::isMain());
         if (!weakThis)
             return;
@@ -106,9 +115,14 @@ void CtapAuthenticator::makeCredential()
 
 void CtapAuthenticator::continueMakeCredentialAfterResponseReceived(Vector<uint8_t>&& data)
 {
-    auto response = readCTAPMakeCredentialResponse(data, AuthenticatorAttachment::CrossPlatform, WTF::get<PublicKeyCredentialCreationOptions>(requestData().options).attestation);
+    auto response = readCTAPMakeCredentialResponse(data, AuthenticatorAttachment::CrossPlatform, transports(), std::get<PublicKeyCredentialCreationOptions>(requestData().options).attestation);
     if (!response) {
         auto error = getResponseCode(data);
+
+        if (error == CtapDeviceResponseCode::kCtap2ErrActionTimeout) {
+            makeCredential();
+            return;
+        }
 
         if (error == CtapDeviceResponseCode::kCtap2ErrCredentialExcluded) {
             receiveRespond(ExceptionData { InvalidStateError, "At least one credential matches an entry of the excludeCredentials list in the authenticator."_s });
@@ -125,6 +139,15 @@ void CtapAuthenticator::continueMakeCredentialAfterResponseReceived(Vector<uint8
         receiveRespond(ExceptionData { UnknownError, makeString("Unknown internal error. Error code: ", static_cast<uint8_t>(error)) });
         return;
     }
+    auto& options = std::get<PublicKeyCredentialCreationOptions>(requestData().options);
+    if (options.extensions && options.extensions->credProps) {
+        auto extensionOutputs = response->extensions();
+        
+        auto rkSupported = m_info.options().residentKeyAvailability() == AuthenticatorSupportedOptions::ResidentKeyAvailability::kSupported;
+        auto rkRequested = options.authenticatorSelection && ((options.authenticatorSelection->residentKey && options.authenticatorSelection->residentKey != ResidentKeyRequirement::Discouraged) || options.authenticatorSelection->requireResidentKey);
+        extensionOutputs.credProps = AuthenticationExtensionsClientOutputs::CredentialPropertiesOutput { rkSupported && rkRequested };
+        response->setExtensions(WTFMove(extensionOutputs));
+    }
     receiveRespond(response.releaseNonNull());
 }
 
@@ -132,12 +155,16 @@ void CtapAuthenticator::getAssertion()
 {
     ASSERT(!m_isDowngraded);
     Vector<uint8_t> cborCmd;
-    auto& options = WTF::get<PublicKeyCredentialRequestOptions>(requestData().options);
-    if (m_info.options().clientPinAvailability() == AuthenticatorSupportedOptions::ClientPinAvailability::kSupportedAndPinSet && options.userVerification != UserVerificationRequirement::Discouraged)
-        cborCmd = encodeGetAssertionRequestAsCBOR(requestData().hash, options, m_info.options().userVerificationAvailability(), PinParameters { pin::kProtocolVersion, m_pinAuth });
+    auto& options = std::get<PublicKeyCredentialRequestOptions>(requestData().options);
+    auto internalUVAvailability = m_info.options().userVerificationAvailability();
+    // If UV is required, then either built-in uv or a pin will work.
+    if (internalUVAvailability == UVAvailability::kSupportedAndConfigured && options.userVerification != UserVerificationRequirement::Discouraged && m_pinAuth.isEmpty())
+        cborCmd = encodeGetAssertionRequestAsCBOR(requestData().hash, options, internalUVAvailability);
+    else if (m_info.options().clientPinAvailability() == AuthenticatorSupportedOptions::ClientPinAvailability::kSupportedAndPinSet && options.userVerification != UserVerificationRequirement::Discouraged)
+        cborCmd = encodeGetAssertionRequestAsCBOR(requestData().hash, options, internalUVAvailability, PinParameters { pin::kProtocolVersion, m_pinAuth });
     else
-        cborCmd = encodeGetAssertionRequestAsCBOR(requestData().hash, options, m_info.options().userVerificationAvailability());
-    driver().transact(WTFMove(cborCmd), [weakThis = makeWeakPtr(*this)](Vector<uint8_t>&& data) {
+        cborCmd = encodeGetAssertionRequestAsCBOR(requestData().hash, options, internalUVAvailability);
+    driver().transact(WTFMove(cborCmd), [weakThis = WeakPtr { *this }](Vector<uint8_t>&& data) {
         ASSERT(RunLoop::isMain());
         if (!weakThis)
             return;
@@ -150,6 +177,11 @@ void CtapAuthenticator::continueGetAssertionAfterResponseReceived(Vector<uint8_t
     auto response = readCTAPGetAssertionResponse(data, AuthenticatorAttachment::CrossPlatform);
     if (!response) {
         auto error = getResponseCode(data);
+
+        if (error == CtapDeviceResponseCode::kCtap2ErrActionTimeout) {
+            getAssertion();
+            return;
+        }
 
         if (!isPinError(error) && tryDowngrade())
             return;
@@ -176,7 +208,7 @@ void CtapAuthenticator::continueGetAssertionAfterResponseReceived(Vector<uint8_t
     m_remainingAssertionResponses = response->numberOfCredentials() - 1;
     m_assertionResponses.reserveInitialCapacity(response->numberOfCredentials());
     m_assertionResponses.uncheckedAppend(response.releaseNonNull());
-    driver().transact(encodeEmptyAuthenticatorRequest(CtapRequestCommand::kAuthenticatorGetNextAssertion), [weakThis = makeWeakPtr(*this)](Vector<uint8_t>&& data) {
+    driver().transact(encodeEmptyAuthenticatorRequest(CtapRequestCommand::kAuthenticatorGetNextAssertion), [weakThis = WeakPtr { *this }](Vector<uint8_t>&& data) {
         ASSERT(RunLoop::isMain());
         if (!weakThis)
             return;
@@ -197,16 +229,11 @@ void CtapAuthenticator::continueGetNextAssertionAfterResponseReceived(Vector<uin
 
     if (!m_remainingAssertionResponses) {
         if (auto* observer = this->observer()) {
-            Vector<Ref<AuthenticatorAssertionResponse>> responsesCopy;
-            responsesCopy.reserveInitialCapacity(m_assertionResponses.size());
-            for (auto& response : m_assertionResponses)
-                responsesCopy.uncheckedAppend(response.copyRef());
-
-            observer->selectAssertionResponse(WTFMove(responsesCopy), WebAuthenticationSource::External, [this, weakThis = makeWeakPtr(*this)] (AuthenticatorAssertionResponse* response) {
-                ASSERT(RunLoop::isMain());
+            observer->selectAssertionResponse(Vector { m_assertionResponses }, WebAuthenticationSource::External, [this, weakThis = WeakPtr { *this }] (AuthenticatorAssertionResponse* response) {
+                RELEASE_ASSERT(RunLoop::isMain());
                 if (!weakThis)
                     return;
-                auto result = m_assertionResponses.findMatching([expectedResponse = response] (auto& response) {
+                auto result = m_assertionResponses.findIf([expectedResponse = response] (auto& response) {
                     return response.ptr() == expectedResponse;
                 });
                 if (result == notFound)
@@ -217,7 +244,7 @@ void CtapAuthenticator::continueGetNextAssertionAfterResponseReceived(Vector<uin
         return;
     }
 
-    driver().transact(encodeEmptyAuthenticatorRequest(CtapRequestCommand::kAuthenticatorGetNextAssertion), [weakThis = makeWeakPtr(*this)](Vector<uint8_t>&& data) {
+    driver().transact(encodeEmptyAuthenticatorRequest(CtapRequestCommand::kAuthenticatorGetNextAssertion), [weakThis = WeakPtr { *this }](Vector<uint8_t>&& data) {
         ASSERT(RunLoop::isMain());
         if (!weakThis)
             return;
@@ -228,7 +255,7 @@ void CtapAuthenticator::continueGetNextAssertionAfterResponseReceived(Vector<uin
 void CtapAuthenticator::getRetries()
 {
     auto cborCmd = encodeAsCBOR(pin::RetriesRequest { });
-    driver().transact(WTFMove(cborCmd), [weakThis = makeWeakPtr(*this)](Vector<uint8_t>&& data) {
+    driver().transact(WTFMove(cborCmd), [weakThis = WeakPtr { *this }](Vector<uint8_t>&& data) {
         ASSERT(RunLoop::isMain());
         if (!weakThis)
             return;
@@ -246,7 +273,7 @@ void CtapAuthenticator::continueGetKeyAgreementAfterGetRetries(Vector<uint8_t>&&
     }
 
     auto cborCmd = encodeAsCBOR(pin::KeyAgreementRequest { });
-    driver().transact(WTFMove(cborCmd), [weakThis = makeWeakPtr(*this), retries = retries->retries] (Vector<uint8_t>&& data) {
+    driver().transact(WTFMove(cborCmd), [weakThis = WeakPtr { *this }, retries = retries->retries] (Vector<uint8_t>&& data) {
         ASSERT(RunLoop::isMain());
         if (!weakThis)
             return;
@@ -264,8 +291,8 @@ void CtapAuthenticator::continueRequestPinAfterGetKeyAgreement(Vector<uint8_t>&&
     }
 
     if (auto* observer = this->observer()) {
-        observer->requestPin(retries, [weakThis = makeWeakPtr(*this), keyAgreement = WTFMove(*keyAgreement)] (const String& pin) {
-            ASSERT(RunLoop::isMain());
+        observer->requestPin(retries, [weakThis = WeakPtr { *this }, keyAgreement = WTFMove(*keyAgreement)] (const String& pin) {
+            RELEASE_ASSERT(RunLoop::isMain());
             if (!weakThis)
                 return;
             weakThis->continueGetPinTokenAfterRequestPin(pin, keyAgreement.peerKey);
@@ -295,7 +322,7 @@ void CtapAuthenticator::continueGetPinTokenAfterRequestPin(const String& pin, co
     }
 
     auto cborCmd = encodeAsCBOR(*tokenRequest);
-    driver().transact(WTFMove(cborCmd), [weakThis = makeWeakPtr(*this), tokenRequest = WTFMove(*tokenRequest)] (Vector<uint8_t>&& data) {
+    driver().transact(WTFMove(cborCmd), [weakThis = WeakPtr { *this }, tokenRequest = WTFMove(*tokenRequest)] (Vector<uint8_t>&& data) {
         ASSERT(RunLoop::isMain());
         if (!weakThis)
             return;
@@ -333,6 +360,7 @@ bool CtapAuthenticator::tryRestartPin(const CtapDeviceResponseCode& error)
     switch (error) {
     case CtapDeviceResponseCode::kCtap2ErrPinAuthInvalid:
     case CtapDeviceResponseCode::kCtap2ErrPinInvalid:
+    case CtapDeviceResponseCode::kCtap2ErrPinRequired:
         getRetries();
         return true;
     default:
@@ -365,7 +393,7 @@ bool CtapAuthenticator::tryDowngrade()
 // Only U2F protocol is supported for Google legacy AppID support.
 bool CtapAuthenticator::processGoogleLegacyAppIdSupportExtension()
 {
-    auto& extensions = WTF::get<PublicKeyCredentialCreationOptions>(requestData().options).extensions;
+    auto& extensions = std::get<PublicKeyCredentialCreationOptions>(requestData().options).extensions;
     if (!extensions) {
         // AuthenticatorCoordinator::create should always set it.
         ASSERT_NOT_REACHED();
@@ -374,6 +402,14 @@ bool CtapAuthenticator::processGoogleLegacyAppIdSupportExtension()
     if (extensions->googleLegacyAppidSupport)
         tryDowngrade();
     return extensions->googleLegacyAppidSupport;
+}
+
+Vector<AuthenticatorTransport> CtapAuthenticator::transports() const
+{
+    
+    if (auto& infoTransports = m_info.transports())
+        return *infoTransports;
+    return Vector { driver().transport() };
 }
 
 } // namespace WebKit

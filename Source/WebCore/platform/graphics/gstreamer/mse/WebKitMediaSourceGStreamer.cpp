@@ -287,7 +287,7 @@ void webKitMediaSrcEmitStreams(WebKitMediaSrc* source, const Vector<RefPtr<Media
         gst_pad_set_activatemode_function(GST_PAD(pad.get()), webKitMediaSrcActivateMode);
 
         ASSERT(track->initialCaps());
-        RefPtr<Stream> stream = adoptRef(new Stream(source, GRefPtr<GstPad>(GST_PAD(pad.get())), makeRef(*track),
+        auto stream = adoptRef(new Stream(source, GRefPtr<GstPad>(GST_PAD(pad.get())), *track,
             adoptGRef(gst_stream_new(track->trackId().string().utf8().data(), track->initialCaps().get(), gstStreamType(track->type()), GST_STREAM_FLAG_SELECT))));
         pad->priv->stream = stream;
 
@@ -545,6 +545,8 @@ static void webKitMediaSrcStreamFlush(Stream* stream, bool isSeekingFlush)
 {
     ASSERT(isMainThread());
     bool skipFlush = false;
+    GST_DEBUG_OBJECT(stream->source, "Flush requested for stream '%s'. isSeekingFlush = %s",
+        stream->track->trackId().string().utf8().data(), boolForPrinting(isSeekingFlush));
 
     {
         DataMutexLocker streamingMembers { stream->streamingMembersDataMutex };
@@ -635,6 +637,9 @@ static void webKitMediaSrcStreamFlush(Stream* stream, bool isSeekingFlush)
         GST_DEBUG_OBJECT(stream->pad.get(), "Starting webKitMediaSrcLoop task and releasing the STREAM_LOCK.");
         gst_pad_start_task(stream->pad.get(), webKitMediaSrcLoop, stream->pad.get(), nullptr);
     }
+
+    GST_DEBUG_OBJECT(stream->source, "Flush request for stream '%s' (isSeekingFlush = %s) satisfied.",
+        stream->track->trackId().string().utf8().data(), boolForPrinting(isSeekingFlush));
 }
 
 void webKitMediaSrcFlush(WebKitMediaSrc* source, const AtomString& streamName)
@@ -722,8 +727,7 @@ static gboolean webKitMediaSrcSendEvent(GstElement* element, GstEvent* event)
         return true;
     }
     default:
-        GST_DEBUG_OBJECT(element, "Rejecting unsupported event: %" GST_PTR_FORMAT, event);
-        return false;
+        return GST_ELEMENT_CLASS(webkit_media_src_parent_class)->send_event(element, event);
     }
 }
 

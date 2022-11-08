@@ -14,8 +14,12 @@ import subprocess
 import sys
 import tempfile
 
-# Fragment of a regular expression that matches C++ and Objective-C++ implementation files and headers.
-_IMPLEMENTATION_AND_HEADER_EXTENSIONS = r'\.(cc|cpp|cxx|mm|h|hpp|hxx)$'
+# This line is 'magic' in that git-cl looks for it to decide whether to
+# use Python3 instead of Python2 when running the code in this file.
+USE_PYTHON3 = True
+
+# Fragment of a regular expression that matches C/C++ and Objective-C++ implementation files and headers.
+_IMPLEMENTATION_AND_HEADER_EXTENSIONS = r'\.(c|cc|cpp|cxx|mm|h|hpp|hxx)$'
 
 # Fragment of a regular expression that matches C++ and Objective-C++ header files.
 _HEADER_EXTENSIONS = r'\.(h|hpp|hxx)$'
@@ -192,7 +196,9 @@ def _CheckChangeHasBugField(input_api, output_api):
     if len(bugs) == 1 and bugs[0] == 'None':
         return []
 
-    projects = ['angleproject:', 'chromium:', 'dawn:', 'fuchsia:', 'skia:', 'swiftshader:', 'b/']
+    projects = [
+        'angleproject:', 'chromium:', 'dawn:', 'fuchsia:', 'skia:', 'swiftshader:', 'tint:', 'b/'
+    ]
     bug_regex = re.compile(r"([a-z]+[:/])(\d+)")
     errors = []
     extra_help = None
@@ -237,7 +243,7 @@ def _CheckCodeGeneration(input_api, output_api):
     code_gen_path = input_api.os_path.join(input_api.PresubmitLocalPath(),
                                            'scripts/run_code_generation.py')
     cmd_name = 'run_code_generation'
-    cmd = [input_api.python_executable, code_gen_path, '--verify-no-dirty']
+    cmd = [input_api.python3_executable, code_gen_path, '--verify-no-dirty']
     test_cmd = input_api.Command(name=cmd_name, cmd=cmd, kwargs={}, message=Msg)
     if input_api.verbose:
         print('Running ' + cmd_name)
@@ -323,12 +329,15 @@ def _CheckExportValidity(input_api, output_api):
 def _CheckTabsInSourceFiles(input_api, output_api):
     """Forbids tab characters in source files due to a WebKit repo requirement. """
 
-    def implementation_and_headers(f):
+    def implementation_and_headers_including_third_party(f):
+        # Check third_party files too, because WebKit's checks don't make exceptions.
         return input_api.FilterSourceFile(
-            f, files_to_check=(r'.+%s' % _IMPLEMENTATION_AND_HEADER_EXTENSIONS,))
+            f,
+            files_to_check=(r'.+%s' % _IMPLEMENTATION_AND_HEADER_EXTENSIONS,),
+            files_to_skip=[f for f in input_api.DEFAULT_FILES_TO_SKIP if not "third_party" in f])
 
     files_with_tabs = []
-    for f in input_api.AffectedSourceFiles(implementation_and_headers):
+    for f in input_api.AffectedSourceFiles(implementation_and_headers_including_third_party):
         for (num, line) in f.ChangedContents():
             if '\t' in line:
                 files_with_tabs.append(f)
@@ -377,10 +386,47 @@ def _CheckNonAsciiInSourceFiles(input_api, output_api):
     return []
 
 
+def _CheckCommentBeforeTestInTestFiles(input_api, output_api):
+    """Require a comment before TEST_P() and other tests. """
+
+    def test_files(f):
+        return input_api.FilterSourceFile(
+            f, files_to_check=(r'^src\/tests\/.+\.cpp$', r'^src\/.+_unittest\.cpp$'))
+
+    tests_with_no_comment = []
+    for f in input_api.AffectedSourceFiles(test_files):
+        diff = f.GenerateScmDiff()
+        last_line_was_comment = False
+        for line in diff.splitlines():
+            # Skip removed lines
+            if line.startswith('-'):
+                continue
+
+            new_line_is_comment = line.startswith(' //') or line.startswith('+//')
+            new_line_is_test_declaration = (
+                line.startswith('+TEST_P(') or line.startswith('+TEST(') or
+                line.startswith('+TYPED_TEST('))
+
+            if new_line_is_test_declaration and not last_line_was_comment:
+                tests_with_no_comment.append(line[1:])
+
+            last_line_was_comment = new_line_is_comment
+
+    if tests_with_no_comment:
+        return [
+            output_api.PresubmitError(
+                'Tests without comment.',
+                items=sorted(tests_with_no_comment),
+                long_text='ANGLE requires a comment describing what a test does.')
+        ]
+    return []
+
+
 def CheckChangeOnUpload(input_api, output_api):
     results = []
     results.extend(_CheckTabsInSourceFiles(input_api, output_api))
     results.extend(_CheckNonAsciiInSourceFiles(input_api, output_api))
+    results.extend(_CheckCommentBeforeTestInTestFiles(input_api, output_api))
     results.extend(_CheckCodeGeneration(input_api, output_api))
     results.extend(_CheckChangeHasBugField(input_api, output_api))
     results.extend(input_api.canned_checks.CheckChangeHasDescription(input_api, output_api))

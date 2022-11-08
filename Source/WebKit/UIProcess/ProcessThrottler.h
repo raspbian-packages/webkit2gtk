@@ -28,11 +28,11 @@
 
 #include "Logging.h"
 #include "ProcessAssertion.h"
+#include <variant>
 #include <wtf/ProcessID.h>
 #include <wtf/RefCounter.h>
 #include <wtf/RunLoop.h>
 #include <wtf/UniqueRef.h>
-#include <wtf/Variant.h>
 #include <wtf/WeakPtr.h>
 
 #define PROCESSTHROTTLER_RELEASE_LOG(msg, ...) RELEASE_LOG(ProcessSuspension, "%p - [PID=%d] ProcessThrottler::" msg, this, m_processIdentifier, ##__VA_ARGS__)
@@ -64,7 +64,12 @@ public:
             : m_throttler(&throttler)
             , m_name(name)
         {
-            throttler.addActivity(*this);
+            ASSERT(isMainRunLoop());
+            if (!throttler.addActivity(*this)) {
+                m_throttler = nullptr;
+                return;
+            }
+
             if (!isQuietActivity()) {
                 PROCESSTHROTTLER_ACTIVITY_RELEASE_LOG("Activity: Starting %" PUBLIC_LOG_STRING " activity / '%" PUBLIC_LOG_STRING "'",
                     type == ActivityType::Foreground ? "foreground" : "background", m_name.characters());
@@ -73,16 +78,17 @@ public:
 
         ~Activity()
         {
+            ASSERT(isMainRunLoop());
             if (isValid())
                 invalidate();
         }
 
         bool isValid() const { return !!m_throttler; }
+        ASCIILiteral name() const { return m_name; }
+        bool isQuietActivity() const { return !m_name.characters(); }
 
     private:
         friend class ProcessThrottler;
-
-        bool isQuietActivity() const { return !m_name.characters(); }
 
         void invalidate()
         {
@@ -105,7 +111,7 @@ public:
     using BackgroundActivity = Activity<ActivityType::Background>;
     UniqueRef<BackgroundActivity> backgroundActivity(ASCIILiteral name);
 
-    using ActivityVariant = Variant<std::nullptr_t, UniqueRef<BackgroundActivity>, UniqueRef<ForegroundActivity>>;
+    using ActivityVariant = std::variant<std::nullptr_t, UniqueRef<BackgroundActivity>, UniqueRef<ForegroundActivity>>;
     static bool isValidBackgroundActivity(const ActivityVariant&);
     static bool isValidForegroundActivity(const ActivityVariant&);
 
@@ -125,6 +131,7 @@ public:
     
     void didConnectToProcess(ProcessID);
     bool shouldBeRunnable() const { return m_foregroundActivities.size() || m_backgroundActivities.size(); }
+    void setAllowsActivities(bool);
 
 private:
     ProcessAssertionType expectedAssertionType();
@@ -135,8 +142,8 @@ private:
     void sendPrepareToSuspendIPC(IsSuspensionImminent);
     void processReadyToSuspend();
 
-    void addActivity(ForegroundActivity&);
-    void addActivity(BackgroundActivity&);
+    bool addActivity(ForegroundActivity&);
+    bool addActivity(BackgroundActivity&);
     void removeActivity(ForegroundActivity&);
     void removeActivity(BackgroundActivity&);
     void invalidateAllActivities();
@@ -155,6 +162,7 @@ private:
     HashSet<BackgroundActivity*> m_backgroundActivities;
     std::optional<uint64_t> m_pendingRequestToSuspendID;
     bool m_shouldTakeUIBackgroundAssertion;
+    bool m_allowsActivities { true };
 };
 
 inline auto ProcessThrottler::foregroundActivity(ASCIILiteral name) -> UniqueRef<ForegroundActivity>

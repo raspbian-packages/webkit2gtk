@@ -55,7 +55,7 @@ static CString buildAcceptLanguages(const Vector<String>& languages)
     size_t languagesCount = languages.size();
 
     // Ignore "C" locale.
-    size_t cLocalePosition = languages.find("c");
+    size_t cLocalePosition = languages.find("c"_s);
     if (cLocalePosition != notFound)
         languagesCount--;
 
@@ -177,7 +177,7 @@ void NetworkProcess::platformTerminate()
 void NetworkProcess::setNetworkProxySettings(PAL::SessionID sessionID, SoupNetworkProxySettings&& settings)
 {
     if (auto* session = networkSession(sessionID))
-        static_cast<NetworkSessionSoup&>(*session).setProxySettings(WTFMove(settings));
+        static_cast<NetworkSessionSoup&>(*session).setProxySettings(settings);
 }
 
 void NetworkProcess::setPersistentCredentialStorageEnabled(PAL::SessionID sessionID, bool enabled)

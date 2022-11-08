@@ -78,7 +78,7 @@ static void logSpeculativeLoadingDiagnosticMessage(NetworkProcess& networkProces
 static const AtomString& subresourcesType()
 {
     ASSERT(RunLoop::isMain());
-    static NeverDestroyed<const AtomString> resource("SubResources", AtomString::ConstructFromLiteral);
+    static NeverDestroyed<const AtomString> resource("SubResources"_s);
     return resource;
 }
 
@@ -339,7 +339,7 @@ void SpeculativeLoadManager::retrieve(const Key& storageKey, RetrieveCompletionH
 
 bool SpeculativeLoadManager::shouldRegisterLoad(const WebCore::ResourceRequest& request)
 {
-    if (request.httpMethod() != "GET")
+    if (request.httpMethod() != "GET"_s)
         return false;
     if (!request.httpHeaderField(HTTPHeaderName::Range).isEmpty())
         return false;
@@ -370,7 +370,7 @@ void SpeculativeLoadManager::registerLoad(const GlobalFrameID& frameID, const Re
         m_pendingFrameLoads.add(frameID, pendingFrameLoad.copyRef());
 
         // Retrieve the subresources entry if it exists to start speculative revalidation and to update it.
-        retrieveSubresourcesEntry(resourceKey, [this, weakThis = makeWeakPtr(*this), frameID, pendingFrameLoad = WTFMove(pendingFrameLoad), requestIsAppInitiated = request.isAppInitiated(), isNavigatingToAppBoundDomain](std::unique_ptr<SubresourcesEntry> entry) {
+        retrieveSubresourcesEntry(resourceKey, [this, weakThis = WeakPtr { *this }, frameID, pendingFrameLoad = WTFMove(pendingFrameLoad), requestIsAppInitiated = request.isAppInitiated(), isNavigatingToAppBoundDomain](std::unique_ptr<SubresourcesEntry> entry) {
             if (!weakThis)
                 return;
 
@@ -470,7 +470,7 @@ void SpeculativeLoadManager::preconnectForSubresource(const SubresourceInfo& sub
     parameters.shouldPreconnectOnly = PreconnectOnly::Yes;
     parameters.request = constructRevalidationRequest(subresourceInfo.key(), subresourceInfo, entry);
     parameters.isNavigatingToAppBoundDomain = isNavigatingToAppBoundDomain;
-    (new PreconnectTask(*networkSession, WTFMove(parameters), [](const WebCore::ResourceError&) { }))->start();
+    (new PreconnectTask(*networkSession, WTFMove(parameters), [](const WebCore::ResourceError&, const WebCore::NetworkLoadMetrics&) { }))->start();
 #else
     UNUSED_PARAM(subresourceInfo);
     UNUSED_PARAM(entry);
@@ -569,7 +569,7 @@ void SpeculativeLoadManager::preloadEntry(const Key& key, const SubresourceInfo&
         return;
     m_pendingPreloads.add(key, nullptr);
     
-    retrieveEntryFromStorage(subresourceInfo, [this, weakThis = makeWeakPtr(*this), key, subresourceInfo, frameID, isNavigatingToAppBoundDomain](std::unique_ptr<Entry> entry) {
+    retrieveEntryFromStorage(subresourceInfo, [this, weakThis = WeakPtr { *this }, key, subresourceInfo, frameID, isNavigatingToAppBoundDomain](std::unique_ptr<Entry> entry) {
         if (!weakThis)
             return;
 
@@ -612,7 +612,7 @@ void SpeculativeLoadManager::startSpeculativeRevalidation(const GlobalFrameID& f
 
 void SpeculativeLoadManager::retrieveSubresourcesEntry(const Key& storageKey, WTF::Function<void (std::unique_ptr<SubresourcesEntry>)>&& completionHandler)
 {
-    ASSERT(storageKey.type() == "Resource");
+    ASSERT(storageKey.type() == "Resource"_s);
     auto subresourcesStorageKey = makeSubresourcesKey(storageKey, m_storage.salt());
     m_storage.retrieve(subresourcesStorageKey, static_cast<unsigned>(ResourceLoadPriority::Medium), [completionHandler = WTFMove(completionHandler)](auto record, auto timings) {
         if (!record) {

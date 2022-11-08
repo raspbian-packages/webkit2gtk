@@ -28,11 +28,10 @@
 #include "RemoteGraphicsContextGL.h"
 
 #if ENABLE(GPU_PROCESS) && ENABLE(WEBGL) && PLATFORM(WIN)
-
 #include "GPUConnectionToWebProcess.h"
+#include "WCContentBufferManager.h"
 
 namespace WebKit {
-using namespace WebCore;
 
 class RemoteGraphicsContextGLWin final : public RemoteGraphicsContextGL {
 public:
@@ -41,9 +40,10 @@ public:
 
     // RemoteGraphicsContextGL overrides.
     void platformWorkQueueInitialize(WebCore::GraphicsContextGLAttributes&&) final;
+    void prepareForDisplay(CompletionHandler<void(std::optional<WCContentBufferIdentifier>)>&&) final;
 };
 
-Ref<RemoteGraphicsContextGL> RemoteGraphicsContextGL::create(GPUConnectionToWebProcess& gpuConnectionToWebProcess, GraphicsContextGLAttributes&& attributes, GraphicsContextGLIdentifier graphicsContextGLIdentifier, RemoteRenderingBackend& renderingBackend, IPC::StreamConnectionBuffer&& stream)
+Ref<RemoteGraphicsContextGL> RemoteGraphicsContextGL::create(GPUConnectionToWebProcess& gpuConnectionToWebProcess, WebCore::GraphicsContextGLAttributes&& attributes, GraphicsContextGLIdentifier graphicsContextGLIdentifier, RemoteRenderingBackend& renderingBackend, IPC::StreamConnectionBuffer&& stream)
 {
     auto instance = adoptRef(*new RemoteGraphicsContextGLWin(gpuConnectionToWebProcess, graphicsContextGLIdentifier, renderingBackend, WTFMove(stream)));
     instance->initialize(WTFMove(attributes));
@@ -57,13 +57,14 @@ RemoteGraphicsContextGLWin::RemoteGraphicsContextGLWin(GPUConnectionToWebProcess
 
 void RemoteGraphicsContextGLWin::platformWorkQueueInitialize(WebCore::GraphicsContextGLAttributes&& attributes)
 {
-    m_context = GraphicsContextGLOpenGL::createForGPUProcess(WTFMove(attributes));
+    m_context = WebCore::GraphicsContextGLTextureMapperANGLE::create(WTFMove(attributes));
 }
 
-void RemoteGraphicsContextGL::prepareForDisplay(CompletionHandler<void()>&& completionHandler)
+void RemoteGraphicsContextGLWin::prepareForDisplay(CompletionHandler<void(std::optional<WCContentBufferIdentifier>)>&& completionHandler)
 {
     m_context->prepareForDisplay();
-    completionHandler();
+    auto identifier = WCContentBufferManager::singleton().acquireContentBufferIdentifier(m_webProcessIdentifier, m_context->layerContentsDisplayDelegate()->platformLayer());
+    completionHandler(identifier);
 }
 
 }

@@ -72,20 +72,12 @@ static void testWebKitSettings(Test*, gconstpointer)
     webkit_settings_set_enable_html5_database(settings, FALSE);
     g_assert_false(webkit_settings_get_enable_html5_database(settings));
 
-    // XSS Auditor is enabled by default.
-    g_assert_true(webkit_settings_get_enable_xss_auditor(settings));
-    webkit_settings_set_enable_xss_auditor(settings, FALSE);
-    g_assert_false(webkit_settings_get_enable_xss_auditor(settings));
-
+ALLOW_DEPRECATED_DECLARATIONS_BEGIN
     // Frame flattening is disabled by default.
     g_assert_false(webkit_settings_get_enable_frame_flattening(settings));
     webkit_settings_set_enable_frame_flattening(settings, TRUE);
     g_assert_true(webkit_settings_get_enable_frame_flattening(settings));
-
-    // Java is enabled by default.
-    g_assert_true(webkit_settings_get_enable_java(settings));
-    webkit_settings_set_enable_java(settings, FALSE);
-    g_assert_false(webkit_settings_get_enable_java(settings));
+ALLOW_DEPRECATED_DECLARATIONS_END
 
     // By default, JavaScript can open windows automatically is disabled.
     g_assert_false(webkit_settings_get_javascript_can_open_windows_automatically(settings));
@@ -276,10 +268,10 @@ static void testWebKitSettings(Test*, gconstpointer)
     webkit_settings_set_enable_page_cache(settings, FALSE);
     g_assert_false(webkit_settings_get_enable_page_cache(settings));
 
-    // By default, smooth scrolling is disabled.
-    g_assert_false(webkit_settings_get_enable_smooth_scrolling(settings));
-    webkit_settings_set_enable_smooth_scrolling(settings, TRUE);
+    // By default, smooth scrolling is enabled.
     g_assert_true(webkit_settings_get_enable_smooth_scrolling(settings));
+    webkit_settings_set_enable_smooth_scrolling(settings, FALSE);
+    g_assert_false(webkit_settings_get_enable_smooth_scrolling(settings));
 
     // By default, writing of console messages to stdout is disabled.
     g_assert_false(webkit_settings_get_enable_write_console_messages_to_stdout(settings));
@@ -290,6 +282,11 @@ static void testWebKitSettings(Test*, gconstpointer)
     g_assert_true(webkit_settings_get_enable_media_stream(settings));
     webkit_settings_set_enable_media_stream(settings, FALSE);
     g_assert_false(webkit_settings_get_enable_media_stream(settings));
+
+    // By default, WebRTC is disabled
+    g_assert_false(webkit_settings_get_enable_webrtc(settings));
+    webkit_settings_set_enable_webrtc(settings, TRUE);
+    g_assert_true(webkit_settings_get_enable_webrtc(settings));
 
     // By default, SpatialNavigation is disabled
     g_assert_false(webkit_settings_get_enable_spatial_navigation(settings));
@@ -340,14 +337,14 @@ static void testWebKitSettings(Test*, gconstpointer)
 
 #if PLATFORM(GTK)
 #if !USE(GTK4)
-    // Ondemand is the default hardware acceleration policy.
-    g_assert_cmpuint(webkit_settings_get_hardware_acceleration_policy(settings), ==, WEBKIT_HARDWARE_ACCELERATION_POLICY_ON_DEMAND);
+    // Always is the default hardware acceleration policy.
+    g_assert_cmpuint(webkit_settings_get_hardware_acceleration_policy(settings), ==, WEBKIT_HARDWARE_ACCELERATION_POLICY_ALWAYS);
     webkit_settings_set_hardware_acceleration_policy(settings, WEBKIT_HARDWARE_ACCELERATION_POLICY_NEVER);
     g_assert_cmpuint(webkit_settings_get_hardware_acceleration_policy(settings), ==, WEBKIT_HARDWARE_ACCELERATION_POLICY_NEVER);
-    webkit_settings_set_hardware_acceleration_policy(settings, WEBKIT_HARDWARE_ACCELERATION_POLICY_ALWAYS);
-    g_assert_cmpuint(webkit_settings_get_hardware_acceleration_policy(settings), ==, WEBKIT_HARDWARE_ACCELERATION_POLICY_ALWAYS);
     webkit_settings_set_hardware_acceleration_policy(settings, WEBKIT_HARDWARE_ACCELERATION_POLICY_ON_DEMAND);
     g_assert_cmpuint(webkit_settings_get_hardware_acceleration_policy(settings), ==, WEBKIT_HARDWARE_ACCELERATION_POLICY_ON_DEMAND);
+    webkit_settings_set_hardware_acceleration_policy(settings, WEBKIT_HARDWARE_ACCELERATION_POLICY_ALWAYS);
+    g_assert_cmpuint(webkit_settings_get_hardware_acceleration_policy(settings), ==, WEBKIT_HARDWARE_ACCELERATION_POLICY_ALWAYS);
 #endif
 
     // Back-forward navigation gesture is disabled by default
@@ -362,10 +359,23 @@ static void testWebKitSettings(Test*, gconstpointer)
     g_assert_false(webkit_settings_get_enable_javascript_markup(settings));
 
 ALLOW_DEPRECATED_DECLARATIONS_BEGIN
-    // Accelerated 2D canvas setting is deprecated and no-op.
+    // Accelerated 2D canvas is deprecated and always disabled.
     g_assert_false(webkit_settings_get_enable_accelerated_2d_canvas(settings));
     webkit_settings_set_enable_accelerated_2d_canvas(settings, TRUE);
     g_assert_false(webkit_settings_get_enable_accelerated_2d_canvas(settings));
+
+    // XSS Auditor is deprecated and always disabled.
+    g_assert_false(webkit_settings_get_enable_xss_auditor(settings));
+    webkit_settings_set_enable_xss_auditor(settings, TRUE);
+    g_assert_false(webkit_settings_get_enable_xss_auditor(settings));
+
+    // Java is not supported, and always disabled.
+    // Make warnings non-fatal for this test to make it pass.
+    Test::removeLogFatalFlag(G_LOG_LEVEL_WARNING);
+    g_assert_false(webkit_settings_get_enable_java(settings));
+    webkit_settings_set_enable_java(settings, FALSE);
+    g_assert_false(webkit_settings_get_enable_java(settings));
+    Test::addLogFatalFlag(G_LOG_LEVEL_WARNING);
 ALLOW_DEPRECATED_DECLARATIONS_END
 
     g_object_unref(G_OBJECT(settings));

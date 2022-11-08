@@ -102,24 +102,26 @@ WI.SpreadsheetCSSStyleDeclarationSection = class SpreadsheetCSSStyleDeclarationS
         console.assert(iconClassName);
         this._element.classList.add("has-icon", iconClassName);
 
-        let groupings = this._style.groupings.filter((grouping) => grouping.text !== "all");
+        let groupings = this._style.groupings.filter((grouping) => !grouping.isMedia || grouping.text !== "all").reverse();
         if (groupings.length) {
             let groupingsElement = this.element.appendChild(document.createElement("div"));
             groupingsElement.classList.add("header-groupings");
 
             let currentGroupingType = null;
+            let currentGroupingHadText = false;
             let groupingTypeElement = null;
             this._groupingElements = groupings.map((grouping) => {
-                if (grouping.type !== currentGroupingType) {
+                if (grouping.type !== currentGroupingType || !grouping.text || !currentGroupingHadText) {
                     groupingTypeElement = groupingsElement.appendChild(document.createElement("div"));
                     groupingTypeElement.classList.add("grouping");
                     groupingTypeElement.textContent = grouping.prefix + " ";
                     currentGroupingType = grouping.type;
                 } else
-                    groupingTypeElement.append(", ");
+                    groupingTypeElement.append(grouping.isLayer && grouping.text ? "." : ", ");
 
+                currentGroupingHadText = !!grouping.text;
                 let span = groupingTypeElement.appendChild(document.createElement("span"));
-                span.textContent = grouping.text;
+                span.textContent = grouping.text ?? "";
                 return span;
             });
         }
@@ -176,8 +178,10 @@ WI.SpreadsheetCSSStyleDeclarationSection = class SpreadsheetCSSStyleDeclarationS
         if (this._style.editable) {
             this.element.addEventListener("click", this._handleClick.bind(this));
 
-            new WI.KeyboardShortcut(WI.KeyboardShortcut.Modifier.CommandOrControl, "S", this._save.bind(this), this._element);
-            new WI.KeyboardShortcut(WI.KeyboardShortcut.Modifier.CommandOrControl | WI.KeyboardShortcut.Modifier.Shift, "S", this._save.bind(this), this._element);
+            if (WI.FileUtilities.canSave(WI.FileUtilities.SaveMode.SingleFile)) {
+                new WI.KeyboardShortcut(WI.KeyboardShortcut.Modifier.CommandOrControl, "S", this._save.bind(this), this._element);
+                new WI.KeyboardShortcut(WI.KeyboardShortcut.Modifier.CommandOrControl | WI.KeyboardShortcut.Modifier.Shift, "S", this._save.bind(this), this._element);
+            }
         }
     }
 
@@ -433,8 +437,8 @@ WI.SpreadsheetCSSStyleDeclarationSection = class SpreadsheetCSSStyleDeclarationS
         } else
             url = sourceCode.url;
 
-        const saveAs = event.shiftKey;
-        WI.FileUtilities.save({url: url, content: sourceCode.content}, saveAs);
+        let forceSaveAs = event.shiftKey;
+        WI.FileUtilities.save(WI.FileUtilities.SaveMode.SingleFile, {url, content: sourceCode.content}, forceSaveAs);
     }
 
     _handleMouseDown(event)
@@ -481,7 +485,7 @@ WI.SpreadsheetCSSStyleDeclarationSection = class SpreadsheetCSSStyleDeclarationS
     _populateIconElementContextMenu(contextMenu)
     {
         contextMenu.appendItem(WI.UIString("Copy Rule"), () => {
-            InspectorFrontendHost.copyText(this._style.generateCSSRuleString());
+            InspectorFrontendHost.copyText(this._style.generateFormattedText({includeGroupingsAndSelectors: true, multiline: true}));
         });
 
         if (this._style.editable && this._style.properties.length) {
@@ -522,17 +526,19 @@ WI.SpreadsheetCSSStyleDeclarationSection = class SpreadsheetCSSStyleDeclarationS
                     createNewRule(selector, text);
                 };
 
-                if (WI.CSSManager.ForceablePseudoClasses.every((className) => !this._style.selectorText.includes(":" + className))) {
+                if (WI.cssManager.canForcePseudoClass() && Object.values(WI.CSSManager.ForceablePseudoClass).every((className) => !this._style.selectorText.includes(":" + className))) {
                     contextMenu.appendSeparator();
 
-                     for (let pseudoClass of WI.CSSManager.ForceablePseudoClasses) {
-                        if (pseudoClass === "visited" && this._style.node.nodeName() !== "A")
+                    for (let pseudoClass of Object.values(WI.CSSManager.ForceablePseudoClass)) {
+                        if (!WI.cssManager.canForcePseudoClass(pseudoClass))
+                            continue;
+
+                        if (pseudoClass === WI.CSSManager.ForceablePseudoClass.Visited && this._style.node.nodeName() !== "A")
                             continue;
 
                         let pseudoClassSelector = ":" + pseudoClass;
                         contextMenu.appendItem(WI.UIString("Add %s Rule").format(pseudoClassSelector), () => {
-                            if (WI.cssManager.canForcePseudoClasses())
-                                this._style.node.setPseudoClassEnabled(pseudoClass, true);
+                            this._style.node.setPseudoClassEnabled(pseudoClass, true);
 
                             addPseudoRule(pseudoClassSelector);
                         });

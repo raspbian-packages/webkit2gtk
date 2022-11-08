@@ -46,14 +46,19 @@ struct WebProcessDataStoreParameters {
     SandboxExtension::Handle mediaKeyStorageDirectoryExtensionHandle;
     String javaScriptConfigurationDirectory;
     SandboxExtension::Handle javaScriptConfigurationDirectoryExtensionHandle;
-#if ENABLE(RESOURCE_LOAD_STATISTICS)
+#if ENABLE(INTELLIGENT_TRACKING_PREVENTION)
     WebCore::ThirdPartyCookieBlockingMode thirdPartyCookieBlockingMode { WebCore::ThirdPartyCookieBlockingMode::All };
     HashSet<WebCore::RegistrableDomain> domainsWithUserInteraction;
     HashMap<TopFrameDomain, SubResourceDomain> domainsWithStorageAccessQuirk;
 #endif
-#if HAVE(ARKIT_INLINE_PREVIEW)
+#if ENABLE(ARKIT_INLINE_PREVIEW)
     String modelElementCacheDirectory;
     SandboxExtension::Handle modelElementCacheDirectoryExtensionHandle;
+#endif
+#if PLATFORM(IOS_FAMILY)
+    std::optional<SandboxExtension::Handle> cookieStorageDirectoryExtensionHandle;
+    std::optional<SandboxExtension::Handle> containerCachesDirectoryExtensionHandle;
+    std::optional<SandboxExtension::Handle> containerTemporaryDirectoryExtensionHandle;
 #endif
     bool resourceLoadStatisticsEnabled { false };
 
@@ -74,14 +79,19 @@ void WebProcessDataStoreParameters::encode(Encoder& encoder) const
     encoder << mediaKeyStorageDirectoryExtensionHandle;
     encoder << javaScriptConfigurationDirectory;
     encoder << javaScriptConfigurationDirectoryExtensionHandle;
-#if ENABLE(RESOURCE_LOAD_STATISTICS)
+#if ENABLE(INTELLIGENT_TRACKING_PREVENTION)
     encoder << thirdPartyCookieBlockingMode;
     encoder << domainsWithUserInteraction;
     encoder << domainsWithStorageAccessQuirk;
 #endif
-#if HAVE(ARKIT_INLINE_PREVIEW)
+#if ENABLE(ARKIT_INLINE_PREVIEW)
     encoder << modelElementCacheDirectory;
     encoder << modelElementCacheDirectoryExtensionHandle;
+#endif
+#if PLATFORM(IOS_FAMILY)
+    encoder << cookieStorageDirectoryExtensionHandle;
+    encoder << containerCachesDirectoryExtensionHandle;
+    encoder << containerTemporaryDirectoryExtensionHandle;
 #endif
     encoder << resourceLoadStatisticsEnabled;
 }
@@ -134,7 +144,7 @@ std::optional<WebProcessDataStoreParameters> WebProcessDataStoreParameters::deco
     if (!javaScriptConfigurationDirectoryExtensionHandle)
         return std::nullopt;
         
-#if ENABLE(RESOURCE_LOAD_STATISTICS)
+#if ENABLE(INTELLIGENT_TRACKING_PREVENTION)
     std::optional<WebCore::ThirdPartyCookieBlockingMode> thirdPartyCookieBlockingMode;
     decoder >> thirdPartyCookieBlockingMode;
     if (!thirdPartyCookieBlockingMode)
@@ -150,15 +160,31 @@ std::optional<WebProcessDataStoreParameters> WebProcessDataStoreParameters::deco
     if (!domainsWithStorageAccessQuirk)
         return std::nullopt;
 #endif
-#if HAVE(ARKIT_INLINE_PREVIEW)
-        String modelElementCacheDirectory;
-        if (!decoder.decode(modelElementCacheDirectory))
-            return std::nullopt;
+#if ENABLE(ARKIT_INLINE_PREVIEW)
+    String modelElementCacheDirectory;
+    if (!decoder.decode(modelElementCacheDirectory))
+        return std::nullopt;
 
-        std::optional<SandboxExtension::Handle> modelElementCacheDirectoryExtensionHandle;
-        decoder >> modelElementCacheDirectoryExtensionHandle;
-        if (!modelElementCacheDirectoryExtensionHandle)
-            return std::nullopt;
+    std::optional<SandboxExtension::Handle> modelElementCacheDirectoryExtensionHandle;
+    decoder >> modelElementCacheDirectoryExtensionHandle;
+    if (!modelElementCacheDirectoryExtensionHandle)
+        return std::nullopt;
+#endif
+#if PLATFORM(IOS_FAMILY)
+    std::optional<std::optional<SandboxExtension::Handle>> cookieStorageDirectoryExtensionHandle;
+    decoder >> cookieStorageDirectoryExtensionHandle;
+    if (!cookieStorageDirectoryExtensionHandle)
+        return std::nullopt;
+
+    std::optional<std::optional<SandboxExtension::Handle>> containerCachesDirectoryExtensionHandle;
+    decoder >> containerCachesDirectoryExtensionHandle;
+    if (!containerCachesDirectoryExtensionHandle)
+        return std::nullopt;
+
+    std::optional<std::optional<SandboxExtension::Handle>> containerTemporaryDirectoryExtensionHandle;
+    decoder >> containerTemporaryDirectoryExtensionHandle;
+    if (!containerTemporaryDirectoryExtensionHandle)
+        return std::nullopt;
 #endif
 
     bool resourceLoadStatisticsEnabled = false;
@@ -176,14 +202,19 @@ std::optional<WebProcessDataStoreParameters> WebProcessDataStoreParameters::deco
         WTFMove(*mediaKeyStorageDirectoryExtensionHandle),
         WTFMove(javaScriptConfigurationDirectory),
         WTFMove(*javaScriptConfigurationDirectoryExtensionHandle),
-#if ENABLE(RESOURCE_LOAD_STATISTICS)
+#if ENABLE(INTELLIGENT_TRACKING_PREVENTION)
         *thirdPartyCookieBlockingMode,
         WTFMove(*domainsWithUserInteraction),
         WTFMove(*domainsWithStorageAccessQuirk),
 #endif
-#if HAVE(ARKIT_INLINE_PREVIEW)
+#if ENABLE(ARKIT_INLINE_PREVIEW)
         WTFMove(modelElementCacheDirectory),
         WTFMove(*modelElementCacheDirectoryExtensionHandle),
+#endif
+#if PLATFORM(IOS_FAMILY)
+        WTFMove(*cookieStorageDirectoryExtensionHandle),
+        WTFMove(*containerCachesDirectoryExtensionHandle),
+        WTFMove(*containerTemporaryDirectoryExtensionHandle),
 #endif
         resourceLoadStatisticsEnabled
     };

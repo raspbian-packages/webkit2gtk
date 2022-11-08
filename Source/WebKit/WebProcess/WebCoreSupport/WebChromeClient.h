@@ -31,8 +31,10 @@
 namespace WebCore {
 class HTMLImageElement;
 class RegistrableDomain;
+enum class CookieConsentDecisionResult : uint8_t;
 enum class StorageAccessPromptWasShown : bool;
 enum class StorageAccessWasGranted : bool;
+struct TextRecognitionOptions;
 }
 
 namespace WebKit {
@@ -98,11 +100,12 @@ private:
     void setResizable(bool) final;
     
     void addMessageToConsole(JSC::MessageSource, JSC::MessageLevel, const String& message, unsigned lineNumber, unsigned columnNumber, const String& sourceID) final;
+    void addMessageWithArgumentsToConsole(JSC::MessageSource, JSC::MessageLevel, const String& message, Span<const String> messageArguments, unsigned lineNumber, unsigned columnNumber, const String& sourceID) final;
     
     bool canRunBeforeUnloadConfirmPanel() final;
     bool runBeforeUnloadConfirmPanel(const String& message, WebCore::Frame&) final;
     
-    void closeWindowSoon() final;
+    void closeWindow() final;
     
     void runJavaScriptAlert(WebCore::Frame&, const String&) final;
     bool runJavaScriptConfirm(WebCore::Frame&, const String&) final;
@@ -144,7 +147,7 @@ private:
 
     void print(WebCore::Frame&, const WebCore::StringWithDirection&) final;
 
-    void exceededDatabaseQuota(WebCore::Frame&, const String& databaseName, WebCore::DatabaseDetails) final;
+    void exceededDatabaseQuota(WebCore::Frame&, const String& databaseName, WebCore::DatabaseDetails) final { }
 
     void reachedMaxAppCacheSize(int64_t spaceNeeded) final;
     void reachedApplicationCacheOriginQuota(WebCore::SecurityOrigin&, int64_t spaceNeeded) final;
@@ -229,6 +232,7 @@ private:
     void setNeedsOneShotDrawingSynchronization() final;
     bool shouldTriggerRenderingUpdate(unsigned rescheduledRenderingUpdateCount) const final;
     void triggerRenderingUpdate() final;
+    unsigned remoteImagesCountForTesting() const final; 
 
     void contentRuleListNotification(const URL&, const WebCore::ContentRuleListResults&) final;
 
@@ -245,12 +249,13 @@ private:
     WebCore::DisplayRefreshMonitorFactory* displayRefreshMonitorFactory() const final;
 
 #if ENABLE(GPU_PROCESS)
-    RefPtr<WebCore::ImageBuffer> createImageBuffer(const WebCore::FloatSize&, WebCore::RenderingMode, WebCore::RenderingPurpose, float resolutionScale, const WebCore::DestinationColorSpace&, WebCore::PixelFormat) const final;
-#if ENABLE(WEBGL)
-    RefPtr<WebCore::GraphicsContextGL> createGraphicsContextGL(const WebCore::GraphicsContextGLAttributes&, WebCore::PlatformDisplayID hostWindowDisplayID) const final;
+    RefPtr<WebCore::ImageBuffer> createImageBuffer(const WebCore::FloatSize&, WebCore::RenderingMode, WebCore::RenderingPurpose, float resolutionScale, const WebCore::DestinationColorSpace&, WebCore::PixelFormat, bool avoidBackendSizeCheck = false) const final;
 #endif
+#if ENABLE(WEBGL)
+    RefPtr<WebCore::GraphicsContextGL> createGraphicsContextGL(const WebCore::GraphicsContextGLAttributes&) const final;
 #endif
 
+    RefPtr<PAL::WebGPU::GPU> createGPUForWebGPU() const final;
 
     CompositingTriggerFlags allowedCompositingTriggers() const final
     {
@@ -276,6 +281,7 @@ private:
 
 #if ENABLE(VIDEO_PRESENTATION_MODE)
     void prepareForVideoFullscreen() final;
+    bool canEnterVideoFullscreen(WebCore::HTMLMediaElementEnums::VideoFullscreenMode) const final;
     bool supportsVideoFullscreen(WebCore::HTMLMediaElementEnums::VideoFullscreenMode) final;
     bool supportsVideoFullscreenStandby() final;
     void setMockVideoPresentationModeEnabled(bool) final;
@@ -303,9 +309,9 @@ private:
 #endif
 
 #if PLATFORM(COCOA)
-    void elementDidFocus(WebCore::Element&) final;
+    void elementDidFocus(WebCore::Element&, const WebCore::FocusOptions&) final;
     void elementDidBlur(WebCore::Element&) final;
-    void elementDidRefocus(WebCore::Element&) final;
+    void elementDidRefocus(WebCore::Element&, const WebCore::FocusOptions&) final;
     void focusedElementDidChangeInputMode(WebCore::Element&, WebCore::InputMode) final;
 
     void makeFirstResponder() final;
@@ -351,7 +357,7 @@ private:
 
     bool shouldUseTiledBackingForFrameView(const WebCore::FrameView&) const final;
 
-    void isPlayingMediaDidChange(WebCore::MediaProducer::MediaStateFlags) final;
+    void isPlayingMediaDidChange(WebCore::MediaProducerMediaStateFlags) final;
     void handleAutoplayEvent(WebCore::AutoplayEvent, OptionSet<WebCore::AutoplayEventFlags>) final;
 
 #if ENABLE(APP_HIGHLIGHTS)
@@ -368,7 +374,7 @@ private:
     String signedPublicKeyAndChallengeString(unsigned keySizeIndex, const String& challengeString, const URL&) const final;
 
 #if ENABLE(TELEPHONE_NUMBER_DETECTION) && PLATFORM(MAC)
-    void handleTelephoneNumberClick(const String& number, const WebCore::IntPoint&) final;
+    void handleTelephoneNumberClick(const String& number, const WebCore::IntPoint&, const WebCore::IntRect&) final;
 #endif
 
 #if ENABLE(DATA_DETECTION)
@@ -378,6 +384,8 @@ private:
 #if ENABLE(SERVICE_CONTROLS)
     void handleSelectionServiceClick(WebCore::FrameSelection&, const Vector<String>& telephoneNumbers, const WebCore::IntPoint&) final;
     bool hasRelevantSelectionServices(bool isTextOnly) const final;
+    void handleImageServiceClick(const WebCore::IntPoint&, WebCore::Image&, WebCore::HTMLImageElement&) final;
+    void handlePDFServiceClick(const WebCore::IntPoint&, WebCore::HTMLAttachmentElement&);
 #endif
 
     bool shouldDispatchFakeMouseMoveEvents() const final;
@@ -390,7 +398,7 @@ private:
     void addPlaybackTargetPickerClient(WebCore::PlaybackTargetClientContextIdentifier) final;
     void removePlaybackTargetPickerClient(WebCore::PlaybackTargetClientContextIdentifier) final;
     void showPlaybackTargetPicker(WebCore::PlaybackTargetClientContextIdentifier, const WebCore::IntPoint&, bool) final;
-    void playbackTargetPickerClientStateDidChange(WebCore::PlaybackTargetClientContextIdentifier, WebCore::MediaProducer::MediaStateFlags) final;
+    void playbackTargetPickerClientStateDidChange(WebCore::PlaybackTargetClientContextIdentifier, WebCore::MediaProducerMediaStateFlags) final;
     void setMockMediaPlaybackTargetPickerEnabled(bool) final;
     void setMockMediaPlaybackTargetPickerState(const String&, WebCore::MediaPlaybackTargetContext::MockState) final;
     void mockMediaPlaybackTargetPickerDismissPopup() final;
@@ -406,9 +414,10 @@ private:
 
     void didInvalidateDocumentMarkerRects() final;
 
-#if ENABLE(RESOURCE_LOAD_STATISTICS)
+#if ENABLE(INTELLIGENT_TRACKING_PREVENTION)
     void hasStorageAccess(WebCore::RegistrableDomain&& subFrameDomain, WebCore::RegistrableDomain&& topFrameDomain, WebCore::Frame&, WTF::CompletionHandler<void(bool)>&&) final;
     void requestStorageAccess(WebCore::RegistrableDomain&& subFrameDomain, WebCore::RegistrableDomain&& topFrameDomain, WebCore::Frame&, WebCore::StorageAccessScope, WTF::CompletionHandler<void(WebCore::RequestStorageAccessResult)>&&) final;
+    bool hasPageLevelStorageAccess(const WebCore::RegistrableDomain& topLevelDomain, const WebCore::RegistrableDomain& resourceDomain) const final;
 #endif
 
 #if ENABLE(DEVICE_ORIENTATION)
@@ -429,7 +438,7 @@ private:
 #endif
 
 #if ENABLE(IMAGE_ANALYSIS)
-    void requestTextRecognition(WebCore::Element&, CompletionHandler<void(RefPtr<WebCore::Element>&&)>&& = { }) final;
+    void requestTextRecognition(WebCore::Element&, WebCore::TextRecognitionOptions&&, CompletionHandler<void(RefPtr<WebCore::Element>&&)>&& = { }) final;
 #endif
 
     bool needsImageOverlayControllerForSelectionPainting() const final
@@ -451,14 +460,21 @@ private:
 
 #if ENABLE(WEBXR) && !USE(OPENXR)
     void enumerateImmersiveXRDevices(CompletionHandler<void(const PlatformXR::Instance::DeviceList&)>&&) final;
+    void requestPermissionOnXRSessionFeatures(const WebCore::SecurityOriginData&, PlatformXR::SessionMode, const PlatformXR::Device::FeatureList& /* granted */, const PlatformXR::Device::FeatureList& /* consentRequired */, const PlatformXR::Device::FeatureList& /* consentOptional */, CompletionHandler<void(std::optional<PlatformXR::Device::FeatureList>&&)>&&) final;
 #endif
 
-#if HAVE(ARKIT_INLINE_PREVIEW_IOS)
-    void takeModelElementFullscreen(WebCore::GraphicsLayer::PlatformLayerID contentLayerId) const final;
+#if ENABLE(APPLE_PAY_AMS_UI)
+    void startApplePayAMSUISession(const URL&, const WebCore::ApplePayAMSUIRequest&, CompletionHandler<void(std::optional<bool>&&)>&&) final;
+    void abortApplePayAMSUISession() final;
 #endif
-#if HAVE(ARKIT_INLINE_PREVIEW_MAC)
-    void modelElementDidCreatePreview(WebCore::HTMLModelElement&, const URL&, const String&, const WebCore::FloatSize&) const final;
-#endif
+
+    void requestCookieConsent(CompletionHandler<void(WebCore::CookieConsentDecisionResult)>&&) final;
+
+    void classifyModalContainerControls(Vector<String>&&, CompletionHandler<void(Vector<WebCore::ModalContainerControlType>&&)>&&) final;
+
+    void decidePolicyForModalContainer(OptionSet<WebCore::ModalContainerControlType>, CompletionHandler<void(WebCore::ModalContainerDecision)>&&) final;
+
+    const AtomString& searchStringForModalContainerObserver() const final;
 
     mutable bool m_cachedMainFrameHasHorizontalScrollbar { false };
     mutable bool m_cachedMainFrameHasVerticalScrollbar { false };

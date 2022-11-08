@@ -32,10 +32,8 @@ struct SameSizeAsCSSProperty {
     void* value;
 };
 
-#if defined(__m68k__)
-COMPILE_ASSERT(sizeof(CSSProperty) <= sizeof(SameSizeAsCSSProperty), CSSProperty_should_stay_small);
-#else
-COMPILE_ASSERT(sizeof(CSSProperty) == sizeof(SameSizeAsCSSProperty), CSSProperty_should_stay_small);
+#if !defined(__m68k__)
+static_assert(sizeof(CSSProperty) == sizeof(SameSizeAsCSSProperty), "CSSProperty should stay small");
 #endif
 
 CSSPropertyID StylePropertyMetadata::shorthandID() const

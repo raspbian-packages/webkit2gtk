@@ -36,6 +36,7 @@
 #import <WebCore/EventRegion.h>
 #import <WebCore/GraphicsContext.h>
 #import <WebCore/GraphicsLayerCA.h>
+#import <WebCore/IOSurface.h>
 #import <WebCore/LengthFunctions.h>
 #import <WebCore/PlatformCAFilters.h>
 #import <WebCore/PlatformCALayerCocoa.h>
@@ -173,12 +174,13 @@ void PlatformCALayerRemote::recursiveBuildTransaction(RemoteLayerTreeContext& co
     ASSERT(!m_properties.backingStore || owner());
     RELEASE_ASSERT_WITH_SECURITY_IMPLICATION(&context == m_context);
     
-    if (m_properties.backingStore && (!owner() || !owner()->platformCALayerDrawsContent())) {
+    bool usesBackingStore = owner() && (owner()->platformCALayerDrawsContent() || owner()->platformCALayerDelegatesDisplay(this));
+    if (m_properties.backingStore && !usesBackingStore) {
         m_properties.backingStore = nullptr;
         m_properties.notePropertiesChanged(RemoteLayerTreeTransaction::BackingStoreChanged);
     }
 
-    if (m_properties.backingStore && m_properties.backingStoreAttached && m_properties.backingStore->display())
+    if (m_properties.backingStore && m_properties.backingStoreAttached && m_properties.backingStore->layerWillBeDisplayed())
         m_properties.notePropertiesChanged(RemoteLayerTreeTransaction::BackingStoreChanged);
 
     if (m_properties.changedProperties) {
@@ -235,11 +237,14 @@ void PlatformCALayerRemote::updateBackingStore()
 
     auto type = m_acceleratesDrawing ? RemoteLayerBackingStore::Type::IOSurface : RemoteLayerBackingStore::Type::Bitmap;
     auto includeDisplayList = RemoteLayerBackingStore::IncludeDisplayList::No;
+    auto useOutOfLineSurfaces = UseOutOfLineSurfaces::No;
 #if ENABLE(CG_DISPLAY_LIST_BACKED_IMAGE_BUFFER)
     if (m_context->useCGDisplayListsForDOMRendering())
         includeDisplayList = RemoteLayerBackingStore::IncludeDisplayList::Yes;
+    if (m_context->useCGDisplayListOutOfLineSurfaces())
+        useOutOfLineSurfaces = UseOutOfLineSurfaces::Yes;
 #endif
-    m_properties.backingStore->ensureBackingStore(type, m_properties.bounds.size(), m_properties.contentsScale, m_wantsDeepColorBackingStore, m_properties.opaque, includeDisplayList);
+    m_properties.backingStore->ensureBackingStore(type, m_properties.bounds.size(), m_properties.contentsScale, m_wantsDeepColorBackingStore, m_properties.opaque, includeDisplayList, useOutOfLineSurfaces);
 }
 
 void PlatformCALayerRemote::setNeedsDisplayInRect(const FloatRect& rect)
@@ -683,7 +688,27 @@ CFTypeRef PlatformCALayerRemote::contents() const
 
 void PlatformCALayerRemote::setContents(CFTypeRef value)
 {
+    if (!m_properties.backingStore)
+        return;
+    if (!value)
+        m_properties.backingStore->clearBackingStore();
 }
+
+#if HAVE(IOSURFACE)
+void PlatformCALayerRemote::setContents(const WebCore::IOSurface& surface)
+{
+    ASSERT(m_acceleratesDrawing);
+    ensureBackingStore();
+    m_properties.backingStore->setContents(surface.createSendRight());
+}
+
+void PlatformCALayerRemote::setContents(const WTF::MachSendRight& surfaceHandle)
+{
+    ASSERT(m_acceleratesDrawing);
+    ensureBackingStore();
+    m_properties.backingStore->setContents(surfaceHandle.copySendRight());
+}
+#endif
 
 void PlatformCALayerRemote::setContentsRect(const FloatRect& value)
 {

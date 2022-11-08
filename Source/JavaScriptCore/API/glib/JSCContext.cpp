@@ -21,7 +21,9 @@
 #include "JSCContext.h"
 
 #include "APICast.h"
+#include "IntegrityInlines.h"
 #include "JSCClassPrivate.h"
+#include "JSCContextInternal.h"
 #include "JSCContextPrivate.h"
 #include "JSCExceptionPrivate.h"
 #include "JSCInlines.h"
@@ -36,7 +38,7 @@
 #include <wtf/glib/WTFGType.h>
 
 /**
- * SECTION: JSCContext
+ * JSCContext:
  * @short_description: JavaScript execution context
  * @title: JSCContext
  *
@@ -235,12 +237,12 @@ JSC::JSObject* jscContextGetOrCreateJSWrapper(JSCContext* context, JSClassRef js
     if (auto* jsWrapper = jscContextGetJSWrapper(context, wrappedObject))
         return jsWrapper;
 
-    return wrapperMap(context).createJSWrappper(context->priv->jsContext.get(), jsClass, prototype, wrappedObject, destroyFunction);
+    return wrapperMap(context).createJSWrapper(context->priv->jsContext.get(), jsClass, prototype, wrappedObject, destroyFunction);
 }
 
 JSGlobalContextRef jscContextCreateContextWithJSWrapper(JSCContext* context, JSClassRef jsClass, JSValueRef prototype, gpointer wrappedObject, GDestroyNotify destroyFunction)
 {
-    return wrapperMap(context).createContextWithJSWrappper(jscVirtualMachineGetContextGroup(context->priv->vm.get()), jsClass, prototype, wrappedObject, destroyFunction);
+    return wrapperMap(context).createContextWithJSWrapper(jscVirtualMachineGetContextGroup(context->priv->vm.get()), jsClass, prototype, wrappedObject, destroyFunction);
 }
 
 gpointer jscContextWrappedObject(JSCContext* context, JSObjectRef jsObject)
@@ -581,6 +583,19 @@ void jscContextJSValueToGValue(JSCContext* context, JSValueRef jsValue, GType ty
         *exception = toRef(JSC::createTypeError(globalObject, makeString("unsupported type ", g_type_name(G_VALUE_TYPE(value)))));
         break;
     }
+}
+
+void jscContextGarbageCollect(JSCContext* context, bool sanitizeStack)
+{
+    auto* jsContext = context->priv->jsContext.get();
+    JSC::JSGlobalObject* globalObject = toJS(jsContext);
+    JSC::VM& vm = globalObject->vm();
+    JSC::JSLockHolder locker(vm);
+
+    if (sanitizeStack)
+        sanitizeStackForVM(vm);
+
+    vm.heap.collectNow(JSC::Sync, JSC::CollectionScope::Full);
 }
 
 /**
@@ -957,18 +972,18 @@ JSCCheckSyntaxResult jsc_context_check_syntax(JSCContext* context, const char* c
     JSC::VM& vm = globalObject->vm();
     JSC::JSLockHolder locker(vm);
 
-    URL sourceURL = uri ? URL({ }, uri) : URL();
+    URL sourceURL = uri ? URL(String::fromLatin1(uri)) : URL();
     JSC::SourceCode source = JSC::makeSource(String::fromUTF8(code, length < 0 ? strlen(code) : length), JSC::SourceOrigin { sourceURL },
         sourceURL.string() , TextPosition(OrdinalNumber::fromOneBasedInt(lineNumber), OrdinalNumber()));
     bool success = false;
     JSC::ParserError error;
     switch (mode) {
     case JSC_CHECK_SYNTAX_MODE_SCRIPT:
-        success = !!JSC::parse<JSC::ProgramNode>(vm, source, JSC::Identifier(), JSC::JSParserBuiltinMode::NotBuiltin,
+        success = !!JSC::parse<JSC::ProgramNode>(vm, source, JSC::Identifier(), JSC::ImplementationVisibility::Public, JSC::JSParserBuiltinMode::NotBuiltin,
             JSC::JSParserStrictMode::NotStrict, JSC::JSParserScriptMode::Classic, JSC::SourceParseMode::ProgramMode, JSC::SuperBinding::NotNeeded, error);
         break;
     case JSC_CHECK_SYNTAX_MODE_MODULE:
-        success = !!JSC::parse<JSC::ModuleProgramNode>(vm, source, JSC::Identifier(), JSC::JSParserBuiltinMode::NotBuiltin,
+        success = !!JSC::parse<JSC::ModuleProgramNode>(vm, source, JSC::Identifier(), JSC::ImplementationVisibility::Public, JSC::JSParserBuiltinMode::NotBuiltin,
             JSC::JSParserStrictMode::Strict, JSC::JSParserScriptMode::Module, JSC::SourceParseMode::ModuleAnalyzeMode, JSC::SuperBinding::NotNeeded, error);
         break;
     }

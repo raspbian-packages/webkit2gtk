@@ -39,6 +39,10 @@ using namespace WebCore;
 
 static const cairo_format_t cairoFormat = CAIRO_FORMAT_ARGB32;
 
+void ShareableBitmap::validateConfiguration(Configuration&)
+{
+}
+
 CheckedUint32 ShareableBitmap::calculateBytesPerRow(WebCore::IntSize size, const Configuration&)
 {
     return cairo_format_stride_for_width(cairoFormat, size.width());
@@ -74,7 +78,12 @@ void ShareableBitmap::paint(GraphicsContext& context, float scaleFactor, const I
 
     ASSERT(context.hasPlatformContext());
     auto& state = context.state();
-    Cairo::drawSurface(*context.platformContext(), surface.get(), destRect, srcRect, state.imageInterpolationQuality, state.alpha, Cairo::ShadowState(state));
+    Cairo::drawSurface(*context.platformContext(), surface.get(), destRect, srcRect, state.imageInterpolationQuality(), state.alpha(), Cairo::ShadowState(state));
+}
+
+RefPtr<cairo_surface_t> ShareableBitmap::createPersistentCairoSurface()
+{
+    return createSurfaceFromData(data(), m_size);
 }
 
 RefPtr<cairo_surface_t> ShareableBitmap::createCairoSurface()

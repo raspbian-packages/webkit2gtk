@@ -55,7 +55,6 @@ Download::Download(DownloadManager& downloadManager, DownloadID downloadID, Netw
     , m_client(downloadManager.client())
     , m_download(&download)
     , m_sessionID(session.sessionID())
-    , m_suggestedName(suggestedName)
     , m_testSpeedMultiplier(session.testSpeedMultiplier())
 {
     ASSERT(m_downloadID);
@@ -70,7 +69,6 @@ Download::Download(DownloadManager& downloadManager, DownloadID downloadID, NSUR
     , m_client(downloadManager.client())
     , m_downloadTask(download)
     , m_sessionID(session.sessionID())
-    , m_suggestedName(suggestedName)
     , m_testSpeedMultiplier(session.testSpeedMultiplier())
 {
     ASSERT(m_downloadID);
@@ -94,7 +92,7 @@ void Download::cancel(CompletionHandler<void(const IPC::DataReference&)>&& compl
     // completionHandler will inform the API that the cancellation succeeded.
     m_ignoreDidFailCallback = ignoreDidFailCallback;
 
-    auto completionHandlerWrapper = [this, weakThis = makeWeakPtr(*this), completionHandler = WTFMove(completionHandler)] (const IPC::DataReference& resumeData) mutable {
+    auto completionHandlerWrapper = [this, weakThis = WeakPtr { *this }, completionHandler = WTFMove(completionHandler)] (const IPC::DataReference& resumeData) mutable {
         completionHandler(resumeData);
         if (!weakThis || m_ignoreDidFailCallback == IgnoreDidFailCallback::No)
             return;

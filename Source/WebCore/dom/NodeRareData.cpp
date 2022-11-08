@@ -41,10 +41,8 @@ struct SameSizeAsNodeRareData {
     void* m_pointer[2];
 };
 
-#if defined(__m68k__)
-COMPILE_ASSERT(sizeof(NodeRareData) <= sizeof(SameSizeAsNodeRareData), NodeRareDataShouldStaySmall);
-#else
-COMPILE_ASSERT(sizeof(NodeRareData) == sizeof(SameSizeAsNodeRareData), NodeRareDataShouldStaySmall);
+#if !defined(__m68k__)
+static_assert(sizeof(NodeRareData) == sizeof(SameSizeAsNodeRareData), "NodeRareData should stay small");
 #endif
 
 // Ensure the 10 bits reserved for the m_connectedFrameCount cannot overflow

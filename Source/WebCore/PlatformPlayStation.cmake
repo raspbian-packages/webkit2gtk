@@ -29,14 +29,13 @@ list(APPEND WebCore_SOURCES
     page/scrolling/nicosia/ScrollingTreeOverflowScrollingNodeNicosia.cpp
     page/scrolling/nicosia/ScrollingTreePositionedNode.cpp
     page/scrolling/nicosia/ScrollingTreeScrollingNodeDelegateNicosia.cpp
-    page/scrolling/nicosia/ScrollingTreeStickyNode.cpp
+    page/scrolling/nicosia/ScrollingTreeStickyNodeNicosia.cpp
 
     platform/ScrollAnimationKinetic.cpp
     platform/ScrollAnimationSmooth.cpp
 
     platform/generic/KeyedDecoderGeneric.cpp
     platform/generic/KeyedEncoderGeneric.cpp
-    platform/generic/ScrollAnimatorGeneric.cpp
 
     platform/graphics/GLContext.cpp
     platform/graphics/PlatformDisplay.cpp
@@ -45,6 +44,8 @@ list(APPEND WebCore_SOURCES
     platform/graphics/egl/GLContextEGLLibWPE.cpp
 
     platform/graphics/libwpe/PlatformDisplayLibWPE.cpp
+
+    platform/graphics/playstation/SystemFontDatabasePlayStation.cpp
 
     platform/libwpe/PasteboardLibWPE.cpp
     platform/libwpe/PlatformKeyboardEventLibWPE.cpp
@@ -58,8 +59,6 @@ list(APPEND WebCore_SOURCES
     platform/playstation/ScrollbarThemePlayStation.cpp
     platform/playstation/UserAgentPlayStation.cpp
     platform/playstation/WidgetPlayStation.cpp
-
-    platform/posix/SharedBufferPOSIX.cpp
 
     platform/text/Hyphenation.cpp
     platform/text/LocaleICU.cpp
@@ -87,22 +86,37 @@ set(EGL_EXTRAS)
 foreach (EGL_EXTRA_NAME ${EGL_EXTRA_NAMES})
     find_file(${EGL_EXTRA_NAME}_FOUND ${EGL_EXTRA_NAME} PATH_SUFFIXES bin)
     if (${EGL_EXTRA_NAME}_FOUND)
-        list(APPEND EGL_EXTRAS ${${EGL_EXTRA_NAME}_FOUND})
+        set(_src ${${EGL_EXTRA_NAME}_FOUND})
+        get_filename_component(_filename ${_src} NAME)
+        set(_dst "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${_filename}")
+
+        add_custom_command(OUTPUT ${_dst}
+            COMMAND ${CMAKE_COMMAND} -E copy ${_src} ${_dst}
+            MAIN_DEPENDENCY ${_src}
+            VERBATIM
+        )
+
+        list(APPEND EGL_EXTRAS ${_dst})
     endif ()
 endforeach ()
 
-PLAYSTATION_COPY_REQUIREMENTS(WebCore_CopySharedLibs
-    FILES
-        ${CURL_LIBRARIES}
-        ${Cairo_LIBRARIES}
-        ${EGL_LIBRARIES}
-        ${EGL_EXTRAS}
-        ${FREETYPE_LIBRARIES}
-        ${Fontconfig_LIBRARIES}
-        ${HarfBuzz_LIBRARIES}
-        ${JPEG_LIBRARIES}
-        ${OPENSSL_LIBRARIES}
-        ${PNG_LIBRARIES}
-        ${WebKitRequirements_LIBRARY}
-        ${WebP_LIBRARIES}
+if (EGL_EXTRAS)
+    add_custom_target(EGLExtras_Copy ALL DEPENDS ${EGL_EXTRAS})
+    set_target_properties(EGLExtras_Copy PROPERTIES FOLDER "PlayStation")
+    list(APPEND WebCore_INTERFACE_DEPENDENCIES EGLExtras_Copy)
+endif ()
+
+PLAYSTATION_COPY_MODULES(WebCore
+    TARGETS
+        CURL
+        Cairo
+        EGL
+        Fontconfig
+        Freetype
+        HarfBuzz
+        JPEG
+        OpenSSL
+        PNG
+        WebKitRequirements
+        WebP
 )

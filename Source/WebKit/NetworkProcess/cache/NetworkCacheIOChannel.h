@@ -45,12 +45,13 @@ namespace NetworkCache {
 class IOChannel : public ThreadSafeRefCounted<IOChannel> {
 public:
     enum class Type { Read, Write, Create };
-    static Ref<IOChannel> open(const String& file, Type type, std::optional<WorkQueue::QOS> qos = { }) { return adoptRef(*new IOChannel(file.isolatedCopy(), type, qos)); }
+    static Ref<IOChannel> open(String&& file, Type type, std::optional<WorkQueue::QOS> qos = { }) { return adoptRef(*new IOChannel(WTFMove(file).isolatedCopy(), type, qos)); }
 
     // Using nullptr as queue submits the result to the main queue.
     // FIXME: We should add WorkQueue::main() instead.
-    void read(size_t offset, size_t, WorkQueue&, Function<void (Data&, int error)>&&);
-    void write(size_t offset, const Data&, WorkQueue&, Function<void (int error)>&&);
+    // Can be used with either a concurrent WorkQueue or a serial one.
+    void read(size_t offset, size_t, WTF::WorkQueueBase&, Function<void(Data&, int error)>&&);
+    void write(size_t offset, const Data&, WTF::WorkQueueBase&, Function<void(int error)>&&);
 
     const String& path() const { return m_path; }
     Type type() const { return m_type; }
@@ -67,7 +68,7 @@ private:
     IOChannel(String&& filePath, IOChannel::Type, std::optional<WorkQueue::QOS>);
 
 #if USE(GLIB)
-    void readSyncInThread(size_t offset, size_t, WorkQueue&, Function<void (Data&, int error)>&&);
+    void readSyncInThread(size_t offset, size_t, WTF::WorkQueueBase&, Function<void(Data&, int error)>&&);
 #endif
 
     String m_path;

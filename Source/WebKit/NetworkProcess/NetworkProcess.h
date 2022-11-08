@@ -28,14 +28,14 @@
 #include "AppPrivacyReport.h"
 #include "AuxiliaryProcess.h"
 #include "CacheModel.h"
+#include "DataTaskIdentifier.h"
 #include "DownloadID.h"
 #include "DownloadManager.h"
-#include "LocalStorageDatabaseTracker.h"
 #include "NetworkContentRuleListManager.h"
 #include "NetworkResourceLoadIdentifier.h"
+#include "QuotaIncreaseRequestIdentifier.h"
 #include "RTCDataChannelRemoteManagerProxy.h"
 #include "SandboxExtension.h"
-#include "WebIDBServer.h"
 #include "WebPageProxyIdentifier.h"
 #include "WebResourceLoadStatisticsStore.h"
 #include "WebsiteData.h"
@@ -44,13 +44,15 @@
 #include <WebCore/CrossSiteNavigationDataTransfer.h>
 #include <WebCore/DiagnosticLoggingClient.h>
 #include <WebCore/FetchIdentifier.h>
-#include <WebCore/IDBKeyData.h>
 #include <WebCore/MessagePortChannelRegistry.h>
+#include <WebCore/NotificationEventType.h>
 #include <WebCore/PageIdentifier.h>
 #include <WebCore/PrivateClickMeasurement.h>
+#include <WebCore/PushPermissionState.h>
 #include <WebCore/RegistrableDomain.h>
 #include <WebCore/ServiceWorkerIdentifier.h>
 #include <WebCore/ServiceWorkerTypes.h>
+#include <WebCore/StorageQuotaManager.h>
 #include <memory>
 #include <wtf/CrossThreadTask.h>
 #include <wtf/Function.h>
@@ -82,10 +84,9 @@ namespace WebCore {
 class CertificateInfo;
 class CurlProxySettings;
 class ProtectionSpace;
-class StorageQuotaManager;
 class NetworkStorageSession;
+struct NotificationData;
 class ResourceError;
-class SWServer;
 class UserContentURLPattern;
 enum class HTTPCookieAcceptPolicy : uint8_t;
 enum class IncludeHttpOnlyCookies : bool;
@@ -96,7 +97,6 @@ struct ClientOrigin;
 struct MessageWithMessagePorts;
 struct SecurityOriginData;
 struct SoupNetworkProxySettings;
-struct ServiceWorkerClientIdentifier;
 }
 
 namespace WebKit {
@@ -106,22 +106,18 @@ class NetworkConnectionToWebProcess;
 class NetworkProcessSupplement;
 class NetworkProximityManager;
 class NetworkResourceLoader;
+class NetworkStorageManager;
 class ProcessAssertion;
-class StorageManagerSet;
 class WebPageNetworkParameters;
-class WebSWServerConnection;
-class WebSWServerToContextConnection;
 enum class CallDownloadDidStart : bool;
+enum class RemoteWorkerType : bool;
 enum class ShouldGrandfatherStatistics : bool;
 enum class StorageAccessStatus : uint8_t;
 enum class WebsiteDataFetchOption : uint8_t;
 enum class WebsiteDataType : uint32_t;
 struct NetworkProcessCreationParameters;
+struct WebPushMessage;
 struct WebsiteDataStoreParameters;
-
-#if ENABLE(SERVICE_WORKER)
-class WebSWOriginStore;
-#endif
 
 namespace NetworkCache {
 enum class CacheOption : uint8_t;
@@ -177,16 +173,11 @@ public:
     void forEachNetworkStorageSession(const Function<void(WebCore::NetworkStorageSession&)>&);
     WebCore::NetworkStorageSession* storageSession(PAL::SessionID) const;
     std::unique_ptr<WebCore::NetworkStorageSession> newTestingSession(PAL::SessionID);
-#if PLATFORM(COCOA)
-    void ensureSession(PAL::SessionID, bool shouldUseTestingNetworkSession, const String& identifier, RetainPtr<CFHTTPCookieStorageRef>&&);
-#else
-    void ensureSession(PAL::SessionID, bool shouldUseTestingNetworkSession, const String& identifier);
-#endif
+    void addStorageSession(PAL::SessionID, bool shouldUseTestingNetworkSession, const Vector<uint8_t>& uiProcessCookieStorageIdentifier, const SandboxExtension::Handle&);
 
     void processWillSuspendImminentlyForTestingSync(CompletionHandler<void()>&&);
-    void prepareToSuspend(bool isSuspensionImminent, CompletionHandler<void()>&&);
-    void processDidResume();
-    void resume();
+    void prepareToSuspend(bool isSuspensionImminent, MonotonicTime estimatedSuspendTime, CompletionHandler<void()>&&);
+    void processDidResume(bool forForegroundActivity);
 
     CacheModel cacheModel() const { return m_cacheModel; }
 
@@ -211,32 +202,31 @@ public:
 
     void addWebsiteDataStore(WebsiteDataStoreParameters&&);
 
-#if ENABLE(RESOURCE_LOAD_STATISTICS)
-    void clearPrevalentResource(PAL::SessionID, const RegistrableDomain&, CompletionHandler<void()>&&);
-    void clearUserInteraction(PAL::SessionID, const RegistrableDomain&, CompletionHandler<void()>&&);
-    void deleteAndRestrictWebsiteDataForRegistrableDomains(PAL::SessionID, OptionSet<WebsiteDataType>, RegistrableDomainsToDeleteOrRestrictWebsiteDataFor&&, bool shouldNotifyPage, CompletionHandler<void(const HashSet<RegistrableDomain>&)>&&);
+#if ENABLE(INTELLIGENT_TRACKING_PREVENTION)
+    void clearPrevalentResource(PAL::SessionID, RegistrableDomain&&, CompletionHandler<void()>&&);
+    void clearUserInteraction(PAL::SessionID, RegistrableDomain&&, CompletionHandler<void()>&&);
+    void deleteAndRestrictWebsiteDataForRegistrableDomains(PAL::SessionID, OptionSet<WebsiteDataType>, RegistrableDomainsToDeleteOrRestrictWebsiteDataFor&&, bool shouldNotifyPage, CompletionHandler<void(HashSet<RegistrableDomain>&&)>&&);
     void deleteCookiesForTesting(PAL::SessionID, RegistrableDomain, bool includeHttpOnlyCookies, CompletionHandler<void()>&&);
     void dumpResourceLoadStatistics(PAL::SessionID, CompletionHandler<void(String)>&&);
     void updatePrevalentDomainsToBlockCookiesFor(PAL::SessionID, const Vector<RegistrableDomain>& domainsToBlock, CompletionHandler<void()>&&);
-    void isGrandfathered(PAL::SessionID, const RegistrableDomain&, CompletionHandler<void(bool)>&&);
-    void isPrevalentResource(PAL::SessionID, const RegistrableDomain&, CompletionHandler<void(bool)>&&);
-    void isVeryPrevalentResource(PAL::SessionID, const RegistrableDomain&, CompletionHandler<void(bool)>&&);
-    void setAgeCapForClientSideCookies(PAL::SessionID, std::optional<Seconds>, CompletionHandler<void()>&&);
-    void isRegisteredAsRedirectingTo(PAL::SessionID, const RedirectedFromDomain&, const RedirectedToDomain&, CompletionHandler<void(bool)>&&);
-    void isRegisteredAsSubFrameUnder(PAL::SessionID, const SubFrameDomain&, const TopFrameDomain&, CompletionHandler<void(bool)>&&);
-    void isRegisteredAsSubresourceUnder(PAL::SessionID, const SubResourceDomain&, const TopFrameDomain&, CompletionHandler<void(bool)>&&);
-    void setGrandfathered(PAL::SessionID, const RegistrableDomain&, bool isGrandfathered, CompletionHandler<void()>&&);
+    void isGrandfathered(PAL::SessionID, RegistrableDomain&&, CompletionHandler<void(bool)>&&);
+    void isPrevalentResource(PAL::SessionID, RegistrableDomain&&, CompletionHandler<void(bool)>&&);
+    void isVeryPrevalentResource(PAL::SessionID, RegistrableDomain&&, CompletionHandler<void(bool)>&&);
+    void isRegisteredAsRedirectingTo(PAL::SessionID, RedirectedFromDomain&&, RedirectedToDomain&&, CompletionHandler<void(bool)>&&);
+    void isRegisteredAsSubFrameUnder(PAL::SessionID, SubFrameDomain&&, TopFrameDomain&&, CompletionHandler<void(bool)>&&);
+    void isRegisteredAsSubresourceUnder(PAL::SessionID, SubResourceDomain&&, TopFrameDomain&&, CompletionHandler<void(bool)>&&);
+    void setGrandfathered(PAL::SessionID, RegistrableDomain&&, bool isGrandfathered, CompletionHandler<void()>&&);
     void setMaxStatisticsEntries(PAL::SessionID, uint64_t maximumEntryCount, CompletionHandler<void()>&&);
-    void setPrevalentResource(PAL::SessionID, const RegistrableDomain&, CompletionHandler<void()>&&);
-    void setPrevalentResourceForDebugMode(PAL::SessionID, const RegistrableDomain&, CompletionHandler<void()>&&);
-    void setVeryPrevalentResource(PAL::SessionID, const RegistrableDomain&, CompletionHandler<void()>&&);
+    void setPrevalentResource(PAL::SessionID, RegistrableDomain&&, CompletionHandler<void()>&&);
+    void setPrevalentResourceForDebugMode(PAL::SessionID, RegistrableDomain&&, CompletionHandler<void()>&&);
+    void setVeryPrevalentResource(PAL::SessionID, RegistrableDomain&&, CompletionHandler<void()>&&);
     void setPruneEntriesDownTo(PAL::SessionID, uint64_t pruneTargetCount, CompletionHandler<void()>&&);
-    void hadUserInteraction(PAL::SessionID, const RegistrableDomain&, CompletionHandler<void(bool)>&&);
-    void isRelationshipOnlyInDatabaseOnce(PAL::SessionID, const RegistrableDomain& subDomain, const RegistrableDomain& topDomain, CompletionHandler<void(bool)>&&);
+    void hadUserInteraction(PAL::SessionID, RegistrableDomain&&, CompletionHandler<void(bool)>&&);
+    void isRelationshipOnlyInDatabaseOnce(PAL::SessionID, RegistrableDomain&& subDomain, RegistrableDomain&& topDomain, CompletionHandler<void(bool)>&&);
     void hasLocalStorage(PAL::SessionID, const RegistrableDomain&, CompletionHandler<void(bool)>&&);
     void getAllStorageAccessEntries(PAL::SessionID, CompletionHandler<void(Vector<String> domains)>&&);
-    void logFrameNavigation(PAL::SessionID, const NavigatedToDomain&, const TopFrameDomain&, const NavigatedFromDomain&, bool isRedirect, bool isMainFrame, Seconds delayAfterMainFrameDocumentLoad, bool wasPotentiallyInitiatedByUser);
-    void logUserInteraction(PAL::SessionID, const TopFrameDomain&, CompletionHandler<void()>&&);
+    void logFrameNavigation(PAL::SessionID, NavigatedToDomain&&, TopFrameDomain&&, NavigatedFromDomain&&, bool isRedirect, bool isMainFrame, Seconds delayAfterMainFrameDocumentLoad, bool wasPotentiallyInitiatedByUser);
+    void logUserInteraction(PAL::SessionID, TopFrameDomain&&, CompletionHandler<void()>&&);
     void resetCacheMaxAgeCapForPrevalentResources(PAL::SessionID, CompletionHandler<void()>&&);
     void resetParametersToDefaultValues(PAL::SessionID, CompletionHandler<void()>&&);
     void scheduleClearInMemoryAndPersistent(PAL::SessionID, std::optional<WallTime> modifiedSince, ShouldGrandfatherStatistics, CompletionHandler<void()>&&);
@@ -244,33 +234,34 @@ public:
     void scheduleCookieBlockingUpdate(PAL::SessionID, CompletionHandler<void()>&&);
     void scheduleStatisticsAndDataRecordsProcessing(PAL::SessionID, CompletionHandler<void()>&&);
     void statisticsDatabaseHasAllTables(PAL::SessionID, CompletionHandler<void(bool)>&&);
-    void statisticsDatabaseColumnsForTable(PAL::SessionID, const String&, CompletionHandler<void(Vector<String>&&)>&&);
     void setCacheMaxAgeCapForPrevalentResources(PAL::SessionID, Seconds, CompletionHandler<void()>&&);
     void setGrandfatheringTime(PAL::SessionID, Seconds, CompletionHandler<void()>&&);
-    void setLastSeen(PAL::SessionID, const RegistrableDomain&, Seconds, CompletionHandler<void()>&&);
+    void setLastSeen(PAL::SessionID, RegistrableDomain&&, Seconds, CompletionHandler<void()>&&);
     void domainIDExistsInDatabase(PAL::SessionID, int domainID, CompletionHandler<void(bool)>&&);
-    void mergeStatisticForTesting(PAL::SessionID, const RegistrableDomain&, const TopFrameDomain& topFrameDomain1, const TopFrameDomain& topFrameDomain2, Seconds lastSeen, bool hadUserInteraction, Seconds mostRecentUserInteraction, bool isGrandfathered, bool isPrevalent, bool isVeryPrevalent, unsigned dataRecordsRemoved, CompletionHandler<void()>&&);
-    void insertExpiredStatisticForTesting(PAL::SessionID, const RegistrableDomain&, unsigned numberOfOperatingDaysPassed, bool hadUserInteraction, bool isScheduledForAllButCookieDataRemoval, bool isPrevalent, CompletionHandler<void()>&&);
+    void mergeStatisticForTesting(PAL::SessionID, RegistrableDomain&&, TopFrameDomain&& topFrameDomain1, TopFrameDomain&& topFrameDomain2, Seconds lastSeen, bool hadUserInteraction, Seconds mostRecentUserInteraction, bool isGrandfathered, bool isPrevalent, bool isVeryPrevalent, unsigned dataRecordsRemoved, CompletionHandler<void()>&&);
+    void insertExpiredStatisticForTesting(PAL::SessionID, RegistrableDomain&&, unsigned numberOfOperatingDaysPassed, bool hadUserInteraction, bool isScheduledForAllButCookieDataRemoval, bool isPrevalent, CompletionHandler<void()>&&);
     void setMinimumTimeBetweenDataRecordsRemoval(PAL::SessionID, Seconds, CompletionHandler<void()>&&);
     void setNotifyPagesWhenDataRecordsWereScanned(PAL::SessionID, bool value, CompletionHandler<void()>&&);
+    void setResourceLoadStatisticsTimeAdvanceForTesting(PAL::SessionID, Seconds, CompletionHandler<void()>&&);
     void setIsRunningResourceLoadStatisticsTest(PAL::SessionID, bool value, CompletionHandler<void()>&&);
     void setResourceLoadStatisticsEnabled(PAL::SessionID, bool);
     void setResourceLoadStatisticsLogTestingEvent(bool);
     void setResourceLoadStatisticsDebugMode(PAL::SessionID, bool debugMode, CompletionHandler<void()>&&d);
     void isResourceLoadStatisticsEphemeral(PAL::SessionID, CompletionHandler<void(bool)>&&) const;
     void setShouldClassifyResourcesBeforeDataRecordsRemoval(PAL::SessionID, bool value, CompletionHandler<void()>&&);
-    void setSubframeUnderTopFrameDomain(PAL::SessionID, const SubFrameDomain&, const TopFrameDomain&, CompletionHandler<void()>&&);
-    void setSubresourceUnderTopFrameDomain(PAL::SessionID, const SubResourceDomain&, const TopFrameDomain&, CompletionHandler<void()>&&);
-    void setSubresourceUniqueRedirectTo(PAL::SessionID, const SubResourceDomain&, const RedirectedToDomain&, CompletionHandler<void()>&&);
-    void setSubresourceUniqueRedirectFrom(PAL::SessionID, const SubResourceDomain&, const RedirectedFromDomain&, CompletionHandler<void()>&&);
+    void setSubframeUnderTopFrameDomain(PAL::SessionID, SubFrameDomain&&, TopFrameDomain&&, CompletionHandler<void()>&&);
+    void setSubresourceUnderTopFrameDomain(PAL::SessionID, SubResourceDomain&&, TopFrameDomain&&, CompletionHandler<void()>&&);
+    void setSubresourceUniqueRedirectTo(PAL::SessionID, SubResourceDomain&&, RedirectedToDomain&&, CompletionHandler<void()>&&);
+    void setSubresourceUniqueRedirectFrom(PAL::SessionID, SubResourceDomain&&, RedirectedFromDomain&&, CompletionHandler<void()>&&);
     void setTimeToLiveUserInteraction(PAL::SessionID, Seconds, CompletionHandler<void()>&&);
-    void setTopFrameUniqueRedirectTo(PAL::SessionID, const TopFrameDomain&, const RedirectedToDomain&, CompletionHandler<void()>&&);
-    void setTopFrameUniqueRedirectFrom(PAL::SessionID, const TopFrameDomain&, const RedirectedFromDomain&, CompletionHandler<void()>&&);
+    void setTopFrameUniqueRedirectTo(PAL::SessionID, TopFrameDomain&&, RedirectedToDomain&&, CompletionHandler<void()>&&);
+    void setTopFrameUniqueRedirectFrom(PAL::SessionID, TopFrameDomain&&, RedirectedFromDomain&&, CompletionHandler<void()>&&);
     void registrableDomainsWithWebsiteData(PAL::SessionID, OptionSet<WebsiteDataType>, bool shouldNotifyPage, CompletionHandler<void(HashSet<RegistrableDomain>&&)>&&);
-    void didCommitCrossSiteLoadWithDataTransfer(PAL::SessionID, const RegistrableDomain& fromDomain, const RegistrableDomain& toDomain, OptionSet<WebCore::CrossSiteNavigationDataTransfer::Flag>, WebPageProxyIdentifier, WebCore::PageIdentifier);
-    void setCrossSiteLoadWithLinkDecorationForTesting(PAL::SessionID, const RegistrableDomain& fromDomain, const RegistrableDomain& toDomain, CompletionHandler<void()>&&);
+    void didCommitCrossSiteLoadWithDataTransfer(PAL::SessionID, RegistrableDomain&& fromDomain, RegistrableDomain&& toDomain, OptionSet<WebCore::CrossSiteNavigationDataTransfer::Flag>, WebPageProxyIdentifier, WebCore::PageIdentifier);
+    void setCrossSiteLoadWithLinkDecorationForTesting(PAL::SessionID, RegistrableDomain&& fromDomain, RegistrableDomain&& toDomain, CompletionHandler<void()>&&);
     void resetCrossSiteLoadsWithLinkDecorationForTesting(PAL::SessionID, CompletionHandler<void()>&&);
     void hasIsolatedSession(PAL::SessionID, const WebCore::RegistrableDomain&, CompletionHandler<void(bool)>&&) const;
+    void closeITPDatabase(PAL::SessionID, CompletionHandler<void()>&&);
 #if ENABLE(APP_BOUND_DOMAINS)
     void setAppBoundDomainsForResourceLoadStatistics(PAL::SessionID, HashSet<WebCore::RegistrableDomain>&&, CompletionHandler<void()>&&);
 #endif
@@ -285,11 +276,7 @@ public:
 
     void setPrivateClickMeasurementEnabled(bool);
     bool privateClickMeasurementEnabled() const;
-    void setPrivateClickMeasurementDebugMode(bool);
-    bool privateClickMeasurementDebugModeEnabled() const;
-
-    using CacheStorageRootPathCallback = CompletionHandler<void(String&&)>;
-    void cacheStorageRootPath(PAL::SessionID, CacheStorageRootPathCallback&&);
+    void setPrivateClickMeasurementDebugMode(PAL::SessionID, bool);
 
     void preconnectTo(PAL::SessionID, WebPageProxyIdentifier, WebCore::PageIdentifier, const URL&, const String&, WebCore::StoredCredentialsPolicy, std::optional<NavigatingToAppBoundDomain>, LastNavigationWasAppInitiated);
 
@@ -297,27 +284,21 @@ public:
     bool sessionIsControlledByAutomation(PAL::SessionID) const;
 
     void connectionToWebProcessClosed(IPC::Connection&, PAL::SessionID);
-    void getLocalStorageOriginDetails(PAL::SessionID, CompletionHandler<void(Vector<LocalStorageDatabaseTracker::OriginDetails>&&)>&&);
 
 #if ENABLE(CONTENT_EXTENSIONS)
     NetworkContentRuleListManager& networkContentRuleListManager() { return m_networkContentRuleListManager; }
 #endif
 
-    WebIDBServer& webIDBServer(PAL::SessionID);
-
     void syncLocalStorage(CompletionHandler<void()>&&);
 
     void resetQuota(PAL::SessionID, CompletionHandler<void()>&&);
-    void renameOriginInWebsiteData(PAL::SessionID, const URL&, const URL&, OptionSet<WebsiteDataType>, CompletionHandler<void()>&&);
-
-#if ENABLE(SERVICE_WORKER)
-    WebCore::SWServer* swServerForSessionIfExists(PAL::SessionID sessionID) { return m_swServers.get(sessionID); }
-    WebCore::SWServer& swServerForSession(PAL::SessionID);
-    void registerSWServerConnection(WebSWServerConnection&);
-    void unregisterSWServerConnection(WebSWServerConnection&);
-    
-    void forEachSWServer(const Function<void(WebCore::SWServer&)>&);
+#if PLATFORM(IOS_FAMILY)
+    void setBackupExclusionPeriodForTesting(PAL::SessionID, Seconds, CompletionHandler<void()>&&);
 #endif
+    void clearStorage(PAL::SessionID, CompletionHandler<void()>&&);
+    void didIncreaseQuota(PAL::SessionID, WebCore::ClientOrigin&&, QuotaIncreaseRequestIdentifier, std::optional<uint64_t> newQuota);
+    void renameOriginInWebsiteData(PAL::SessionID, const URL&, const URL&, OptionSet<WebsiteDataType>, CompletionHandler<void()>&&);
+    void websiteDataOriginDirectoryForTesting(PAL::SessionID, const URL&, const URL&, WebsiteDataType, CompletionHandler<void(const String&)>&&);
 
 #if PLATFORM(IOS_FAMILY)
     bool parentProcessHasServiceWorkerEntitlement() const;
@@ -327,28 +308,28 @@ public:
     bool parentProcessHasServiceWorkerEntitlement() const { return true; }
 #endif
 
-    const String& uiProcessBundleIdentifier() const { return m_uiProcessBundleIdentifier; }
+    const String& uiProcessBundleIdentifier() const;
 
     void ref() const override { ThreadSafeRefCounted<NetworkProcess>::ref(); }
     void deref() const override { ThreadSafeRefCounted<NetworkProcess>::deref(); }
 
-    CacheStorage::Engine* findCacheEngine(PAL::SessionID);
-    CacheStorage::Engine& ensureCacheEngine(PAL::SessionID, Function<Ref<CacheStorage::Engine>()>&&);
-    void removeCacheEngine(PAL::SessionID);
     void requestStorageSpace(PAL::SessionID, const WebCore::ClientOrigin&, uint64_t quota, uint64_t currentSize, uint64_t spaceRequired, CompletionHandler<void(std::optional<uint64_t>)>&&);
 
     void storePrivateClickMeasurement(PAL::SessionID, WebCore::PrivateClickMeasurement&&);
     void dumpPrivateClickMeasurement(PAL::SessionID, CompletionHandler<void(String)>&&);
     void clearPrivateClickMeasurement(PAL::SessionID, CompletionHandler<void()>&&);
+    bool allowsPrivateClickMeasurementTestFunctionality() const;
     void setPrivateClickMeasurementOverrideTimerForTesting(PAL::SessionID, bool value, CompletionHandler<void()>&&);
     void markAttributedPrivateClickMeasurementsAsExpiredForTesting(PAL::SessionID, CompletionHandler<void()>&&);
     void setPrivateClickMeasurementEphemeralMeasurementForTesting(PAL::SessionID, bool value, CompletionHandler<void()>&&);
-    void simulateResourceLoadStatisticsSessionRestart(PAL::SessionID, CompletionHandler<void()>&&);
+    void simulatePrivateClickMeasurementSessionRestart(PAL::SessionID, CompletionHandler<void()>&&);
+    void closePCMDatabase(PAL::SessionID, CompletionHandler<void()>&&);
     void setPrivateClickMeasurementTokenPublicKeyURLForTesting(PAL::SessionID, URL&&, CompletionHandler<void()>&&);
     void setPrivateClickMeasurementTokenSignatureURLForTesting(PAL::SessionID, URL&&, CompletionHandler<void()>&&);
     void setPrivateClickMeasurementAttributionReportURLsForTesting(PAL::SessionID, URL&& sourceURL, URL&& destinationURL, CompletionHandler<void()>&&);
     void markPrivateClickMeasurementsAsExpiredForTesting(PAL::SessionID, CompletionHandler<void()>&&);
     void setPCMFraudPreventionValuesForTesting(PAL::SessionID, String&& unlinkableToken, String&& secretToken, String&& signature, String&& keyID, CompletionHandler<void()>&&);
+    void setPrivateClickMeasurementAppBundleIDForTesting(PAL::SessionID, String&& appBundleIDForTesting, CompletionHandler<void()>&&);
 
     RefPtr<WebCore::StorageQuotaManager> storageQuotaManager(PAL::SessionID, const WebCore::ClientOrigin&);
 
@@ -358,6 +339,7 @@ public:
     const OptionSet<NetworkCache::CacheOption>& cacheOptions() const { return m_cacheOptions; }
 
     NetworkConnectionToWebProcess* webProcessConnection(WebCore::ProcessIdentifier) const;
+    WebCore::ProcessIdentifier webProcessIdentifierForConnection(IPC::Connection&) const;
     WebCore::MessagePortChannelRegistry& messagePortChannelRegistry() { return m_messagePortChannelRegistry; }
 
     void setServiceWorkerFetchTimeoutForTesting(Seconds, CompletionHandler<void()>&&);
@@ -387,6 +369,28 @@ public:
 
 #if ENABLE(WEB_RTC)
     RTCDataChannelRemoteManagerProxy& rtcDataChannelProxy();
+#endif
+
+#if ENABLE(CFPREFS_DIRECT_MODE)
+    void notifyPreferencesChanged(const String& domain, const String& key, const std::optional<String>& encodedValue);
+#endif
+
+    bool ftpEnabled() const { return m_ftpEnabled; }
+
+#if ENABLE(SERVICE_WORKER)
+    void getPendingPushMessages(PAL::SessionID, CompletionHandler<void(const Vector<WebPushMessage>&)>&&);
+    void processPushMessage(PAL::SessionID, WebPushMessage&&, WebCore::PushPermissionState, CompletionHandler<void(bool)>&&);
+    void processNotificationEvent(WebCore::NotificationData&&, WebCore::NotificationEventType, CompletionHandler<void(bool)>&&);
+#endif
+
+    void setPushAndNotificationsEnabledForOrigin(PAL::SessionID, const WebCore::SecurityOriginData&, bool, CompletionHandler<void()>&&);
+    void deletePushAndNotificationRegistration(PAL::SessionID, const WebCore::SecurityOriginData&, CompletionHandler<void(const String&)>&&);
+    void getOriginsWithPushAndNotificationPermissions(PAL::SessionID, CompletionHandler<void(const Vector<WebCore::SecurityOriginData>&)>&&);
+    void getOriginsWithPushSubscriptions(PAL::SessionID, CompletionHandler<void(const Vector<WebCore::SecurityOriginData>&)>&&);
+    void hasPushSubscriptionForTesting(PAL::SessionID, URL&&, CompletionHandler<void(bool)>&&);
+
+#if ENABLE(INSPECTOR_NETWORK_THROTTLING)
+    void setEmulatedConditions(PAL::SessionID, std::optional<int64_t>&& bytesPerSecondLimit);
 #endif
 
 private:
@@ -420,9 +424,8 @@ private:
 
     // Message Handlers
     bool didReceiveSyncNetworkProcessMessage(IPC::Connection&, IPC::Decoder&, UniqueRef<IPC::Encoder>&);
-    void initializeNetworkProcess(NetworkProcessCreationParameters&&);
+    void initializeNetworkProcess(NetworkProcessCreationParameters&&, CompletionHandler<void()>&&);
     void createNetworkConnectionToWebProcess(WebCore::ProcessIdentifier, PAL::SessionID, CompletionHandler<void(std::optional<IPC::Attachment>&&, WebCore::HTTPCookieAcceptPolicy)>&&);
-    void prepareLoadForWebProcessTransfer(WebCore::ProcessIdentifier sourceProcessIdentifier, uint64_t resourceLoadIdentifier, CompletionHandler<void(std::optional<NetworkResourceLoadIdentifier>)>&&);
 
     void fetchWebsiteData(PAL::SessionID, OptionSet<WebsiteDataType>, OptionSet<WebsiteDataFetchOption>, CompletionHandler<void(WebsiteData&&)>&&);
     void deleteWebsiteData(PAL::SessionID, OptionSet<WebsiteDataType>, WallTime modifiedSince, CompletionHandler<void()>&&);
@@ -430,7 +433,6 @@ private:
 
     void clearCachedCredentials(PAL::SessionID);
 
-    void setCacheStorageParameters(PAL::SessionID, String&& cacheStorageDirectory, SandboxExtension::Handle&&);
     void initializeQuotaUsers(WebCore::StorageQuotaManager&, PAL::SessionID, const WebCore::ClientOrigin&);
 
     // FIXME: This should take a session ID so we can identify which disk cache to delete.
@@ -443,14 +445,17 @@ private:
     void publishDownloadProgress(DownloadID, const URL&, SandboxExtension::Handle&&);
 #endif
     void continueWillSendRequest(DownloadID, WebCore::ResourceRequest&&);
+    void dataTaskWithRequest(WebPageProxyIdentifier, PAL::SessionID, WebCore::ResourceRequest&&, IPC::FormDataReference&&, CompletionHandler<void(DataTaskIdentifier)>&&);
+    void cancelDataTask(DataTaskIdentifier, PAL::SessionID);
     void applicationDidEnterBackground();
     void applicationWillEnterForeground();
 
     void setCacheModel(CacheModel);
     void setCacheModelSynchronouslyForTesting(CacheModel, CompletionHandler<void()>&&);
     void allowSpecificHTTPSCertificateForHost(const WebCore::CertificateInfo&, const String& host);
+    void allowTLSCertificateChainForLocalPCMTesting(PAL::SessionID, const WebCore::CertificateInfo&);
     void setAllowsAnySSLCertificateForWebSocket(bool, CompletionHandler<void()>&&);
-    
+
     void flushCookies(PAL::SessionID, CompletionHandler<void()>&&);
 
     void addWebPageNetworkParameters(PAL::SessionID, WebPageProxyIdentifier, WebPageNetworkParameters&&);
@@ -472,6 +477,7 @@ private:
     static void setSharedHTTPCookieStorage(const Vector<uint8_t>& identifier);
 #endif
 
+    void terminateRemoteWorkerContextConnectionWhenPossible(RemoteWorkerType, PAL::SessionID, const WebCore::RegistrableDomain&, WebCore::ProcessIdentifier);
     void platformFlushCookies(PAL::SessionID, CompletionHandler<void()>&&);
     
     void registerURLSchemeAsSecure(const String&) const;
@@ -480,65 +486,10 @@ private:
     void registerURLSchemeAsNoAccess(const String&) const;
     void registerURLSchemeAsCORSEnabled(const String&) const;
 
-    void addIndexedDatabaseSession(PAL::SessionID, String&, SandboxExtension::Handle&);
-    Ref<WebIDBServer> createWebIDBServer(PAL::SessionID);
-    void setSessionStorageQuotaManagerIDBRootPath(PAL::SessionID, const String& idbRootPath);
-    void removeWebIDBServerIfPossible(PAL::SessionID);
-    void suspendIDBServers(bool isSuspensionImminent);
-
-#if ENABLE(SERVICE_WORKER)
-    void didCreateWorkerContextProcessConnection(const IPC::Attachment&);
-
-    void postMessageToServiceWorker(PAL::SessionID, WebCore::ServiceWorkerIdentifier destination, WebCore::MessageWithMessagePorts&&, const WebCore::ServiceWorkerOrClientIdentifier& source, WebCore::SWServerConnectionIdentifier);
-    
-    void disableServiceWorkerProcessTerminationDelay();
-    
-    WebSWOriginStore* existingSWOriginStoreForSession(PAL::SessionID) const;
-
-    void addServiceWorkerSession(PAL::SessionID, bool processTerminationDelayEnabled, String&& serviceWorkerRegistrationDirectory, const SandboxExtension::Handle&);
-#endif
-
 #if PLATFORM(IOS_FAMILY)
     void setIsHoldingLockedFiles(bool);
 #endif
-
-    void firePrivateClickMeasurementTimerImmediately(PAL::SessionID);
-
-    class SessionStorageQuotaManager {
-        WTF_MAKE_FAST_ALLOCATED;
-    public:
-        SessionStorageQuotaManager(const String& cacheRootPath, uint64_t defaultQuota, uint64_t defaultThirdPartyQuota)
-            : m_cacheRootPath(cacheRootPath)
-            , m_defaultQuota(defaultQuota)
-            , m_defaultThirdPartyQuota(defaultThirdPartyQuota)
-        {
-        }
-        uint64_t defaultQuota(const WebCore::ClientOrigin& origin) const { return origin.topOrigin == origin.clientOrigin ? m_defaultQuota : m_defaultThirdPartyQuota; }
-
-        Ref<WebCore::StorageQuotaManager> ensureOriginStorageQuotaManager(WebCore::ClientOrigin origin, uint64_t quota, WebCore::StorageQuotaManager::UsageGetter&& usageGetter, WebCore::StorageQuotaManager::QuotaIncreaseRequester&& quotaIncreaseRequester)
-        {
-            auto iter = m_storageQuotaManagers.ensure(origin, [quota, usageGetter = WTFMove(usageGetter), quotaIncreaseRequester = WTFMove(quotaIncreaseRequester)]() mutable {
-                return WebCore::StorageQuotaManager::create(quota, WTFMove(usageGetter), WTFMove(quotaIncreaseRequester));
-            }).iterator;
-            return makeRef(*iter->value);
-        }
-
-        auto existingStorageQuotaManagers() { return m_storageQuotaManagers.values(); }
-
-        const String& cacheRootPath() const { return m_cacheRootPath; }
-
-        void setIDBRootPath(const String& idbRootPath) { m_idbRootPath = idbRootPath; }
-        const String& idbRootPath() const { return m_idbRootPath; }
-
-    private:
-        String m_cacheRootPath;
-        String m_idbRootPath;
-        uint64_t m_defaultQuota { WebCore::StorageQuotaManager::defaultQuota() };
-        uint64_t m_defaultThirdPartyQuota { WebCore::StorageQuotaManager::defaultThirdPartyQuota() };
-        HashMap<WebCore::ClientOrigin, RefPtr<WebCore::StorageQuotaManager>> m_storageQuotaManagers;
-    };
-    void addSessionStorageQuotaManager(PAL::SessionID, uint64_t defaultQuota, uint64_t defaultThirdPartyQuota, const String& cacheRootPath, SandboxExtension::Handle&);
-    void removeSessionStorageQuotaManager(PAL::SessionID);
+    void stopRunLoopIfNecessary();
 
     // Connections to WebProcesses.
     HashMap<WebCore::ProcessIdentifier, Ref<NetworkConnectionToWebProcess>> m_webProcessConnections;
@@ -546,21 +497,16 @@ private:
     bool m_hasSetCacheModel { false };
     CacheModel m_cacheModel { CacheModel::DocumentViewer };
     bool m_suppressMemoryPressureHandler { false };
-    String m_uiProcessBundleIdentifier;
+    mutable String m_uiProcessBundleIdentifier;
     DownloadManager m_downloadManager;
-
-    HashMap<PAL::SessionID, Ref<CacheStorage::Engine>> m_cacheEngines;
 
     typedef HashMap<const char*, std::unique_ptr<NetworkProcessSupplement>, PtrHash<const char*>> NetworkProcessSupplementMap;
     NetworkProcessSupplementMap m_supplements;
 
     HashSet<PAL::SessionID> m_sessionsControlledByAutomation;
-    HashMap<PAL::SessionID, Vector<CacheStorageRootPathCallback>> m_cacheStorageParametersCallbacks;
 
     HashMap<PAL::SessionID, std::unique_ptr<NetworkSession>> m_networkSessions;
     HashMap<PAL::SessionID, std::unique_ptr<WebCore::NetworkStorageSession>> m_networkStorageSessions;
-
-    Ref<StorageManagerSet> m_storageManagerSet;
 
 #if PLATFORM(COCOA)
     void platformInitializeNetworkProcessCocoa(const NetworkProcessCreationParameters&);
@@ -579,28 +525,10 @@ private:
     WebSQLiteDatabaseTracker m_webSQLiteDatabaseTracker;
     RefPtr<ProcessAssertion> m_holdingLockedFileAssertion;
 #endif
-
-    HashMap<PAL::SessionID, String> m_idbDatabasePaths;
-    HashMap<PAL::SessionID, RefPtr<WebIDBServer>> m_webIDBServers;
-    bool m_shouldSuspendIDBServers { false };
-    uint64_t m_suspensionIdentifier { 0 };
-    
-#if ENABLE(SERVICE_WORKER)
-    struct ServiceWorkerInfo {
-        String databasePath;
-        bool processTerminationDelayEnabled { true };
-    };
-    HashMap<PAL::SessionID, ServiceWorkerInfo> m_serviceWorkerInfo;
-    HashMap<PAL::SessionID, std::unique_ptr<WebCore::SWServer>> m_swServers;
-#endif
     
 #if ENABLE(WEB_RTC)
     RefPtr<RTCDataChannelRemoteManagerProxy> m_rtcDataChannelProxy;
 #endif
-
-    Lock m_sessionStorageQuotaManagersLock;
-    HashMap<PAL::SessionID, std::unique_ptr<SessionStorageQuotaManager>> m_sessionStorageQuotaManagers WTF_GUARDED_BY_LOCK(m_sessionStorageQuotaManagersLock);
-    bool m_quotaLoggingEnabled { false };
 
     OptionSet<NetworkCache::CacheOption> m_cacheOptions;
     WebCore::MessagePortChannelRegistry m_messagePortChannelRegistry;
@@ -609,9 +537,19 @@ private:
     Seconds m_serviceWorkerFetchTimeout { defaultServiceWorkerFetchTimeout };
 
     HashMap<WebCore::PageIdentifier, Vector<WebCore::UserContentURLPattern>> m_extensionCORSDisablingPatterns;
+    HashSet<RefPtr<NetworkStorageManager>> m_closingStorageManagers;
 
     bool m_privateClickMeasurementEnabled { true };
-    bool m_privateClickMeasurementDebugModeEnabled { false };
+    bool m_ftpEnabled { false };
+    bool m_isSuspended { false };
+    bool m_didSyncCookiesForClose { false };
 };
+
+#if !PLATFORM(COCOA)
+inline const String& NetworkProcess::uiProcessBundleIdentifier() const
+{
+    return m_uiProcessBundleIdentifier;
+}
+#endif
 
 } // namespace WebKit

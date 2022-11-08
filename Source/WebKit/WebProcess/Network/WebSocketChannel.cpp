@@ -32,6 +32,7 @@
 #include "WebCoreArgumentCoders.h"
 #include "WebProcess.h"
 #include <WebCore/Blob.h>
+#include <WebCore/ClientOrigin.h>
 #include <WebCore/Document.h>
 #include <WebCore/ExceptionCode.h>
 #include <WebCore/Page.h>
@@ -50,7 +51,7 @@ Ref<WebSocketChannel> WebSocketChannel::create(WebPageProxyIdentifier webPagePro
 void WebSocketChannel::notifySendFrame(WebSocketFrame::OpCode opCode, const uint8_t* data, size_t length)
 {
     WebSocketFrame frame(opCode, true, false, true, data, length);
-    m_inspector.didSendWebSocketFrame(m_document.get(), frame);
+    m_inspector.didSendWebSocketFrame(frame);
 }
 
 NetworkSendQueue WebSocketChannel::createMessageQueue(Document& document, WebSocketChannel& channel)
@@ -69,8 +70,8 @@ NetworkSendQueue WebSocketChannel::createMessageQueue(Document& document, WebSoc
 }
 
 WebSocketChannel::WebSocketChannel(WebPageProxyIdentifier webPageProxyID, Document& document, WebSocketChannelClient& client)
-    : m_document(makeWeakPtr(document))
-    , m_client(makeWeakPtr(client))
+    : m_document(document)
+    , m_client(client)
     , m_messageQueue(createMessageQueue(document, *this))
     , m_inspector(document)
     , m_webPageProxyID(webPageProxyID)
@@ -115,9 +116,9 @@ WebSocketChannel::ConnectStatus WebSocketChannel::connect(const URL& url, const 
     if (request->url() != url && m_client)
         m_client->didUpgradeURL();
 
-    m_inspector.didCreateWebSocket(m_document.get(), url);
+    m_inspector.didCreateWebSocket(url);
     m_url = request->url();
-    MessageSender::send(Messages::NetworkConnectionToWebProcess::CreateSocketChannel { *request, protocol, m_identifier, m_webPageProxyID });
+    MessageSender::send(Messages::NetworkConnectionToWebProcess::CreateSocketChannel { *request, protocol, m_identifier, m_webPageProxyID, m_document->clientOrigin(), WebProcess::singleton().hadMainFrameMainResourcePrivateRelayed() });
     return ConnectStatus::OK;
 }
 
@@ -129,7 +130,7 @@ bool WebSocketChannel::increaseBufferedAmount(size_t byteLength)
     CheckedSize checkedNewBufferedAmount = m_bufferedAmount;
     checkedNewBufferedAmount += byteLength;
     if (UNLIKELY(checkedNewBufferedAmount.hasOverflowed())) {
-        fail("Failed to send WebSocket frame: buffer has no more space");
+        fail("Failed to send WebSocket frame: buffer has no more space"_s);
         return false;
     }
 
@@ -152,19 +153,18 @@ void WebSocketChannel::decreaseBufferedAmount(size_t byteLength)
 
 template<typename T> void WebSocketChannel::sendMessage(T&& message, size_t byteLength)
 {
-    CompletionHandler<void()> completionHandler = [this, protectedThis = makeRef(*this), byteLength] {
+    CompletionHandler<void()> completionHandler = [this, protectedThis = Ref { *this }, byteLength] {
         decreaseBufferedAmount(byteLength);
     };
     sendWithAsyncReply(WTFMove(message), WTFMove(completionHandler));
 }
 
-WebSocketChannel::SendResult WebSocketChannel::send(const String& message)
+WebSocketChannel::SendResult WebSocketChannel::send(CString&& message)
 {
-    auto utf8 = message.utf8(StrictConversionReplacingUnpairedSurrogatesWithFFFD);
-    if (!increaseBufferedAmount(utf8.length()))
+    if (!increaseBufferedAmount(message.length()))
         return SendFail;
 
-    m_messageQueue.enqueue(WTFMove(utf8));
+    m_messageQueue.enqueue(WTFMove(message));
     return SendSuccess;
 }
 
@@ -198,7 +198,7 @@ unsigned WebSocketChannel::bufferedAmount() const
 void WebSocketChannel::close(int code, const String& reason)
 {
     // An attempt to send closing handshake may fail, which will get the channel closed and dereferenced.
-    auto protectedThis = makeRef(*this);
+    Ref protectedThis { *this };
 
     m_isClosing = true;
     if (m_client)
@@ -207,19 +207,19 @@ void WebSocketChannel::close(int code, const String& reason)
     ASSERT(code >= 0 || code == WebCore::WebSocketChannel::CloseEventCodeNotSpecified);
 
     WebSocketFrame closingFrame(WebSocketFrame::OpCodeClose, true, false, true);
-    m_inspector.didSendWebSocketFrame(m_document.get(), closingFrame);
+    m_inspector.didSendWebSocketFrame(closingFrame);
 
     MessageSender::send(Messages::NetworkSocketChannel::Close { code, reason });
 }
 
-void WebSocketChannel::fail(const String& reason)
+void WebSocketChannel::fail(String&& reason)
 {
     // The client can close the channel, potentially removing the last reference.
-    auto protectedThis = makeRef(*this);
+    Ref protectedThis { *this };
 
     logErrorMessage(reason);
     if (m_client)
-        m_client->didReceiveMessageError();
+        m_client->didReceiveMessageError(String { reason });
 
     if (m_isClosing)
         return;
@@ -232,10 +232,9 @@ void WebSocketChannel::disconnect()
 {
     m_client = nullptr;
     m_document = nullptr;
-    m_pendingTasks.clear();
     m_messageQueue.clear();
 
-    m_inspector.didCloseWebSocket(m_document.get());
+    m_inspector.didCloseWebSocket();
 
     MessageSender::send(Messages::NetworkSocketChannel::Close { WebCore::WebSocketChannel::CloseEventCodeGoingAway, { } });
 }
@@ -248,34 +247,9 @@ void WebSocketChannel::didConnect(String&& subprotocol, String&& extensions)
     if (!m_client)
         return;
 
-    if (m_isSuspended) {
-        enqueueTask([this, subprotocol = WTFMove(subprotocol), extensions = WTFMove(extensions)] () mutable {
-            didConnect(WTFMove(subprotocol), WTFMove(extensions));
-        });
-        return;
-    }
-
     m_subprotocol = WTFMove(subprotocol);
     m_extensions = WTFMove(extensions);
     m_client->didConnect();
-}
-
-static inline WebSocketFrame createWebSocketFrameForWebInspector(const uint8_t* data, size_t length, WebSocketFrame::OpCode opCode)
-{
-    // This is an approximation since frames can be merged on a single message.
-    WebSocketFrame frame;
-    frame.opCode = opCode;
-    frame.masked = false;
-    frame.payload = data;
-    frame.payloadLength = length;
-
-    // WebInspector does not use them.
-    frame.final = false;
-    frame.compress = false;
-    frame.reserved2 = false;
-    frame.reserved3 = false;
-
-    return frame;
 }
 
 void WebSocketChannel::didReceiveText(String&& message)
@@ -286,17 +260,7 @@ void WebSocketChannel::didReceiveText(String&& message)
     if (!m_client)
         return;
 
-    if (m_isSuspended) {
-        enqueueTask([this, message = WTFMove(message)] () mutable {
-            didReceiveText(WTFMove(message));
-        });
-        return;
-    }
-
-    auto utf8Message = message.utf8();
-    m_inspector.didReceiveWebSocketFrame(m_document.get(), createWebSocketFrameForWebInspector(utf8Message.dataAsUInt8Ptr(), utf8Message.length(), WebSocketFrame::OpCode::OpCodeText));
-
-    m_client->didReceiveMessage(message);
+    m_client->didReceiveMessage(WTFMove(message));
 }
 
 void WebSocketChannel::didReceiveBinaryData(IPC::DataReference&& data)
@@ -307,17 +271,7 @@ void WebSocketChannel::didReceiveBinaryData(IPC::DataReference&& data)
     if (!m_client)
         return;
 
-    if (m_isSuspended) {
-        enqueueTask([this, data = data.vector()] () mutable {
-            if (!m_isClosing && m_client)
-                m_client->didReceiveBinaryData(WTFMove(data));
-        });
-        return;
-    }
-
-    m_inspector.didReceiveWebSocketFrame(m_document.get(), createWebSocketFrameForWebInspector(data.data(), data.size(), WebSocketFrame::OpCode::OpCodeBinary));
-
-    m_client->didReceiveBinaryData(data.vector());
+    m_client->didReceiveBinaryData({ data });
 }
 
 void WebSocketChannel::didClose(unsigned short code, String&& reason)
@@ -325,19 +279,8 @@ void WebSocketChannel::didClose(unsigned short code, String&& reason)
     if (!m_client)
         return;
 
-    if (m_isSuspended) {
-        enqueueTask([this, code, reason = WTFMove(reason)] () mutable {
-            didClose(code, WTFMove(reason));
-        });
-        return;
-    }
-
-    WebSocketFrame closingFrame(WebSocketFrame::OpCodeClose, true, false, false);
-    m_inspector.didReceiveWebSocketFrame(m_document.get(), closingFrame);
-    m_inspector.didCloseWebSocket(m_document.get());
-
     // An attempt to send closing handshake may fail, which will get the channel closed and dereferenced.
-    auto protectedThis = makeRef(*this);
+    Ref protectedThis { *this };
 
     bool receivedClosingHandshake = code != WebCore::WebSocketChannel::CloseEventCodeAbnormalClosure;
     if (receivedClosingHandshake)
@@ -364,15 +307,8 @@ void WebSocketChannel::didReceiveMessageError(String&& errorMessage)
     if (!m_client)
         return;
 
-    if (m_isSuspended) {
-        enqueueTask([this, errorMessage = WTFMove(errorMessage)] () mutable {
-            didReceiveMessageError(WTFMove(errorMessage));
-        });
-        return;
-    }
-
     logErrorMessage(errorMessage);
-    m_client->didReceiveMessageError();
+    m_client->didReceiveMessageError(WTFMove(errorMessage));
 }
 
 void WebSocketChannel::networkProcessCrashed()
@@ -382,45 +318,21 @@ void WebSocketChannel::networkProcessCrashed()
 
 void WebSocketChannel::suspend()
 {
-    m_isSuspended = true;
 }
 
 void WebSocketChannel::resume()
 {
-    auto protectedThis = makeRef(*this);
-    m_isSuspended = false;
-    while (!m_isSuspended && !m_pendingTasks.isEmpty())
-        m_pendingTasks.takeFirst()();
-}
-
-void WebSocketChannel::enqueueTask(Function<void()>&& task)
-{
-    m_pendingTasks.append(WTFMove(task));
 }
 
 void WebSocketChannel::didSendHandshakeRequest(ResourceRequest&& request)
 {
-    if (m_isSuspended) {
-        enqueueTask([this, request = WTFMove(request)]() mutable {
-            didSendHandshakeRequest(WTFMove(request));
-        });
-        return;
-    }
-
-    m_inspector.willSendWebSocketHandshakeRequest(m_document.get(), request);
+    m_inspector.willSendWebSocketHandshakeRequest(request);
     m_handshakeRequest = WTFMove(request);
 }
 
 void WebSocketChannel::didReceiveHandshakeResponse(ResourceResponse&& response)
 {
-    if (m_isSuspended) {
-        enqueueTask([this, response = WTFMove(response)]() mutable {
-            didReceiveHandshakeResponse(WTFMove(response));
-        });
-        return;
-    }
-
-    m_inspector.didReceiveWebSocketHandshakeResponse(m_document.get(), response);
+    m_inspector.didReceiveWebSocketHandshakeResponse(response);
     m_handshakeResponse = WTFMove(response);
 }
 

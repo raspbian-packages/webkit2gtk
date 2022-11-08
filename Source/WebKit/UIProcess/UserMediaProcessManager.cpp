@@ -114,13 +114,14 @@ bool UserMediaProcessManager::willCreateMediaStream(UserMediaPermissionRequestMa
                 }
             }
 
+            auto auditToken = process.auditToken();
             if (needsAppleCameraSandboxExtension) {
-                if (auto handle = SandboxExtension::createHandleForMachLookup(appleCameraServicePath, std::nullopt)) {
+                if (auto handle = SandboxExtension::createHandleForMachLookup(appleCameraServicePath, auditToken, SandboxExtension::MachBootstrapOptions::EnableMachBootstrap)) {
                     handles[--extensionCount] = WTFMove(*handle);
                     ids.uncheckedAppend(appleCameraServicePath);
                 }
 #if HAVE(ADDITIONAL_APPLE_CAMERA_SERVICE)
-                if (auto handle = SandboxExtension::createHandleForMachLookup(additionalAppleCameraServicePath, std::nullopt)) {
+                if (auto handle = SandboxExtension::createHandleForMachLookup(additionalAppleCameraServicePath, auditToken, SandboxExtension::MachBootstrapOptions::EnableMachBootstrap)) {
                     handles[--extensionCount] = WTFMove(*handle);
                     ids.uncheckedAppend(additionalAppleCameraServicePath);
                 }
@@ -226,7 +227,7 @@ void UserMediaProcessManager::captureDevicesChanged()
 
 void UserMediaProcessManager::updateCaptureDevices(ShouldNotify shouldNotify)
 {
-    WebCore::RealtimeMediaSourceCenter::singleton().getMediaStreamDevices([weakThis = makeWeakPtr(*this), this, shouldNotify](auto&& newDevices) mutable {
+    WebCore::RealtimeMediaSourceCenter::singleton().getMediaStreamDevices([weakThis = WeakPtr { *this }, this, shouldNotify](auto&& newDevices) mutable {
         if (!weakThis)
             return;
 

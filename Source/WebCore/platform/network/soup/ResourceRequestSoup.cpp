@@ -101,7 +101,7 @@ void ResourceRequest::updateSoupMessageBody(SoupMessage* soupMessage, BlobRegist
     // Handle the common special case of one piece of form data, with no files.
     auto& elements = formData->elements();
     if (elements.size() == 1 && !formData->alwaysStream()) {
-        if (auto* vector = WTF::get_if<Vector<uint8_t>>(elements[0].data)) {
+        if (auto* vector = std::get_if<Vector<uint8_t>>(&elements[0].data)) {
 #if USE(SOUP2)
             soup_message_body_append(soupMessage->request_body, SOUP_MEMORY_TEMPORARY, vector->data(), vector->size());
 #else
@@ -158,7 +158,7 @@ void ResourceRequest::updateFromSoupMessageHeaders(SoupMessageHeaders* soupHeade
     const char* headerName;
     const char* headerValue;
     while (soup_message_headers_iter_next(&headersIter, &headerName, &headerValue))
-        m_httpHeaderFields.set(String(headerName), String(headerValue));
+        m_httpHeaderFields.set(String::fromLatin1(headerName), String::fromLatin1(headerValue));
 }
 
 unsigned initializeMaximumHTTPConnectionCountPerHost()
@@ -177,8 +177,7 @@ GUniquePtr<SoupURI> ResourceRequest::createSoupURI() const
     // characters, so that soup does not interpret them as fragment identifiers.
     // See http://wkbug.com/68089
     if (m_url.protocolIsData()) {
-        String urlString = m_url.string();
-        urlString.replace("#", "%23");
+        String urlString = makeStringByReplacingAll(m_url.string(), '#', "%23"_s);
         return GUniquePtr<SoupURI>(soup_uri_new(urlString.utf8().data()));
     }
 

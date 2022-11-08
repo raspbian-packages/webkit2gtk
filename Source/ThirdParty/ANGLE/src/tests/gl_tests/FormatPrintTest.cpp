@@ -15,8 +15,8 @@
 // So we need to include ANGLETest.h first to avoid this conflict.
 
 #include "libANGLE/Context.h"
+#include "libANGLE/capture/gl_enum_utils.h"
 #include "libANGLE/formatutils.h"
-#include "libANGLE/gl_enum_utils.h"
 #include "util/EGLWindow.h"
 
 using namespace angle;
@@ -24,7 +24,7 @@ using namespace angle;
 namespace
 {
 
-class FormatPrintTest : public ANGLETest
+class FormatPrintTest : public ANGLETest<>
 {};
 
 // This test enumerates all sized and unsized GL formats and prints out support information
@@ -50,7 +50,7 @@ TEST_P(FormatPrintTest, PrintAllSupportedFormats)
             bool textureSupport = typeFormatPair.second.textureSupport(context->getClientVersion(),
                                                                        context->getExtensions());
             bool filterSupport  = typeFormatPair.second.filterSupport(context->getClientVersion(),
-                                                                     context->getExtensions());
+                                                                      context->getExtensions());
             bool textureAttachmentSupport = typeFormatPair.second.textureAttachmentSupport(
                 context->getClientVersion(), context->getExtensions());
             bool renderbufferSupport = typeFormatPair.second.renderbufferSupport(

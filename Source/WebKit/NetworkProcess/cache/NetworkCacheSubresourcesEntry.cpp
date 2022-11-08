@@ -31,6 +31,7 @@
 #include "Logging.h"
 #include "NetworkCacheCoders.h"
 #include <WebCore/RegistrableDomain.h>
+#include <wtf/persistence/PersistentEncoder.h>
 
 namespace WebKit {
 namespace NetworkCache {
@@ -47,6 +48,7 @@ void SubresourceInfo::encode(WTF::Persistence::Encoder& encoder) const
         return;
 
     encoder << m_isSameSite;
+    encoder << m_isAppInitiated;
     encoder << m_firstPartyForCookies;
     encoder << m_requestHeaders;
     encoder << m_priority;
@@ -88,6 +90,12 @@ std::optional<SubresourceInfo> SubresourceInfo::decode(WTF::Persistence::Decoder
     if (!isSameSite)
         return std::nullopt;
     info.m_isSameSite = WTFMove(*isSameSite);
+
+    std::optional<bool> isAppInitiated;
+    decoder >> isAppInitiated;
+    if (!isAppInitiated)
+        return std::nullopt;
+    info.m_isAppInitiated = WTFMove(*isAppInitiated);
 
     std::optional<URL> firstPartyForCookies;
     decoder >> firstPartyForCookies;
@@ -149,7 +157,7 @@ SubresourcesEntry::SubresourcesEntry(const Storage::Record& storageEntry)
     : m_key(storageEntry.key)
     , m_timeStamp(storageEntry.timeStamp)
 {
-    ASSERT(m_key.type() == "SubResources");
+    ASSERT(m_key.type() == "SubResources"_s);
 }
 
 SubresourceInfo::SubresourceInfo(const Key& key, const WebCore::ResourceRequest& request, const SubresourceInfo* previousInfo)
@@ -158,6 +166,7 @@ SubresourceInfo::SubresourceInfo(const Key& key, const WebCore::ResourceRequest&
     , m_firstSeen(previousInfo ? previousInfo->firstSeen() : m_lastSeen)
     , m_isTransient(!previousInfo)
     , m_isSameSite(request.isSameSite())
+    , m_isAppInitiated(request.isAppInitiated())
     , m_firstPartyForCookies(request.firstPartyForCookies())
     , m_requestHeaders(request.httpHeaderFields())
     , m_priority(request.priority())
@@ -202,7 +211,7 @@ SubresourcesEntry::SubresourcesEntry(Key&& key, const Vector<std::unique_ptr<Sub
     , m_timeStamp(WallTime::now())
     , m_subresources(makeSubresourceInfoVector(subresourceLoads, nullptr))
 {
-    ASSERT(m_key.type() == "SubResources");
+    ASSERT(m_key.type() == "SubResources"_s);
 }
     
 void SubresourcesEntry::updateSubresourceLoads(const Vector<std::unique_ptr<SubresourceLoad>>& subresourceLoads)

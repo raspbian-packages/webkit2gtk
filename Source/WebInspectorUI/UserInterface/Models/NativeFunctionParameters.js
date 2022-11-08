@@ -252,6 +252,8 @@ WI.NativePrototypeFunctionParameters = {
         findLast: "callback, [thisArg]",
         findLastIndex: "callback, [thisArg]",
         forEach: "callback, [thisArg]",
+        group: "callback, [thisArg]",
+        groupToMap: "callback, [thisArg]",
         includes: "searchValue, [startIndex=0]",
         indexOf: "searchValue, [startIndex=0]",
         join: "[separator=\",\"]",
@@ -1271,11 +1273,6 @@ WI.NativePrototypeFunctionParameters = {
         __proto__: null,
     },
 
-    QuickTimePluginReplacement: {
-        postEvent: "eventName",
-        __proto__: null,
-    },
-
     RTCDTMFSender: {
         insertDTMF: "tones, [duration], [interToneGap]",
         __proto__: null,
@@ -1696,11 +1693,6 @@ WI.NativePrototypeFunctionParameters = {
 
     StringCallback: {
         handleEvent: "data",
-        __proto__: null,
-    },
-
-    StyleMedia: {
-        matchMedium: "[mediaquery]",
         __proto__: null,
     },
 

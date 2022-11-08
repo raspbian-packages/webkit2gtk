@@ -56,6 +56,11 @@ String WebsiteDataStore::defaultCacheStorageDirectory()
     return { };
 }
 
+String WebsiteDataStore::defaultGeneralStorageDirectory()
+{
+    return { };
+}
+
 String WebsiteDataStore::defaultNetworkCacheDirectory()
 {
     return { };
@@ -96,7 +101,7 @@ String WebsiteDataStore::cacheDirectoryFileSystemRepresentation(const String& di
     return { };
 }
 
-String WebsiteDataStore::websiteDataDirectoryFileSystemRepresentation(const String& directoryName)
+String WebsiteDataStore::websiteDataDirectoryFileSystemRepresentation(const String& directoryName, ShouldCreateDirectory)
 {
     return { };
 }

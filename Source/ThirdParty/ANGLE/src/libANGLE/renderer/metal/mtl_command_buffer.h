@@ -13,6 +13,7 @@
 
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
+#include <cstdint>
 
 #include <deque>
 #include <memory>
@@ -89,15 +90,14 @@ class CommandQueue final : public WrappedObject<id<MTLCommandQueue>>, angle::Non
         uint64_t serial;
     };
     std::deque<CmdBufferQueueEntry> mMetalCmdBuffers;
-    std::deque<CmdBufferQueueEntry> mMetalCmdBuffersTmp;
 
-    uint64_t mQueueSerialCounter = 1;
+    uint64_t mQueueSerialCounter  = 1;
+    uint64_t mLastCommittedSerial = 0;
     std::atomic<uint64_t> mCommittedBufferSerial{0};
     std::atomic<uint64_t> mCompletedBufferSerial{0};
 
     mutable std::mutex mLock;
 };
-
 
 class CommandBuffer final : public WrappedObject<id<MTLCommandBuffer>>, angle::NonCopyable
 {
@@ -110,10 +110,8 @@ class CommandBuffer final : public WrappedObject<id<MTLCommandBuffer>>, angle::N
 
     // Return true if command buffer can be encoded into. Return false if it has been committed
     // and hasn't been restarted.
-    bool valid() const;
-    void commit(CommandBufferFinishOperation operation = NoWait);
-    
-
+    bool ready() const;
+    void commit(CommandBufferFinishOperation operation);
 
     void present(id<CAMetalDrawable> presentationDrawable);
 
@@ -134,12 +132,14 @@ class CommandBuffer final : public WrappedObject<id<MTLCommandBuffer>>, angle::N
     void setActiveCommandEncoder(CommandEncoder *encoder);
     void invalidateActiveCommandEncoder(CommandEncoder *encoder);
 
+    bool needsFlushForDrawCallLimits() const;
+
   private:
     void set(id<MTLCommandBuffer> metalBuffer);
     void cleanup();
 
-    bool validImpl() const;
-    void commitImpl();
+    bool readyImpl() const;
+    bool commitImpl();
     void forceEndingCurrentEncoder();
 
     void setPendingEvents();
@@ -148,6 +148,9 @@ class CommandBuffer final : public WrappedObject<id<MTLCommandBuffer>>, angle::N
 
     void pushDebugGroupImpl(const std::string &marker);
     void popDebugGroupImpl();
+
+    void setResourceUsedByCommandBuffer(const ResourceRef &resource);
+    void clearResourceListAndSize();
 
     using ParentClass = WrappedObject<id<MTLCommandBuffer>>;
 
@@ -161,10 +164,11 @@ class CommandBuffer final : public WrappedObject<id<MTLCommandBuffer>>, angle::N
 
     std::vector<std::string> mPendingDebugSigns;
     std::vector<std::pair<mtl::SharedEventRef, uint64_t>> mPendingSignalEvents;
-
     std::vector<std::string> mDebugGroups;
 
-    bool mCommitted = false;
+    std::unordered_set<id> mResourceList;
+    size_t mWorkingResourceSize = 0;
+    bool mCommitted             = false;
 };
 
 class CommandEncoder : public WrappedObject<id<MTLCommandEncoder>>, angle::NonCopyable
@@ -329,7 +333,7 @@ class RenderCommandEncoder final : public CommandEncoder
 
     // Restart the encoder so that new commands can be encoded.
     // NOTE: parent CommandBuffer's restart() must be called before this.
-    RenderCommandEncoder &restart(const RenderPassDesc &desc);
+    RenderCommandEncoder &restart(const RenderPassDesc &desc, uint32_t deviceMaxRenderTargets);
 
     RenderCommandEncoder &setRenderPipelineState(id<MTLRenderPipelineState> state);
     RenderCommandEncoder &setTriangleFillMode(MTLTriangleFillMode mode);
@@ -431,6 +435,11 @@ class RenderCommandEncoder final : public CommandEncoder
                                         uint32_t vertexStart,
                                         uint32_t vertexCount,
                                         uint32_t instances);
+    RenderCommandEncoder &drawInstancedBaseInstance(MTLPrimitiveType primitiveType,
+                                                    uint32_t vertexStart,
+                                                    uint32_t vertexCount,
+                                                    uint32_t instances,
+                                                    uint32_t baseInstance);
     RenderCommandEncoder &drawIndexed(MTLPrimitiveType primitiveType,
                                       uint32_t indexCount,
                                       MTLIndexType indexType,
@@ -442,13 +451,14 @@ class RenderCommandEncoder final : public CommandEncoder
                                                const BufferRef &indexBuffer,
                                                size_t bufferOffset,
                                                uint32_t instances);
-    RenderCommandEncoder &drawIndexedInstancedBaseVertex(MTLPrimitiveType primitiveType,
-                                                         uint32_t indexCount,
-                                                         MTLIndexType indexType,
-                                                         const BufferRef &indexBuffer,
-                                                         size_t bufferOffset,
-                                                         uint32_t instances,
-                                                         uint32_t baseVertex);
+    RenderCommandEncoder &drawIndexedInstancedBaseVertexBaseInstance(MTLPrimitiveType primitiveType,
+                                                                     uint32_t indexCount,
+                                                                     MTLIndexType indexType,
+                                                                     const BufferRef &indexBuffer,
+                                                                     size_t bufferOffset,
+                                                                     uint32_t instances,
+                                                                     uint32_t baseVertex,
+                                                                     uint32_t baseInstance);
 
     RenderCommandEncoder &setVisibilityResultMode(MTLVisibilityResultMode mode, size_t offset);
 
@@ -581,20 +591,11 @@ class BlitCommandEncoder final : public CommandEncoder
                                     uint32_t sliceCount,
                                     uint32_t levelCount);
 
-    BlitCommandEncoder &copyTexture(const TextureRef &src,
-                                    uint32_t srcSlice,
-                                    uint32_t srcLevel,
-                                    const TextureRef &dst,
-                                    uint32_t dstSlice,
-                                    uint32_t dstLevel,
-                                    uint32_t sliceCount,
-                                    uint32_t levelCount);
-
     BlitCommandEncoder &fillBuffer(const BufferRef &buffer, NSRange range, uint8_t value);
 
     BlitCommandEncoder &generateMipmapsForTexture(const TextureRef &texture);
-    BlitCommandEncoder &synchronizeResource(const BufferRef &buffer);
-    BlitCommandEncoder &synchronizeResource(const TextureRef &texture);
+    BlitCommandEncoder &synchronizeResource(Buffer *bufferPtr);
+    BlitCommandEncoder &synchronizeResource(Texture *texturePtr);
 
   private:
     id<MTLBlitCommandEncoder> get()

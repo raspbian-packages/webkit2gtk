@@ -71,15 +71,18 @@ void ImageSibling::setTargetImage(const gl::Context *context, egl::Image *imageT
     imageTarget->addTargetSibling(this);
 }
 
-angle::Result ImageSibling::orphanImages(const gl::Context *context)
+angle::Result ImageSibling::orphanImages(const gl::Context *context,
+                                         RefCountObjectReleaser<Image> *outReleaseImage)
 {
+    ASSERT(outReleaseImage != nullptr);
+
     if (mTargetOf.get() != nullptr)
     {
         // Can't be a target and have sources.
         ASSERT(mSourcesOf.empty());
 
         ANGLE_TRY(mTargetOf->orphanSibling(context, this));
-        mTargetOf.set(DisplayFromContext(context), nullptr);
+        *outReleaseImage = mTargetOf.set(DisplayFromContext(context), nullptr);
     }
     else
     {
@@ -128,6 +131,21 @@ bool ImageSibling::isRenderable(const gl::Context *context,
 {
     ASSERT(isEGLImageTarget());
     return mTargetOf->isRenderable(context);
+}
+
+bool ImageSibling::isYUV() const
+{
+    return mTargetOf.get() && mTargetOf->isYUV();
+}
+
+bool ImageSibling::isCreatedWithAHB() const
+{
+    return mTargetOf.get() && mTargetOf->isCreatedWithAHB();
+}
+
+bool ImageSibling::hasProtectedContent() const
+{
+    return mTargetOf.get() && mTargetOf->hasProtectedContent();
 }
 
 void ImageSibling::notifySiblings(angle::SubjectMessage message)
@@ -181,6 +199,11 @@ GLsizei ExternalImageSibling::getAttachmentSamples(const gl::ImageIndex &imageIn
     return static_cast<GLsizei>(mImplementation->getSamples());
 }
 
+GLuint ExternalImageSibling::getLevelCount() const
+{
+    return static_cast<GLuint>(mImplementation->getLevelCount());
+}
+
 bool ExternalImageSibling::isRenderable(const gl::Context *context,
                                         GLenum binding,
                                         const gl::ImageIndex &imageIndex) const
@@ -193,6 +216,21 @@ bool ExternalImageSibling::isTextureable(const gl::Context *context) const
     return mImplementation->isTexturable(context);
 }
 
+bool ExternalImageSibling::isYUV() const
+{
+    return mImplementation->isYUV();
+}
+
+bool ExternalImageSibling::isCubeMap() const
+{
+    return mImplementation->isCubeMap();
+}
+
+bool ExternalImageSibling::hasProtectedContent() const
+{
+    return mImplementation->hasProtectedContent();
+}
+
 void ExternalImageSibling::onAttach(const gl::Context *context, rx::Serial framebufferSerial) {}
 
 void ExternalImageSibling::onDetach(const gl::Context *context, rx::Serial framebufferSerial) {}
@@ -203,12 +241,15 @@ GLuint ExternalImageSibling::getId() const
     return 0;
 }
 
-gl::InitState ExternalImageSibling::initState(const gl::ImageIndex &imageIndex) const
+gl::InitState ExternalImageSibling::initState(GLenum binding,
+                                              const gl::ImageIndex &imageIndex) const
 {
     return gl::InitState::Initialized;
 }
 
-void ExternalImageSibling::setInitState(const gl::ImageIndex &imageIndex, gl::InitState initState)
+void ExternalImageSibling::setInitState(GLenum binding,
+                                        const gl::ImageIndex &imageIndex,
+                                        gl::InitState initState)
 {}
 
 rx::ExternalImageSiblingImpl *ExternalImageSibling::getImplementation() const
@@ -234,11 +275,15 @@ ImageState::ImageState(EGLenum target, ImageSibling *buffer, const AttributeMap 
       source(buffer),
       targets(),
       format(GL_NONE),
+      yuv(false),
+      cubeMap(false),
       size(),
       samples(),
+      levelCount(1),
       sourceType(target),
       colorspace(
-          static_cast<EGLenum>(attribs.get(EGL_GL_COLORSPACE, EGL_GL_COLORSPACE_DEFAULT_EXT)))
+          static_cast<EGLenum>(attribs.get(EGL_GL_COLORSPACE, EGL_GL_COLORSPACE_DEFAULT_EXT))),
+      hasProtectedContent(static_cast<bool>(attribs.get(EGL_PROTECTED_CONTENT_EXT, EGL_FALSE)))
 {}
 
 ImageState::~ImageState() {}
@@ -313,14 +358,14 @@ angle::Result Image::orphanSibling(const gl::Context *context, ImageSibling *sib
 
     if (mState.source == sibling)
     {
-        // The external source of an image cannot be redefined so it cannot be orpahend.
+        // The external source of an image cannot be redefined so it cannot be orphaned.
         ASSERT(!IsExternalImageTarget(mState.sourceType));
 
         // If the sibling is the source, it cannot be a target.
         ASSERT(mState.targets.find(sibling) == mState.targets.end());
         mState.source = nullptr;
         mOrphanedAndNeedsInit =
-            (sibling->initState(mState.imageIndex) == gl::InitState::MayNeedInit);
+            (sibling->initState(GL_NONE, mState.imageIndex) == gl::InitState::MayNeedInit);
     }
     else
     {
@@ -378,6 +423,21 @@ bool Image::isTexturable(const gl::Context *context) const
     return false;
 }
 
+bool Image::isYUV() const
+{
+    return mState.yuv;
+}
+
+bool Image::isCreatedWithAHB() const
+{
+    return mState.target == EGL_NATIVE_BUFFER_ANDROID;
+}
+
+bool Image::isCubeMap() const
+{
+    return mState.cubeMap;
+}
+
 size_t Image::getWidth() const
 {
     return mState.size.width;
@@ -386,6 +446,11 @@ size_t Image::getWidth() const
 size_t Image::getHeight() const
 {
     return mState.size.height;
+}
+
+const gl::Extents &Image::getExtents() const
+{
+    return mState.size;
 }
 
 bool Image::isLayered() const
@@ -398,6 +463,16 @@ size_t Image::getSamples() const
     return mState.samples;
 }
 
+GLuint Image::getLevelCount() const
+{
+    return mState.levelCount;
+}
+
+bool Image::hasProtectedContent() const
+{
+    return mState.hasProtectedContent;
+}
+
 rx::ImageImpl *Image::getImplementation() const
 {
     return mImplementation;
@@ -407,7 +482,15 @@ Error Image::initialize(const Display *display)
 {
     if (IsExternalImageTarget(mState.sourceType))
     {
-        ANGLE_TRY(rx::GetAs<ExternalImageSibling>(mState.source)->initialize(display));
+        ExternalImageSibling *externalSibling = rx::GetAs<ExternalImageSibling>(mState.source);
+        ANGLE_TRY(externalSibling->initialize(display));
+
+        mState.hasProtectedContent = externalSibling->hasProtectedContent();
+        mState.levelCount          = externalSibling->getLevelCount();
+        mState.cubeMap             = externalSibling->isCubeMap();
+
+        // External siblings can be YUV
+        mState.yuv = externalSibling->isYUV();
     }
 
     mState.format = mState.source->getAttachmentFormat(GL_NONE, mState.imageIndex);
@@ -423,8 +506,20 @@ Error Image::initialize(const Display *display)
         mState.format = gl::Format(nonLinearFormat);
     }
 
+    if (!IsExternalImageTarget(mState.sourceType))
+    {
+        // Account for the fact that GL_ANGLE_yuv_internal_format extension maybe enabled,
+        // in which case the internal format itself could be YUV.
+        mState.yuv = gl::IsYuvFormat(mState.format.info->sizedInternalFormat);
+    }
+
     mState.size    = mState.source->getAttachmentSize(mState.imageIndex);
     mState.samples = mState.source->getAttachmentSamples(mState.imageIndex);
+
+    if (IsTextureTarget(mState.sourceType))
+    {
+        mState.size.depth = 1;
+    }
 
     return mImplementation->initialize(display);
 }
@@ -441,7 +536,7 @@ gl::InitState Image::sourceInitState() const
         return mOrphanedAndNeedsInit ? gl::InitState::MayNeedInit : gl::InitState::Initialized;
     }
 
-    return mState.source->initState(mState.imageIndex);
+    return mState.source->initState(GL_NONE, mState.imageIndex);
 }
 
 void Image::setInitState(gl::InitState initState)
@@ -451,7 +546,12 @@ void Image::setInitState(gl::InitState initState)
         mOrphanedAndNeedsInit = false;
     }
 
-    return mState.source->setInitState(mState.imageIndex, initState);
+    return mState.source->setInitState(GL_NONE, mState.imageIndex, initState);
+}
+
+Error Image::exportVkImage(void *vkImage, void *vkImageCreateInfo)
+{
+    return mImplementation->exportVkImage(vkImage, vkImageCreateInfo);
 }
 
 void Image::notifySiblings(const ImageSibling *notifier, angle::SubjectMessage message)

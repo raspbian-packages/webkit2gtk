@@ -71,7 +71,7 @@ public:
     void setActive(bool) final;
     bool isActive() const final;
 
-    void didReceiveInitializationSegment(SourceBufferPrivateClient::InitializationSegment&&, CompletionHandler<void()>&&);
+    void didReceiveInitializationSegment(SourceBufferPrivateClient::InitializationSegment&&, CompletionHandler<void(SourceBufferPrivateClient::ReceiveResult)>&&);
     void didReceiveSample(Ref<MediaSample>&&);
     void didReceiveAllPendingSamples();
     void appendParsingFailed();
@@ -93,6 +93,8 @@ public:
     const Logger& sourceBufferLogger() const final { return m_logger; }
     const void* sourceBufferLogIdentifier() final { return logIdentifier(); }
 #endif
+
+    size_t platformMaximumBufferSize() const override;
 
 private:
     SourceBufferPrivateGStreamer(MediaSourcePrivateGStreamer*, const ContentType&, MediaPlayerPrivateGStreamerMSE&);

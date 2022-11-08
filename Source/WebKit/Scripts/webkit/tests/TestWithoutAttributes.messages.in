@@ -63,7 +63,7 @@ messages -> TestWithoutAttributes {
     SetVideoLayerID(WebCore::GraphicsLayer::PlatformLayerID videoLayerID)
 
 #if PLATFORM(MAC)
-    DidCreateWebProcessConnection(IPC::MachPort connectionIdentifier, OptionSet<WebKit::SelectionFlags> flags)
+    DidCreateWebProcessConnection(MachSendRight connectionIdentifier, OptionSet<WebKit::SelectionFlags> flags)
 #endif
 
 #if PLATFORM(MAC)
@@ -75,7 +75,7 @@ messages -> TestWithoutAttributes {
     DeprecatedOperation(IPC::DummyType dummy)
 #endif
 
-#if ENABLE(EXPERIMENTAL_FEATURE)
+#if ENABLE(FEATURE_FOR_TESTING)
     ExperimentalOperation(IPC::DummyType dummy)
 #endif
 }

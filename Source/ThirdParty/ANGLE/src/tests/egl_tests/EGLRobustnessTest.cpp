@@ -16,7 +16,7 @@
 
 using namespace angle;
 
-class EGLRobustnessTest : public ANGLETest
+class EGLRobustnessTest : public ANGLETest<>
 {
   public:
     void testSetUp() override
@@ -222,6 +222,7 @@ TEST_P(EGLRobustnessTest, DISABLED_ResettingDisplayWorks)
     ASSERT_TRUE(glGetGraphicsResetStatusEXT() == GL_NO_ERROR);
 }
 
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(EGLRobustnessTest);
 ANGLE_INSTANTIATE_TEST(EGLRobustnessTest,
                        WithNoFixture(ES2_VULKAN()),
                        WithNoFixture(ES2_D3D9()),

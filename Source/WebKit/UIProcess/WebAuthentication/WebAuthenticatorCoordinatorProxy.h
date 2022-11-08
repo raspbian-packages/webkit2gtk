@@ -28,6 +28,7 @@
 #if ENABLE(WEB_AUTHN)
 
 #include "MessageReceiver.h"
+#include <WebCore/CredentialRequestOptions.h>
 #include <WebCore/FrameIdentifier.h>
 #include <wtf/Forward.h>
 #include <wtf/Noncopyable.h>
@@ -41,6 +42,12 @@ struct PublicKeyCredentialRequestOptions;
 struct SecurityOriginData;
 }
 
+#if HAVE(UNIFIED_ASC_AUTH_UI)
+OBJC_CLASS ASCAuthorizationRemotePresenter;
+OBJC_CLASS ASCCredentialRequestContext;
+OBJC_CLASS ASCAgentProxy;
+#endif
+
 namespace WebKit {
 
 class WebPageProxy;
@@ -48,7 +55,9 @@ class WebPageProxy;
 struct FrameInfoData;
 struct WebAuthenticationRequestData;
 
-class WebAuthenticatorCoordinatorProxy : private IPC::MessageReceiver {
+using RequestCompletionHandler = CompletionHandler<void(const WebCore::AuthenticatorResponseData&, WebCore::AuthenticatorAttachment, const WebCore::ExceptionData&)>;
+
+class WebAuthenticatorCoordinatorProxy : public IPC::MessageReceiver {
     WTF_MAKE_FAST_ALLOCATED;
     WTF_MAKE_NONCOPYABLE(WebAuthenticatorCoordinatorProxy);
 public:
@@ -56,7 +65,6 @@ public:
     ~WebAuthenticatorCoordinatorProxy();
 
 private:
-    using RequestCompletionHandler = CompletionHandler<void(const WebCore::AuthenticatorResponseData&, WebCore::AuthenticatorAttachment, const WebCore::ExceptionData&)>;
     using QueryCompletionHandler = CompletionHandler<void(bool)>;
 
     // IPC::MessageReceiver.
@@ -64,12 +72,21 @@ private:
 
     // Receivers.
     void makeCredential(WebCore::FrameIdentifier, FrameInfoData&&, Vector<uint8_t>&& hash, WebCore::PublicKeyCredentialCreationOptions&&, bool processingUserGesture, RequestCompletionHandler&&);
-    void getAssertion(WebCore::FrameIdentifier, FrameInfoData&&, Vector<uint8_t>&& hash, WebCore::PublicKeyCredentialRequestOptions&&, bool processingUserGesture, RequestCompletionHandler&&);
+    void getAssertion(WebCore::FrameIdentifier, FrameInfoData&&, Vector<uint8_t>&& hash, WebCore::PublicKeyCredentialRequestOptions&&, WebCore::CredentialRequestOptions::MediationRequirement, std::optional<WebCore::SecurityOriginData>, bool processingUserGesture, RequestCompletionHandler&&);
     void isUserVerifyingPlatformAuthenticatorAvailable(QueryCompletionHandler&&);
+    void isConditionalMediationAvailable(QueryCompletionHandler&&);
 
     void handleRequest(WebAuthenticationRequestData&&, RequestCompletionHandler&&);
 
     WebPageProxy& m_webPageProxy;
+
+#if HAVE(UNIFIED_ASC_AUTH_UI)
+    void cancel();
+    RetainPtr<ASCCredentialRequestContext> contextForRequest(WebAuthenticationRequestData&&);
+    void performRequest(RetainPtr<ASCCredentialRequestContext>, RequestCompletionHandler&&);
+    RetainPtr<ASCAuthorizationRemotePresenter> m_presenter;
+    RetainPtr<ASCAgentProxy> m_proxy;
+#endif // HAVE(UNIFIED_ASC_AUTH_UI)
 };
 
 } // namespace WebKit

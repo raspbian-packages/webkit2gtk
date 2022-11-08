@@ -35,7 +35,7 @@
 #include <wtf/glib/WTFGType.h>
 
 /**
- * SECTION: JSCClass
+ * JSCClass:
  * @short_description: JavaScript custom class
  * @title: JSCClass
  * @see_also: JSCContext
@@ -110,10 +110,9 @@ private:
 
 static bool isWrappedObject(JSC::JSObject* jsObject)
 {
-    JSC::JSGlobalObject* globalObject = jsObject->globalObject();
     if (jsObject->isGlobalObject())
-        return jsObject->inherits<JSC::JSCallbackObject<JSC::JSAPIWrapperGlobalObject>>(globalObject->vm());
-    return jsObject->inherits<JSC::JSCallbackObject<JSC::JSAPIWrapperObject>>(globalObject->vm());
+        return jsObject->inherits<JSC::JSCallbackObject<JSC::JSAPIWrapperGlobalObject>>();
+    return jsObject->inherits<JSC::JSCallbackObject<JSC::JSAPIWrapperObject>>();
 }
 
 static JSClassRef wrappedObjectClass(JSC::JSObject* jsObject)
@@ -859,5 +858,5 @@ void jsc_class_add_property(JSCClass* jscClass, const char* name, GType property
 
     auto context = jscContextGetOrCreate(priv->context);
     GRefPtr<JSCValue> prototype = jscContextGetOrCreateValue(context.get(), toRef(priv->prototype.get()));
-    jsc_value_object_define_property_accessor(prototype.get(), name, JSC_VALUE_PROPERTY_CONFIGURABLE, propertyType, getter, setter, userData, destroyNotify);
+    jscValueAddPropertyAccessor(prototype.get(), name, propertyType, getter, setter, userData, destroyNotify);
 }

@@ -218,9 +218,9 @@ bool PageLoadState::hasOnlySecureContent(const Data& data)
         return false;
 
     if (data.state == State::Provisional)
-        return WTF::protocolIs(data.provisionalURL, "https");
+        return WTF::protocolIs(data.provisionalURL, "https"_s);
 
-    return WTF::protocolIs(data.url, "https");
+    return WTF::protocolIs(data.url, "https"_s);
 }
 
 bool PageLoadState::hasOnlySecureContent() const
@@ -477,7 +477,7 @@ void PageLoadState::didChangeProcessIsResponsive()
 
 void PageLoadState::callObserverCallback(void (Observer::*callback)())
 {
-    auto protectedPage = makeRef(m_webPageProxy);
+    Ref protectedPage { m_webPageProxy };
 
     auto observerCopy = m_observers;
     for (auto* observer : observerCopy) {

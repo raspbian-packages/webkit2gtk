@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010-2020 Apple Inc. All rights reserved.
+ * Copyright (C) 2010-2022 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -29,6 +29,7 @@
 #include "APIArray.h"
 #include "DownloadManager.h"
 #include "FrameInfoData.h"
+#include "InjectedBundleCSSStyleDeclarationHandle.h"
 #include "InjectedBundleHitTestResult.h"
 #include "InjectedBundleNodeHandle.h"
 #include "InjectedBundleRangeHandle.h"
@@ -41,6 +42,7 @@
 #include "WebChromeClient.h"
 #include "WebCoreArgumentCoders.h"
 #include "WebDocumentLoader.h"
+#include "WebImage.h"
 #include "WebPage.h"
 #include "WebPageProxyMessages.h"
 #include "WebProcess.h"
@@ -108,18 +110,18 @@ void WebFrame::initWithCoreMainFrame(WebPage& page, Frame& coreFrame)
 {
     page.send(Messages::WebPageProxy::DidCreateMainFrame(frameID()));
 
-    m_coreFrame = makeWeakPtr(coreFrame);
-    m_coreFrame->tree().setName(String());
+    m_coreFrame = coreFrame;
+    m_coreFrame->tree().setName(nullAtom());
     m_coreFrame->init();
 }
 
-Ref<WebFrame> WebFrame::createSubframe(WebPage* page, const String& frameName, HTMLFrameOwnerElement* ownerElement)
+Ref<WebFrame> WebFrame::createSubframe(WebPage* page, const AtomString& frameName, HTMLFrameOwnerElement* ownerElement)
 {
     auto frame = create();
     page->send(Messages::WebPageProxy::DidCreateSubframe(frame->frameID()));
 
     auto coreFrame = Frame::create(page->corePage(), ownerElement, makeUniqueRef<WebFrameLoaderClient>(frame.get()));
-    frame->m_coreFrame = makeWeakPtr(coreFrame.get());
+    frame->m_coreFrame = coreFrame;
 
     coreFrame->tree().setName(frameName);
     if (ownerElement) {
@@ -193,6 +195,7 @@ FrameInfoData WebFrame::info() const
         // FIXME: This should use the full request.
         ResourceRequest(url()),
         SecurityOriginData::fromFrame(m_coreFrame.get()),
+        m_coreFrame ? m_coreFrame->tree().name().string() : String(),
         m_frameID,
         parent ? std::optional<WebCore::FrameIdentifier> { parent->frameID() } : std::nullopt,
     };
@@ -306,14 +309,12 @@ void WebFrame::convertMainResourceLoadToDownload(DocumentLoader* documentLoader,
     SubresourceLoader* mainResourceLoader = documentLoader->mainResourceLoader();
 
     auto& webProcess = WebProcess::singleton();
-    // Use 0 to indicate that the resource load can't be converted and a new download must be started.
+    // Use std::nullopt to indicate that the resource load can't be converted and a new download must be started.
     // This can happen if there is no loader because the main resource is in the WebCore memory cache,
     // or because the conversion was attempted when not calling SubresourceLoader::didReceiveResponse().
-    uint64_t mainResourceLoadIdentifier;
+    std::optional<WebCore::ResourceLoaderIdentifier> mainResourceLoadIdentifier;
     if (mainResourceLoader)
         mainResourceLoadIdentifier = mainResourceLoader->identifier();
-    else
-        mainResourceLoadIdentifier = 0;
 
     std::optional<NavigatingToAppBoundDomain> isAppBound = NavigatingToAppBoundDomain::No;
     isAppBound = m_isNavigatingToAppBoundDomain;
@@ -341,10 +342,10 @@ String WebFrame::source() const
     DocumentLoader* documentLoader = m_coreFrame->loader().activeDocumentLoader();
     if (!documentLoader)
         return String();
-    RefPtr<SharedBuffer> mainResourceData = documentLoader->mainResourceData();
+    RefPtr<FragmentedSharedBuffer> mainResourceData = documentLoader->mainResourceData();
     if (!mainResourceData)
         return String();
-    return decoder->encoding().decode(mainResourceData->data(), mainResourceData->size());
+    return decoder->encoding().decode(mainResourceData->makeContiguous()->data(), mainResourceData->size());
 }
 
 String WebFrame::contentsAsString() const 
@@ -496,7 +497,7 @@ Ref<API::Array> WebFrame::childFrames()
 String WebFrame::layerTreeAsText() const
 {
     if (!m_coreFrame)
-        return "";
+        return emptyString();
 
     return m_coreFrame->contentRenderer()->compositor().layerTreeAsText();
 }
@@ -533,19 +534,20 @@ JSGlobalContextRef WebFrame::jsContextForWorld(InjectedBundleScriptWorld* world)
     return toGlobalRef(m_coreFrame->script().globalObject(world->coreWorld()));
 }
 
-bool WebFrame::handlesPageScaleGesture() const
+JSGlobalContextRef WebFrame::jsContextForServiceWorkerWorld(InjectedBundleScriptWorld* world)
 {
-    auto* pluginView = WebPage::pluginViewForFrame(m_coreFrame.get());
-    return pluginView && pluginView->handlesPageScaleFactor();
+#if ENABLE(SERVICE_WORKER)
+    if (!m_coreFrame || !m_coreFrame->page())
+        return nullptr;
+
+    return toGlobalRef(m_coreFrame->page()->serviceWorkerGlobalObject(world->coreWorld()));
+#else
+    UNUSED_PARAM(world);
+    return nullptr;
+#endif
 }
 
-bool WebFrame::requiresUnifiedScaleFactor() const
-{
-    auto* pluginView = WebPage::pluginViewForFrame(m_coreFrame.get());
-    return pluginView && pluginView->requiresUnifiedScaleFactor();
-}
-
-void WebFrame::setAccessibleName(const String& accessibleName)
+void WebFrame::setAccessibleName(const AtomString& accessibleName)
 {
     if (!AXObjectCache::accessibilityEnabled())
         return;
@@ -659,7 +661,7 @@ bool WebFrame::getDocumentBackgroundColor(double* red, double* green, double* bl
     if (!bgColor.isValid())
         return false;
 
-    auto [r, g, b, a] = bgColor.toSRGBALossy<float>();
+    auto [r, g, b, a] = bgColor.toColorTypeLossy<SRGBA<float>>().resolved();
     *red = r;
     *green = g;
     *blue = b;
@@ -702,14 +704,25 @@ void WebFrame::stopLoading()
 
 WebFrame* WebFrame::frameForContext(JSContextRef context)
 {
-    JSC::JSGlobalObject* globalObjectObj = toJS(context);
-    JSDOMWindow* window = jsDynamicCast<JSDOMWindow*>(globalObjectObj->vm(), globalObjectObj);
-    if (!window)
+    auto* coreFrame = Frame::fromJSContext(context);
+    return coreFrame ? WebFrame::fromCoreFrame(*coreFrame) : nullptr;
+}
+
+WebFrame* WebFrame::contentFrameForWindowOrFrameElement(JSContextRef context, JSValueRef value)
+{
+    auto* coreFrame = Frame::contentFrameFromWindowOrFrameElement(context, value);
+    return coreFrame ? WebFrame::fromCoreFrame(*coreFrame) : nullptr;
+}
+
+JSValueRef WebFrame::jsWrapperForWorld(InjectedBundleCSSStyleDeclarationHandle* cssStyleDeclarationHandle, InjectedBundleScriptWorld* world)
+{
+    if (!m_coreFrame)
         return nullptr;
-    auto* coreFrame = window->wrapped().frame();
-    if (!coreFrame)
-        return nullptr;
-    return WebFrame::fromCoreFrame(*coreFrame);
+
+    JSDOMWindow* globalObject = m_coreFrame->script().globalObject(world->coreWorld());
+
+    JSLockHolder lock(globalObject);
+    return toRef(globalObject, toJS(globalObject, globalObject, cssStyleDeclarationHandle->coreCSSStyleDeclaration()));
 }
 
 JSValueRef WebFrame::jsWrapperForWorld(InjectedBundleNodeHandle* nodeHandle, InjectedBundleScriptWorld* world)
@@ -736,7 +749,7 @@ JSValueRef WebFrame::jsWrapperForWorld(InjectedBundleRangeHandle* rangeHandle, I
 
 String WebFrame::counterValue(JSObjectRef element)
 {
-    if (!toJS(element)->inherits<JSElement>(toJS(element)->vm()))
+    if (!toJS(element)->inherits<JSElement>())
         return String();
 
     return counterValueForElement(&jsCast<JSElement*>(toJS(element))->wrapped());
@@ -801,11 +814,11 @@ void WebFrame::setTextDirection(const String& direction)
     if (!m_coreFrame)
         return;
 
-    if (direction == "auto")
+    if (direction == "auto"_s)
         m_coreFrame->editor().setBaseWritingDirection(WritingDirection::Natural);
-    else if (direction == "ltr")
+    else if (direction == "ltr"_s)
         m_coreFrame->editor().setBaseWritingDirection(WritingDirection::LeftToRight);
-    else if (direction == "rtl")
+    else if (direction == "rtl"_s)
         m_coreFrame->editor().setBaseWritingDirection(WritingDirection::RightToLeft);
 }
 
@@ -835,27 +848,13 @@ RetainPtr<CFDataRef> WebFrame::webArchiveData(FrameFilterFunction callback, void
 }
 #endif
 
-RefPtr<ShareableBitmap> WebFrame::createSelectionSnapshot() const
+RefPtr<WebImage> WebFrame::createSelectionSnapshot() const
 {
-    auto snapshot = snapshotSelection(*coreFrame(), { { WebCore::SnapshotFlags::ForceBlackText }, PixelFormat::BGRA8, DestinationColorSpace::SRGB() });
+    auto snapshot = snapshotSelection(*coreFrame(), { { WebCore::SnapshotFlags::ForceBlackText, WebCore::SnapshotFlags::Shareable }, PixelFormat::BGRA8, DestinationColorSpace::SRGB() });
     if (!snapshot)
         return nullptr;
 
-    auto sharedSnapshot = ShareableBitmap::createShareable(snapshot->backendSize(), { });
-    if (!sharedSnapshot)
-        return nullptr;
-
-    // FIXME: We should consider providing a way to use subpixel antialiasing for the snapshot
-    // if we're compositing this image onto a solid color (e.g. the modern find indicator style).
-    auto graphicsContext = sharedSnapshot->createGraphicsContext();
-    if (!graphicsContext)
-        return nullptr;
-
-    float deviceScaleFactor = coreFrame()->page()->deviceScaleFactor();
-    graphicsContext->scale(deviceScaleFactor);
-    graphicsContext->drawConsumingImageBuffer(WTFMove(snapshot), FloatPoint());
-
-    return sharedSnapshot;
+    return WebImage::create(snapshot.releaseNonNull());
 }
 
 #if ENABLE(APP_BOUND_DOMAINS)

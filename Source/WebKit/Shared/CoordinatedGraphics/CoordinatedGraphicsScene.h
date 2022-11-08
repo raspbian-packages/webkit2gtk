@@ -27,6 +27,7 @@
 #include <WebCore/GraphicsLayer.h>
 #include <WebCore/IntRect.h>
 #include <WebCore/IntSize.h>
+#include <WebCore/NicosiaImageBackingStore.h>
 #include <WebCore/NicosiaPlatformLayer.h>
 #include <WebCore/TextureMapper.h>
 #include <WebCore/TextureMapperBackingStore.h>
@@ -65,6 +66,7 @@ public:
 
     void applyStateChanges(const Vector<WebCore::CoordinatedGraphicsState>&);
     void paintToCurrentGLContext(const WebCore::TransformationMatrix&, const WebCore::FloatRect&, WebCore::TextureMapper::PaintFlags = 0);
+    void updateSceneState();
     void detach();
 
     // The painting thread must lock the main thread to use below two methods, because two methods access members that the main thread manages. See m_client.
@@ -76,7 +78,6 @@ public:
 
 private:
     void commitSceneState(const WebCore::CoordinatedGraphicsState::NicosiaState&);
-    void updateSceneState();
 
     WebCore::TextureMapperLayer* rootLayer() { return m_rootLayer.get(); }
 
@@ -92,6 +93,7 @@ private:
     } m_nicosia;
 
     std::unique_ptr<WebCore::TextureMapper> m_textureMapper;
+    HashSet<Ref<Nicosia::ImageBackingStore::BackingStoreContainer>> m_imageBackingStoreContainers;
 
     // Below two members are accessed by only the main thread. The painting thread must lock the main thread to access both members.
     CoordinatedGraphicsSceneClient* m_client;

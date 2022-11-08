@@ -44,6 +44,32 @@ template<typename T> using WeakHashSet = WTF::WeakHashSet<T, WeakPtrCounter>;
 template<typename T> using WeakPtr = WTF::WeakPtr<T, WeakPtrCounter>;
 template<typename T> using WeakPtrFactory = WTF::WeakPtrFactory<T, WeakPtrCounter>;
 
+// FIXME: Drop when we support C++20. C++17 does not support template parameter deduction for aliases and WeakPtr is an alias in this file.
+template<typename T, typename = std::enable_if_t<!WTF::IsSmartPtr<T>::value>> inline auto makeWeakPtr(T& object, EnableWeakPtrThreadingAssertions enableWeakPtrThreadingAssertions = EnableWeakPtrThreadingAssertions::Yes)
+{
+    return object.weakPtrFactory().template createWeakPtr<T>(object, enableWeakPtrThreadingAssertions);
+}
+
+// FIXME: Drop when we support C++20. C++17 does not support template parameter deduction for aliases and WeakPtr is an alias in this file.
+template<typename T, typename = std::enable_if_t<!WTF::IsSmartPtr<T>::value>> inline auto makeWeakPtr(T* ptr, EnableWeakPtrThreadingAssertions enableWeakPtrThreadingAssertions = EnableWeakPtrThreadingAssertions::Yes) -> decltype(makeWeakPtr(*ptr))
+{
+    if (!ptr)
+        return { };
+    return makeWeakPtr(*ptr, enableWeakPtrThreadingAssertions);
+}
+
+// FIXME: Drop when we support C++20. C++17 does not support template parameter deduction for aliases and WeakPtr is an alias in this file.
+template<typename T, typename = std::enable_if_t<!WTF::IsSmartPtr<T>::value>> inline auto makeWeakPtr(const Ref<T>& object, EnableWeakPtrThreadingAssertions enableWeakPtrThreadingAssertions = EnableWeakPtrThreadingAssertions::Yes)
+{
+    return makeWeakPtr(object.get(), enableWeakPtrThreadingAssertions);
+}
+
+// FIXME: Drop when we support C++20. C++17 does not support template parameter deduction for aliases and WeakPtr is an alias in this file.
+template<typename T, typename = std::enable_if_t<!WTF::IsSmartPtr<T>::value>> inline auto makeWeakPtr(const RefPtr<T>& object, EnableWeakPtrThreadingAssertions enableWeakPtrThreadingAssertions = EnableWeakPtrThreadingAssertions::Yes)
+{
+    return makeWeakPtr(object.get(), enableWeakPtrThreadingAssertions);
+}
+
 struct Int : public CanMakeWeakPtr<Int> {
     Int(int i) : m_i(i) { }
     operator int() const { return m_i; }
@@ -1162,6 +1188,23 @@ TEST(WTF_WeakPtr, WeakHashMapConstObjects)
     }
 }
 
+TEST(WTF_WeakPtr, WeakHashMapRemoveIterator)
+{
+    WeakHashMap<Base, int> weakHashMap;
+    Vector<std::unique_ptr<Base>> objects;
+    for (unsigned i = 0; i < 13; ++i) {
+        auto object = makeUnique<Base>();
+        weakHashMap.add(*object, 0);
+        objects.append(WTFMove(object));
+    }
+    while (!objects.isEmpty()) {
+        auto it = weakHashMap.find(*objects.last());
+        objects.remove(0);
+        weakHashMap.remove(it);
+        weakHashMap.checkConsistency();
+    }
+}
+
 TEST(WTF_WeakPtr, WeakHashMapExpansion)
 {
     unsigned initialCapacity;
@@ -1576,13 +1619,13 @@ TEST(WTF_WeakPtr, WeakHashMapIterators)
         auto pairs = collectKeyValuePairsUsingIterators<Base*, int>(weakHashMap);
         EXPECT_EQ(pairs.size(), 0u);
 
-        EXPECT_EQ(s_baseWeakReferences, 0u); // Iterating over WeakHashMap should have triggerd amortized deletion.
+        EXPECT_EQ(s_baseWeakReferences, 36u);
         weakHashMap.checkConsistency();
-        EXPECT_FALSE(weakHashMap.hasNullReferences());
+        EXPECT_TRUE(weakHashMap.hasNullReferences());
     }
 
     {
-        WeakHashMap<Base, Ref<ValueObject>> weakHashMap;
+        WeakHashMap<Base, RefPtr<ValueObject>> weakHashMap;
         {
             Vector<std::pair<std::unique_ptr<Base>, RefPtr<ValueObject>>> objects;
             for (unsigned i = 0; i < 50; ++i) {
@@ -1592,7 +1635,7 @@ TEST(WTF_WeakPtr, WeakHashMapIterators)
                     objects.append(std::pair { makeUnique<Base>(), ValueObject::create(i) });
                 objects.last().first->dummy = 0;
                 if (i < 25)
-                    weakHashMap.add(*objects.last().first, *objects.last().second);
+                    weakHashMap.add(*objects.last().first, objects.last().second);
             }
             weakHashMap.checkConsistency();
             EXPECT_EQ(s_baseWeakReferences, 25u);
@@ -1678,7 +1721,7 @@ TEST(WTF_WeakPtr, WeakHashMapIterators)
         }
         EXPECT_EQ(s_baseWeakReferences, 16u);
         EXPECT_TRUE(weakHashMap.hasNullReferences());
-        auto pairs = collectKeyValuePairsUsingIterators<Base*, Ref<ValueObject>>(weakHashMap);
+        auto pairs = collectKeyValuePairsUsingIterators<Base*, RefPtr<ValueObject>>(weakHashMap);
         EXPECT_EQ(pairs.size(), 0U);
         weakHashMap.removeNullReferences();
         EXPECT_FALSE(weakHashMap.hasNullReferences());
@@ -1718,8 +1761,8 @@ TEST(WTF_WeakPtr, WeakHashMapAmortizedCleanup)
                 collectKeyValuePairsUsingIterators<Base*, int>(weakHashMap);
 
             weakHashMap.checkConsistency();
-            EXPECT_EQ(s_baseWeakReferences, 40u);
-            EXPECT_FALSE(weakHashMap.hasNullReferences());
+            EXPECT_EQ(s_baseWeakReferences, 50u);
+            EXPECT_TRUE(weakHashMap.hasNullReferences());
 
             for (unsigned i = 0; i < 50; ++i) {
                 if (!(i % 9))
@@ -1734,8 +1777,8 @@ TEST(WTF_WeakPtr, WeakHashMapAmortizedCleanup)
                 collectKeyValuePairsUsingIterators<Base*, int>(weakHashMap);
 
             weakHashMap.checkConsistency();
-            EXPECT_EQ(s_baseWeakReferences, 36u);
-            EXPECT_FALSE(weakHashMap.hasNullReferences());
+            EXPECT_EQ(s_baseWeakReferences, 40u);
+            EXPECT_TRUE(weakHashMap.hasNullReferences());
         }
     }
 
@@ -1771,9 +1814,9 @@ TEST(WTF_WeakPtr, WeakHashMapAmortizedCleanup)
                 }
             }
             weakHashMap.checkConsistency();
-            EXPECT_EQ(s_baseWeakReferences, 42u);
-            EXPECT_EQ(ValueObject::s_count, 42u);
-            EXPECT_FALSE(weakHashMap.hasNullReferences());
+            EXPECT_EQ(s_baseWeakReferences, 50u);
+            EXPECT_EQ(ValueObject::s_count, 50u);
+            EXPECT_TRUE(weakHashMap.hasNullReferences());
 
             for (unsigned i = 0; i < 50; ++i) {
                 if (!(i % 3))
@@ -1810,6 +1853,30 @@ TEST(WTF_WeakPtr, WeakHashMapAmortizedCleanup)
         EXPECT_EQ(s_baseWeakReferences, 0u);
         EXPECT_EQ(ValueObject::s_count, 0u);
         EXPECT_FALSE(weakHashMap.hasNullReferences());
+    }
+}
+
+TEST(WTF_WeakPtr, WeakHashMap_iterator_destruction)
+{
+    constexpr unsigned objectCount = 10;
+    WeakHashMap<Base, unsigned> weakHashMap;
+    Vector<std::unique_ptr<Base>> objects;
+    objects.reserveInitialCapacity(objectCount);
+    for (unsigned i = 0; i < objectCount; ++i) {
+        auto object = makeUnique<Base>();
+        weakHashMap.add(*object, i);
+        objects.uncheckedAppend(WTFMove(object));
+    }
+
+    auto a = objects.takeLast();
+    auto b = objects.takeLast();
+
+    auto aIterator = weakHashMap.find(*a);
+    objects.clear();
+    for (unsigned i = 0; i < 20; ++i) {
+        auto bIterator = weakHashMap.find(*b);
+        EXPECT_EQ(bIterator->value, objectCount - 2);
+        EXPECT_EQ(aIterator->value, objectCount - 1);
     }
 }
 

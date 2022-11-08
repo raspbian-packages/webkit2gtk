@@ -21,7 +21,9 @@
 
 #include "LoadTrackingTest.h"
 #include "WebKitTestServer.h"
+#include "WebKitWebViewInternal.h"
 #include <WebCore/SoupVersioning.h>
+#include <libsoup/soup.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <wtf/HashMap.h>
@@ -95,16 +97,18 @@ public:
         {
         }
 
-        URISchemeHandler(const char* reply, int replyLength, const char* mimeType)
+        URISchemeHandler(const char* reply, int replyLength, const char* mimeType, int statusCode = 200)
             : reply(reply)
             , replyLength(replyLength)
             , mimeType(mimeType)
+            , statusCode(statusCode)
         {
         }
 
         CString reply;
         int replyLength;
         CString mimeType;
+        int statusCode;
     };
 
     static void uriSchemeRequestCallback(WebKitURISchemeRequest* request, gpointer userData)
@@ -113,11 +117,25 @@ public:
         test->m_uriSchemeRequest = request;
         test->assertObjectIsDeletedWhenTestFinishes(G_OBJECT(request));
 
-        g_assert_true(webkit_uri_scheme_request_get_web_view(request) == test->m_webView);
+        if (test->m_uriSchemeRequestCallbackUsesTestWebView)
+            g_assert_true(webkit_uri_scheme_request_get_web_view(request) == test->m_webView);
 
         const char* scheme = webkit_uri_scheme_request_get_scheme(request);
         g_assert_nonnull(scheme);
         g_assert_true(test->m_handlersMap.contains(String::fromUTF8(scheme)));
+
+        const char* method = webkit_uri_scheme_request_get_http_method(request);
+        g_assert_nonnull(method);
+        if (!g_strcmp0(scheme, "post"))
+            g_assert_cmpstr(method, ==, "POST");
+        else
+            g_assert_cmpstr(method, ==, "GET");
+
+        if (!g_strcmp0(scheme, "headers")) {
+            auto* headers = webkit_uri_scheme_request_get_http_headers(request);
+            g_assert_cmpstr(soup_message_headers_get_one(headers, "x-test"), ==, "A");
+            g_assert_cmpstr(soup_message_headers_get_list(headers, "x-test2"), ==, "1, 2, 3, 4");
+        }
 
         const URISchemeHandler& handler = test->m_handlersMap.get(String::fromUTF8(scheme));
 
@@ -153,22 +171,32 @@ public:
         else if (!handler.reply.isNull())
             g_memory_input_stream_add_data(G_MEMORY_INPUT_STREAM(inputStream.get()), handler.reply.data(), handler.reply.length(), 0);
 
-        webkit_uri_scheme_request_finish(request, inputStream.get(), handler.replyLength, handler.mimeType.data());
+        auto response = adoptGRef(webkit_uri_scheme_response_new(inputStream.get(), handler.replyLength));
+        webkit_uri_scheme_response_set_status(response.get(), handler.statusCode, nullptr);
+        webkit_uri_scheme_response_set_content_type(response.get(), handler.mimeType.data());
+        if (!g_strcmp0(scheme, "headersresp")) {
+            auto* headers = soup_message_headers_new(SOUP_MESSAGE_HEADERS_RESPONSE);
+            soup_message_headers_append(headers, "x-test", "test_value");
+            webkit_uri_scheme_response_set_http_headers(response.get(), headers);
+        }
+        webkit_uri_scheme_request_finish_with_response(request, response.get());
     }
 
-    void registerURISchemeHandler(const char* scheme, const char* reply, int replyLength, const char* mimeType)
+    void registerURISchemeHandler(const char* scheme, const char* reply, int replyLength, const char* mimeType, int statusCode = 200)
     {
-        m_handlersMap.set(String::fromUTF8(scheme), URISchemeHandler(reply, replyLength, mimeType));
+        m_handlersMap.set(String::fromUTF8(scheme), URISchemeHandler(reply, replyLength, mimeType, statusCode));
         webkit_web_context_register_uri_scheme(m_webContext.get(), scheme, uriSchemeRequestCallback, this, 0);
     }
 
     GRefPtr<WebKitURISchemeRequest> m_uriSchemeRequest;
     HashMap<String, URISchemeHandler> m_handlersMap;
+    bool m_uriSchemeRequestCallbackUsesTestWebView { true };
+    int m_loadCounter { 0 };
 };
 
 String generateHTMLContent(unsigned contentLength)
 {
-    String baseString("abcdefghijklmnopqrstuvwxyz0123457890");
+    String baseString("abcdefghijklmnopqrstuvwxyz0123457890"_s);
     unsigned baseLength = baseString.length();
 
     StringBuilder builder;
@@ -191,6 +219,21 @@ String generateHTMLContent(unsigned contentLength)
     builder.append("</body></html>");
 
     return builder.toString();
+}
+
+static GRefPtr<WebKitWebView> createTestWebViewWithWebContext(WebKitWebContext* context)
+{
+    WebKitWebView* view = WEBKIT_WEB_VIEW(g_object_new(WEBKIT_TYPE_WEB_VIEW,
+#if PLATFORM(WPE)
+        "backend", Test::createWebViewBackend(),
+#endif
+        "web-context", context,
+        nullptr));
+
+#if PLATFORM(GTK)
+    g_object_ref_sink(view);
+#endif
+    return adoptGRef(view);
 }
 
 static void testWebContextURIScheme(URISchemeTest* test, gconstpointer)
@@ -278,6 +321,85 @@ static void testWebContextURIScheme(URISchemeTest* test, gconstpointer)
     g_assert_true(test->m_loadEvents.contains(LoadTrackingTest::ProvisionalLoadFailed));
     g_assert_true(test->m_loadFailed);
     g_assert_error(test->m_error.get(), G_IO_ERROR, G_IO_ERROR_CLOSED);
+
+    test->registerURISchemeHandler("notfound", kBarHTML, strlen(kBarHTML), "text/html", 404);
+    test->m_loadEvents.clear();
+    test->loadURI("notfound:blank");
+    test->waitUntilLoadFinished();
+    g_assert_false(test->m_loadEvents.contains(LoadTrackingTest::ProvisionalLoadFailed));
+
+    test->registerURISchemeHandler("nocontent", nullptr, 0, "application/json", 204);
+    test->m_loadEvents.clear();
+    test->loadURI("nocontent:blank");
+    test->waitUntilLoadFinished();
+    g_assert_false(test->m_loadEvents.contains(LoadTrackingTest::ProvisionalLoadFailed));
+    g_assert_false(test->m_loadEvents.contains(LoadTrackingTest::LoadFailed));
+
+    static const char* formHTML = "<html><body><form id=\"test-form\" method=\"POST\" action=\"post:data\"></form></body></html>";
+    test->registerURISchemeHandler("post", nullptr, 0, "application/json", 204);
+    test->m_loadEvents.clear();
+    test->loadHtml(formHTML, "post:form");
+    test->waitUntilLoadFinished();
+    GUniqueOutPtr<GError> postError;
+    test->runJavaScriptAndWaitUntilFinished("document.getElementById('test-form').submit()", &postError.outPtr());
+    g_assert_no_error(postError.get());
+    test->waitUntilLoadFinished();
+    g_assert_false(test->m_loadEvents.contains(LoadTrackingTest::ProvisionalLoadFailed));
+    g_assert_false(test->m_loadEvents.contains(LoadTrackingTest::LoadFailed));
+
+    static const char* headersHTML = "<html><body><script>let hdrs = new Headers({'X-Test': 'A', 'X-Test2': '1, 2, 3'});hdrs.append('X-Test2', '4');fetch('headers:data', {headers: hdrs})</script></body></html>";
+    test->registerURISchemeHandler("headers", nullptr, 0, "application/json", 204);
+    test->m_loadEvents.clear();
+    test->loadHtml(headersHTML, "headers:form");
+    test->waitUntilLoadFinished();
+    g_assert_false(test->m_loadEvents.contains(LoadTrackingTest::ProvisionalLoadFailed));
+    g_assert_false(test->m_loadEvents.contains(LoadTrackingTest::LoadFailed));
+
+    static const char* respHTML = "<html><head><script>fetch('headersresp:data').then((d)=>{if(d.headers.get('X-Test') !== 'test_value') window.hasError=1}).catch((e)=> window.hasError=1)</script></head></html>";
+    test->registerURISchemeHandler("headersresp", nullptr, 0, "application/json", 204);
+    test->m_loadEvents.clear();
+    test->loadHtml(respHTML, "headersresp:form");
+    test->waitUntilLoadFinished();
+    GUniqueOutPtr<GError> respError;
+    test->runJavaScriptAndWaitUntilFinished("if(window.hasError) throw 'Headers are missing or invalid'", &respError.outPtr());
+    g_assert_no_error(respError.get());
+    g_assert_false(test->m_loadEvents.contains(LoadTrackingTest::ProvisionalLoadFailed));
+    g_assert_false(test->m_loadEvents.contains(LoadTrackingTest::LoadFailed));
+
+    // Torture test time: make sure it still works if we issue a bunch of different requests all at
+    // once. Each request should finish and return exactly the same data.
+    int numIterations = 25;
+    GRefPtr<WebKitWebView> views[numIterations];
+    test->m_uriSchemeRequestCallbackUsesTestWebView = false;
+    for (int i = 0; i < numIterations; i++) {
+        views[i] = createTestWebViewWithWebContext(test->m_webContext.get());
+        test->assertObjectIsDeletedWhenTestFinishes(G_OBJECT(views[i].get()));
+        webkit_web_view_load_uri(views[i].get(), "foo:blank");
+        g_signal_connect(views[i].get(), "load-changed", G_CALLBACK(+[] (WebKitWebView* webView, WebKitLoadEvent loadEvent, gpointer userData) {
+            auto* test = static_cast<URISchemeTest*>(userData);
+            if (loadEvent != WEBKIT_LOAD_FINISHED)
+                return;
+            test->m_loadCounter--;
+            if (!test->m_loadCounter)
+                g_main_loop_quit(test->m_mainLoop);
+        }), test);
+    }
+    test->m_loadCounter = numIterations;
+    g_main_loop_run(test->m_mainLoop);
+
+    for (int i = 0; i < numIterations; i++) {
+        WebKitWebResource* resource = webkit_web_view_get_main_resource(views[i].get());
+        g_assert_nonnull(resource);
+        webkit_web_resource_get_data(resource, nullptr, +[] (GObject* object, GAsyncResult* result, gpointer userData) {
+            auto* test = static_cast<URISchemeTest*>(userData);
+            gsize dataSize;
+            unsigned char* data = webkit_web_resource_get_data_finish(WEBKIT_WEB_RESOURCE(object), result, &dataSize, nullptr);
+            g_assert_cmpint(strncmp(reinterpret_cast<char*>(data), kBarHTML, dataSize), ==, 0);
+            g_main_loop_quit(test->m_mainLoop);
+        }, test);
+        g_main_loop_run(test->m_mainLoop);
+    }
+    test->m_uriSchemeRequestCallbackUsesTestWebView = true;
 }
 
 #if PLATFORM(GTK)
@@ -870,6 +992,84 @@ static void testMemoryPressureSettings(MemoryPressureTest* test, gconstpointer)
     g_assert_cmpuint(test->m_terminationReason, ==, WEBKIT_WEB_PROCESS_EXCEEDED_MEMORY_LIMIT);
 }
 
+static void testWebContextTimeZoneOverride(WebViewTest* test, gconstpointer)
+{
+    GUniqueOutPtr<GError> error;
+    WebKitJavascriptResult* javascriptResult = test->runJavaScriptAndWaitUntilFinished("const date = new Date(1651511226050); date.getTimezoneOffset()", &error.outPtr());
+    g_assert_nonnull(javascriptResult);
+    g_assert_no_error(error.get());
+    // By default the test harness uses the Pacific/Los_Angeles timezone which is 7 hours (420 minutes) compared to GMT.
+    g_assert_cmpint(WebViewTest::javascriptResultToNumber(javascriptResult), ==, 420);
+
+    // Create a new context configured with time zone overide set to Berlin which is 120 minutes ahead of the GMT offset.
+    auto webContext = adoptGRef(WEBKIT_WEB_CONTEXT(g_object_new(WEBKIT_TYPE_WEB_CONTEXT,
+        "time-zone-override", "Europe/Berlin", nullptr)));
+    g_assert_cmpstr(webkit_web_context_get_time_zone_override(webContext.get()), ==, "Europe/Berlin");
+    auto webView = Test::adoptView(Test::createWebView(webContext.get()));
+    javascriptResult = test->runJavaScriptAndWaitUntilFinished("const date = new Date(1651511226050); date.getTimezoneOffset()", &error.outPtr(), webView.get());
+    g_assert_nonnull(javascriptResult);
+    g_assert_no_error(error.get());
+    g_assert_cmpint(WebViewTest::javascriptResultToNumber(javascriptResult), ==, -120);
+}
+
+static void testWebContextTimeZoneOverrideInWorker(WebViewTest* test, gconstpointer)
+{
+    GUniqueOutPtr<GError> error;
+    WebKitJavascriptResult* javascriptResult = test->runJavaScriptAndWaitUntilFinished("Intl.DateTimeFormat().resolvedOptions().timeZone", &error.outPtr());
+    g_assert_nonnull(javascriptResult);
+    g_assert_no_error(error.get());
+    // By default the test harness uses the Pacific/Los_Angeles.
+    g_assert_cmpstr(WebViewTest::javascriptResultToCString(javascriptResult), ==, "America/Los_Angeles");
+    // Create a new context configured with time zone overide set to Berlin which is 120 minutes ahead of the GMT offset.
+    auto webContext = adoptGRef(WEBKIT_WEB_CONTEXT(g_object_new(WEBKIT_TYPE_WEB_CONTEXT,
+        "time-zone-override", "Europe/Berlin", nullptr)));
+    g_assert_cmpstr(webkit_web_context_get_time_zone_override(webContext.get()), ==, "Europe/Berlin");
+    auto webView = Test::adoptView(Test::createWebView(webContext.get()));
+
+    test->runJavaScriptAndWaitUntilFinished(
+        "window.results = [Intl.DateTimeFormat().resolvedOptions().timeZone];"
+        "for (let i = 0; i < 3; i++) {"
+        "  const worker = new Worker('data:text/javascript,self.postMessage(Intl.DateTimeFormat().resolvedOptions().timeZone)');"
+        "  worker.onmessage = message => results.push(message.data);"
+        "}", &error.outPtr(), webView.get());
+    do {
+        javascriptResult = test->runJavaScriptAndWaitUntilFinished("results.length", &error.outPtr(), webView.get());
+        g_assert_nonnull(javascriptResult);
+        g_assert_no_error(error.get());
+    } while (WebViewTest::javascriptResultToNumber(javascriptResult) < 4);
+
+    javascriptResult = test->runJavaScriptAndWaitUntilFinished("results.join(', ')", &error.outPtr(), webView.get());
+    g_assert_nonnull(javascriptResult);
+    g_assert_no_error(error.get());
+    g_assert_cmpstr(WebViewTest::javascriptResultToCString(javascriptResult), ==, "Europe/Berlin, Europe/Berlin, Europe/Berlin, Europe/Berlin");
+}
+
+static void testNoWebProcessLeakAfterWebKitWebContextDestroy(WebViewTest* test, gconstpointer)
+{
+    webkitSetCachedProcessSuspensionDelayForTesting(0);
+    GRefPtr<WebKitWebContext> webContext = adoptGRef(WEBKIT_WEB_CONTEXT(g_object_new(WEBKIT_TYPE_WEB_CONTEXT, nullptr)));
+    GRefPtr<WebKitWebView> webView = Test::adoptView(Test::createWebView(webContext.get()));
+    webkit_web_view_load_uri(webView.get(), kServer->getURIForPath("/").data());
+    test->waitUntilLoadFinished(webView.get());
+    bool didRunForceRepaintCallback = false;
+    webkitWebViewForceRepaintForTesting(webView.get(), [] (gpointer data) {
+        *static_cast<bool*>(data) = true;
+    }, &didRunForceRepaintCallback);
+    webView.clear();
+    // Wait for shutdownPreventingScope created in WebPageProxy::close to be destroyed.
+    while (g_main_context_pending(nullptr))
+        g_main_context_iteration(nullptr, TRUE);
+    webContext.clear();
+    while (!didRunForceRepaintCallback)
+        test->wait(0.1);
+    // At this point page web process should have exited and the callback is expected to have
+    // been invoked during the IPC connection destruction.
+    //
+    // Ideally we'd check that underlying WebProcesPool, and WebProcessProxy have been destroyed too
+    // but there is no public API for that.
+    g_assert_true(didRunForceRepaintCallback);
+}
+
 void beforeAll()
 {
     kServer = new WebKitTestServer();
@@ -887,6 +1087,9 @@ void beforeAll()
     WebViewTest::add("WebKitSecurityManager", "file-xhr", testWebContextSecurityFileXHR);
     ProxyTest::add("WebKitWebContext", "proxy", testWebContextProxySettings);
     MemoryPressureTest::add("WebKitWebContext", "memory-pressure", testMemoryPressureSettings);
+    WebViewTest::add("WebKitWebContext", "timezone", testWebContextTimeZoneOverride);
+    WebViewTest::add("WebKitWebContext", "timezone-worker", testWebContextTimeZoneOverrideInWorker);
+    WebViewTest::add("WebKitWebContext", "no-web-process-leak", testNoWebProcessLeakAfterWebKitWebContextDestroy);
 }
 
 void afterAll()

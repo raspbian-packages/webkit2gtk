@@ -33,6 +33,7 @@
 #include "MediaPlayerPrivateRemote.h"
 #include "MediaSourcePrivateRemote.h"
 #include "RemoteSourceBufferProxyMessages.h"
+#include "SharedBufferReference.h"
 #include "SourceBufferPrivateRemoteMessages.h"
 #include <WebCore/PlatformTimeRanges.h>
 #include <WebCore/SourceBufferPrivateClient.h>
@@ -54,10 +55,10 @@ Ref<SourceBufferPrivateRemote> SourceBufferPrivateRemote::create(GPUProcessConne
 }
 
 SourceBufferPrivateRemote::SourceBufferPrivateRemote(GPUProcessConnection& gpuProcessConnection, RemoteSourceBufferIdentifier remoteSourceBufferIdentifier, const MediaSourcePrivateRemote& mediaSourcePrivate, const MediaPlayerPrivateRemote& mediaPlayerPrivate)
-    : m_gpuProcessConnection(makeWeakPtr(gpuProcessConnection))
+    : m_gpuProcessConnection(gpuProcessConnection)
     , m_remoteSourceBufferIdentifier(remoteSourceBufferIdentifier)
-    , m_mediaSourcePrivate(makeWeakPtr(mediaSourcePrivate))
-    , m_mediaPlayerPrivate(makeWeakPtr(mediaPlayerPrivate))
+    , m_mediaSourcePrivate(mediaSourcePrivate)
+    , m_mediaPlayerPrivate(mediaPlayerPrivate)
 #if !RELEASE_LOG_DISABLED
     , m_logger(m_mediaSourcePrivate->logger())
     , m_logIdentifier(m_mediaSourcePrivate->nextSourceBufferLogIdentifier())
@@ -78,12 +79,16 @@ SourceBufferPrivateRemote::~SourceBufferPrivateRemote()
     m_gpuProcessConnection->messageReceiverMap().removeMessageReceiver(Messages::SourceBufferPrivateRemote::messageReceiverName(), m_remoteSourceBufferIdentifier.toUInt64());
 }
 
-void SourceBufferPrivateRemote::append(Vector<unsigned char>&& data)
+void SourceBufferPrivateRemote::append(Ref<SharedBuffer>&& data)
 {
     if (!m_gpuProcessConnection)
         return;
 
-    m_gpuProcessConnection->connection().send(Messages::RemoteSourceBufferProxy::Append(IPC::DataReference(data)), m_remoteSourceBufferIdentifier);
+    m_gpuProcessConnection->connection().sendWithAsyncReply(Messages::RemoteSourceBufferProxy::Append(IPC::SharedBufferReference { WTFMove(data) }), [] (auto&& bufferHandle) {
+        // Take ownership of shared memory and mark it as media-related memory.
+        if (bufferHandle)
+            bufferHandle->takeOwnershipOfMemory(MemoryLedger::Media);
+    }, m_remoteSourceBufferIdentifier);
 }
 
 void SourceBufferPrivateRemote::abort()
@@ -192,7 +197,7 @@ void SourceBufferPrivateRemote::removeCodedFrames(const MediaTime& start, const 
         return;
 
     m_gpuProcessConnection->connection().sendWithAsyncReply(
-        Messages::RemoteSourceBufferProxy::RemoveCodedFrames(start, end, currentMediaTime, isEnded), [this, protectedThis = makeRef(*this), completionHandler = WTFMove(completionHandler)](auto&& buffered, uint64_t totalTrackBufferSizeInBytes) mutable {
+        Messages::RemoteSourceBufferProxy::RemoveCodedFrames(start, end, currentMediaTime, isEnded), [this, protectedThis = Ref { *this }, completionHandler = WTFMove(completionHandler)](auto&& buffered, uint64_t totalTrackBufferSizeInBytes) mutable {
             setBufferedRanges(buffered);
             m_totalTrackBufferSizeInBytes = totalTrackBufferSizeInBytes;
             completionHandler();
@@ -331,16 +336,11 @@ void SourceBufferPrivateRemote::updateTrackIds(Vector<std::pair<AtomString, Atom
     if (!m_gpuProcessConnection)
         return;
 
-    Vector<std::pair<TrackPrivateRemoteIdentifier, TrackPrivateRemoteIdentifier>> identifierPairs;
-
-    for (auto& trackIdPair : trackIdPairs) {
-        ASSERT(m_trackIdentifierMap.contains(trackIdPair.first));
+    auto identifierPairs = trackIdPairs.map([this](auto& trackIdPair) {
+        ASSERT(m_prevTrackIdentifierMap.contains(trackIdPair.first));
         ASSERT(m_trackIdentifierMap.contains(trackIdPair.second));
-
-        auto oldIdentifier = m_trackIdentifierMap.take(trackIdPair.first);
-        auto newIdentifier = m_trackIdentifierMap.get(trackIdPair.second);
-        identifierPairs.append(std::make_pair(oldIdentifier, newIdentifier));
-    }
+        return std::pair { m_prevTrackIdentifierMap.take(trackIdPair.first), m_trackIdentifierMap.get(trackIdPair.second) };
+    });
 
     m_gpuProcessConnection->connection().send(Messages::RemoteSourceBufferProxy::UpdateTrackIds(identifierPairs), m_remoteSourceBufferIdentifier);
 }
@@ -365,37 +365,41 @@ void SourceBufferPrivateRemote::enqueuedSamplesForTrackID(const AtomString& trac
     }, m_remoteSourceBufferIdentifier);
 }
 
-void SourceBufferPrivateRemote::sourceBufferPrivateDidReceiveInitializationSegment(InitializationSegmentInfo&& segmentInfo, CompletionHandler<void()>&& completionHandler)
+void SourceBufferPrivateRemote::sourceBufferPrivateDidReceiveInitializationSegment(InitializationSegmentInfo&& segmentInfo, CompletionHandler<void(WebCore::SourceBufferPrivateClient::ReceiveResult)>&& completionHandler)
 {
     if (!m_client || !m_mediaPlayerPrivate) {
-        completionHandler();
+        completionHandler(WebCore::SourceBufferPrivateClient::ReceiveResult::ClientDisconnected);
         return;
     }
 
     SourceBufferPrivateClient::InitializationSegment segment;
     segment.duration = segmentInfo.duration;
 
+    m_prevTrackIdentifierMap.swap(m_trackIdentifierMap);
+    segment.audioTracks.reserveInitialCapacity(segmentInfo.audioTracks.size());
     for (auto& audioTrack : segmentInfo.audioTracks) {
         SourceBufferPrivateClient::InitializationSegment::AudioTrackInformation info;
         info.track = m_mediaPlayerPrivate->audioTrackPrivateRemote(audioTrack.identifier);
         info.description = RemoteMediaDescription::create(audioTrack.description);
-        segment.audioTracks.append(info);
+        segment.audioTracks.uncheckedAppend(info);
         m_trackIdentifierMap.add(info.track->id(), audioTrack.identifier);
     }
 
+    segment.videoTracks.reserveInitialCapacity(segmentInfo.videoTracks.size());
     for (auto& videoTrack : segmentInfo.videoTracks) {
         SourceBufferPrivateClient::InitializationSegment::VideoTrackInformation info;
         info.track = m_mediaPlayerPrivate->videoTrackPrivateRemote(videoTrack.identifier);
         info.description = RemoteMediaDescription::create(videoTrack.description);
-        segment.videoTracks.append(info);
+        segment.videoTracks.uncheckedAppend(info);
         m_trackIdentifierMap.add(info.track->id(), videoTrack.identifier);
     }
 
+    segment.textTracks.reserveInitialCapacity(segmentInfo.textTracks.size());
     for (auto& textTrack : segmentInfo.textTracks) {
         SourceBufferPrivateClient::InitializationSegment::TextTrackInformation info;
         info.track = m_mediaPlayerPrivate->textTrackPrivateRemote(textTrack.identifier);
         info.description = RemoteMediaDescription::create(textTrack.description);
-        segment.textTracks.append(info);
+        segment.textTracks.uncheckedAppend(info);
         m_trackIdentifierMap.add(info.track->id(), textTrack.identifier);
     }
 

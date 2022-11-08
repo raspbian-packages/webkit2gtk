@@ -75,7 +75,7 @@ DeviceIdHashSaltStorage::DeviceIdHashSaltStorage(const String& deviceIdHashSaltS
         return;
     }
 
-    loadStorageFromDisk([this, protectedThis = makeRef(*this)] (auto&& deviceIdHashSaltForOrigins) {
+    loadStorageFromDisk([this, protectedThis = Ref { *this }] (auto&& deviceIdHashSaltForOrigins) {
         ASSERT(RunLoop::isMain());
         m_deviceIdHashSaltForOrigins = WTFMove(deviceIdHashSaltForOrigins);
         m_isLoaded = true;
@@ -93,7 +93,7 @@ DeviceIdHashSaltStorage::~DeviceIdHashSaltStorage()
         completionHandler();
 }
 
-static std::optional<SecurityOriginData> getSecurityOriginData(const char* name, KeyedDecoder* decoder)
+static std::optional<SecurityOriginData> getSecurityOriginData(ASCIILiteral name, KeyedDecoder* decoder)
 {
     String origin;
 
@@ -109,7 +109,7 @@ static std::optional<SecurityOriginData> getSecurityOriginData(const char* name,
 
 void DeviceIdHashSaltStorage::loadStorageFromDisk(CompletionHandler<void(HashMap<String, std::unique_ptr<HashSaltForOrigin>>&&)>&& completionHandler)
 {
-    m_queue->dispatch([this, protectedThis = makeRef(*this), completionHandler = WTFMove(completionHandler)]() mutable {
+    m_queue->dispatch([this, protectedThis = Ref { *this }, completionHandler = WTFMove(completionHandler)]() mutable {
         ASSERT(!RunLoop::isMain());
 
         FileSystem::makeAllDirectories(m_deviceIdHashSaltStorageDirectory);
@@ -137,6 +137,8 @@ void DeviceIdHashSaltStorage::loadStorageFromDisk(CompletionHandler<void(HashMap
             }
 
             auto hashSaltForOrigin = getDataFromDecoder(decoder.get(), WTFMove(deviceIdHashSalt));
+            if (!hashSaltForOrigin)
+                continue;
 
             auto origins = makeString(hashSaltForOrigin->documentOrigin.toString(), hashSaltForOrigin->parentOrigin.toString());
             auto deviceIdHashSaltForOrigin = deviceIdHashSaltForOrigins.ensure(origins, [hashSaltForOrigin = WTFMove(hashSaltForOrigin)] () mutable {
@@ -155,20 +157,20 @@ void DeviceIdHashSaltStorage::loadStorageFromDisk(CompletionHandler<void(HashMap
 
 std::unique_ptr<DeviceIdHashSaltStorage::HashSaltForOrigin> DeviceIdHashSaltStorage::getDataFromDecoder(KeyedDecoder* decoder, String&& deviceIdHashSalt) const
 {
-    auto securityOriginData = getSecurityOriginData("origin", decoder);
+    auto securityOriginData = getSecurityOriginData("origin"_s, decoder);
     if (!securityOriginData) {
         RELEASE_LOG_ERROR(DiskPersistency, "DeviceIdHashSaltStorage: The security origin data in the file is not correct: '%s'", deviceIdHashSalt.utf8().data());
         return nullptr;
     }
 
-    auto parentSecurityOriginData = getSecurityOriginData("parentOrigin", decoder);
+    auto parentSecurityOriginData = getSecurityOriginData("parentOrigin"_s, decoder);
     if (!parentSecurityOriginData) {
         RELEASE_LOG_ERROR(DiskPersistency, "DeviceIdHashSaltStorage: The parent security origin data in the file is not correct: '%s'", deviceIdHashSalt.utf8().data());
         return nullptr;
     }
 
     double lastTimeUsed;
-    if (!decoder->decodeDouble("lastTimeUsed", lastTimeUsed)) {
+    if (!decoder->decodeDouble("lastTimeUsed"_s, lastTimeUsed)) {
         RELEASE_LOG_ERROR(DiskPersistency, "DeviceIdHashSaltStorage: The last time used was not correctly restored for: '%s'", deviceIdHashSalt.utf8().data());
         return nullptr;
     }
@@ -183,9 +185,9 @@ std::unique_ptr<DeviceIdHashSaltStorage::HashSaltForOrigin> DeviceIdHashSaltStor
 std::unique_ptr<KeyedEncoder> DeviceIdHashSaltStorage::createEncoderFromData(const HashSaltForOrigin& hashSaltForOrigin) const
 {
     auto encoder = KeyedEncoder::encoder();
-    encoder->encodeString("origin", hashSaltForOrigin.documentOrigin.databaseIdentifier());
-    encoder->encodeString("parentOrigin", hashSaltForOrigin.parentOrigin.databaseIdentifier());
-    encoder->encodeDouble("lastTimeUsed", hashSaltForOrigin.lastTimeUsed.secondsSinceEpoch().value());
+    encoder->encodeString("origin"_s, hashSaltForOrigin.documentOrigin.databaseIdentifier());
+    encoder->encodeString("parentOrigin"_s, hashSaltForOrigin.parentOrigin.databaseIdentifier());
+    encoder->encodeDouble("lastTimeUsed"_s, hashSaltForOrigin.lastTimeUsed.secondsSinceEpoch().value());
     return encoder;
 }
 
@@ -194,7 +196,7 @@ void DeviceIdHashSaltStorage::storeHashSaltToDisk(const HashSaltForOrigin& hashS
     if (m_deviceIdHashSaltStorageDirectory.isEmpty())
         return;
 
-    m_queue->dispatch([this, protectedThis = makeRef(*this), hashSaltForOrigin = hashSaltForOrigin.isolatedCopy()]() mutable {
+    m_queue->dispatch([this, protectedThis = Ref { *this }, hashSaltForOrigin = hashSaltForOrigin.isolatedCopy()]() mutable {
         auto encoder = createEncoderFromData(hashSaltForOrigin);
         writeToDisk(WTFMove(encoder), FileSystem::pathByAppendingComponent(m_deviceIdHashSaltStorageDirectory, hashSaltForOrigin.deviceIdHashSalt));
     });
@@ -256,10 +258,10 @@ void DeviceIdHashSaltStorage::getDeviceIdHashSaltOrigins(CompletionHandler<void(
 
 void DeviceIdHashSaltStorage::deleteHashSaltFromDisk(const HashSaltForOrigin& hashSaltForOrigin)
 {
-    m_queue->dispatch([this, protectedThis = makeRef(*this), deviceIdHashSalt = hashSaltForOrigin.deviceIdHashSalt.isolatedCopy()]() mutable {
+    m_queue->dispatch([this, protectedThis = Ref { *this }, deviceIdHashSalt = hashSaltForOrigin.deviceIdHashSalt.isolatedCopy()]() mutable {
         ASSERT(!RunLoop::isMain());
 
-        String fileFullPath = FileSystem::pathByAppendingComponent(m_deviceIdHashSaltStorageDirectory, deviceIdHashSalt.utf8().data());
+        String fileFullPath = FileSystem::pathByAppendingComponent(m_deviceIdHashSaltStorageDirectory, deviceIdHashSalt);
         FileSystem::deleteFile(fileFullPath);
     });
 }

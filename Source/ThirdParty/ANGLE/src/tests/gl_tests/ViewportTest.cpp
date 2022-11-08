@@ -12,7 +12,7 @@ using namespace angle;
 namespace
 {
 
-class ViewportTest : public ANGLETest
+class ViewportTest : public ANGLETest<>
 {
   protected:
     ViewportTest()
@@ -392,5 +392,8 @@ ANGLE_INSTANTIATE_TEST(ViewportTest,
                        ES2_OPENGLES(),
                        ES3_OPENGLES(),
                        ES2_VULKAN());
+
+// This test suite is not instantiated on some OSes.
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(ViewportTest);
 
 }  // namespace

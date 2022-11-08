@@ -233,7 +233,7 @@ void WaylandCompositor::Surface::attachBuffer(struct wl_resource* buffer)
 
     if (buffer) {
         auto* compositorBuffer = WaylandCompositor::Buffer::getOrCreate(buffer);
-        m_pendingBuffer = makeWeakPtr(*compositorBuffer);
+        m_pendingBuffer = *compositorBuffer;
     }
 }
 
@@ -432,7 +432,7 @@ bool WaylandCompositor::initializeEGL()
 #else
     std::unique_ptr<ExtensionsGLOpenGL> glExtensions = makeUnique<ExtensionsGLOpenGL>(nullptr, GLContext::current()->version() >= 320);
 #endif
-    if (glExtensions->supports("GL_OES_EGL_image") || glExtensions->supports("GL_OES_EGL_image_external"))
+    if (glExtensions->supports("GL_OES_EGL_image"_s) || glExtensions->supports("GL_OES_EGL_image_external"_s))
         glImageTargetTexture2D = reinterpret_cast<PFNGLEGLIMAGETARGETTEXTURE2DOESPROC>(eglGetProcAddress("glEGLImageTargetTexture2DOES"));
 
     if (!glImageTargetTexture2D) {
@@ -501,7 +501,7 @@ WaylandCompositor::WaylandCompositor()
         return;
     }
 
-    String displayName = "webkitgtk-wayland-compositor-" + createCanonicalUUIDString();
+    String displayName = makeString("webkitgtk-wayland-compositor-"_s, UUID::createVersion4());
     if (wl_display_add_socket(display.get(), displayName.utf8().data()) == -1) {
         WTFLogAlways("Nested Wayland compositor could not create display socket");
         return;
@@ -571,7 +571,7 @@ void WaylandCompositor::bindSurfaceToWebPage(WaylandCompositor::Surface* surface
 
     unbindWebPage(*webPage);
     surface->setWebPage(webPage);
-    m_pageMap.set(webPage, makeWeakPtr(*surface));
+    m_pageMap.set(webPage, *surface);
 }
 
 void WaylandCompositor::bindWebPage(WebPageProxy& webPage)

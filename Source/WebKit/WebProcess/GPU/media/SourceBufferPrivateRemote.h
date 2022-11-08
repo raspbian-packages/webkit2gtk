@@ -72,7 +72,7 @@ private:
 
     // SourceBufferPrivate overrides
     void setActive(bool) final;
-    void append(Vector<unsigned char>&&) final;
+    void append(Ref<WebCore::SharedBuffer>&&) final;
     void abort() final;
     void resetParserState() final;
     void removedFromMediaSource() final;
@@ -108,7 +108,7 @@ private:
     void enqueuedSamplesForTrackID(const AtomString&, CompletionHandler<void(Vector<String>&&)>&&) final;
 
     void didReceiveMessage(IPC::Connection&, IPC::Decoder&) final;
-    void sourceBufferPrivateDidReceiveInitializationSegment(InitializationSegmentInfo&&, CompletionHandler<void()>&&);
+    void sourceBufferPrivateDidReceiveInitializationSegment(InitializationSegmentInfo&&, CompletionHandler<void(WebCore::SourceBufferPrivateClient::ReceiveResult)>&&);
     void sourceBufferPrivateStreamEndedWithDecodeError();
     void sourceBufferPrivateAppendError(bool decodeError);
     void sourceBufferPrivateAppendComplete(WebCore::SourceBufferPrivateClient::AppendResult, const WebCore::PlatformTimeRanges& buffered, uint64_t totalTrackBufferSizeInBytes, const MediaTime& timestampOffset);
@@ -126,6 +126,7 @@ private:
     WeakPtr<MediaPlayerPrivateRemote> m_mediaPlayerPrivate;
 
     HashMap<AtomString, TrackPrivateRemoteIdentifier> m_trackIdentifierMap;
+    HashMap<AtomString, TrackPrivateRemoteIdentifier> m_prevTrackIdentifierMap;
 
     bool m_isActive { false };
     uint64_t m_totalTrackBufferSizeInBytes = { 0 };

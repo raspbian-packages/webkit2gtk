@@ -50,8 +50,6 @@
 
 namespace WebCore {
 
-static const uint64_t schemaVersion = 7;
-
 #define RECORDS_TABLE_SCHEMA_PREFIX "CREATE TABLE "
 #define RECORDS_TABLE_SCHEMA_SUFFIX "(" \
     "key TEXT NOT NULL ON CONFLICT FAIL UNIQUE ON CONFLICT REPLACE" \
@@ -67,6 +65,7 @@ static const uint64_t schemaVersion = 7;
     ", referrerPolicy TEXT NOT NULL ON CONFLICT FAIL" \
     ", scriptResourceMap BLOB NOT NULL ON CONFLICT FAIL" \
     ", certificateInfo BLOB NOT NULL ON CONFLICT FAIL" \
+    ", preloadState BLOB NOT NULL ON CONFLICT FAIL" \
     ")"_s;
 
 static ASCIILiteral recordsTableSchema()
@@ -87,7 +86,7 @@ static inline String databaseFilenameFromVersion(uint64_t version)
 static const String& databaseFilename()
 {
     ASSERT(isMainThread());
-    static NeverDestroyed<String> filename = databaseFilenameFromVersion(schemaVersion);
+    static NeverDestroyed<String> filename = databaseFilenameFromVersion(RegistrationDatabase::schemaVersion);
     return filename;
 }
 
@@ -98,7 +97,7 @@ String serviceWorkerRegistrationDatabaseFilename(const String& databaseDirectory
 
 static inline void cleanOldDatabases(const String& databaseDirectory)
 {
-    for (uint64_t version = 1; version < schemaVersion; ++version)
+    for (uint64_t version = 1; version < RegistrationDatabase::schemaVersion; ++version)
         SQLiteFileSystem::deleteDatabaseFile(FileSystem::pathByAppendingComponent(databaseDirectory, databaseFilenameFromVersion(version)));
 }
 
@@ -130,7 +129,7 @@ struct ImportedScriptAttributes {
     }
 };
 
-static HashMap<URL, ImportedScriptAttributes> stripScriptSources(const HashMap<URL, ServiceWorkerContextData::ImportedScript>& map)
+static HashMap<URL, ImportedScriptAttributes> stripScriptSources(const MemoryCompactRobinHoodHashMap<URL, ServiceWorkerContextData::ImportedScript>& map)
 {
     HashMap<URL, ImportedScriptAttributes> mapWithoutScripts;
     for (auto& pair : map)
@@ -138,9 +137,9 @@ static HashMap<URL, ImportedScriptAttributes> stripScriptSources(const HashMap<U
     return mapWithoutScripts;
 }
 
-static HashMap<URL, ServiceWorkerContextData::ImportedScript> populateScriptSourcesFromDisk(SWScriptStorage& scriptStorage, const ServiceWorkerRegistrationKey& registrationKey, HashMap<URL, ImportedScriptAttributes>&& map)
+static MemoryCompactRobinHoodHashMap<URL, ServiceWorkerContextData::ImportedScript> populateScriptSourcesFromDisk(SWScriptStorage& scriptStorage, const ServiceWorkerRegistrationKey& registrationKey, HashMap<URL, ImportedScriptAttributes>&& map)
 {
-    HashMap<URL, ServiceWorkerContextData::ImportedScript> importedScripts;
+    MemoryCompactRobinHoodHashMap<URL, ServiceWorkerContextData::ImportedScript> importedScripts;
     for (auto& pair : map) {
         auto importedScript = scriptStorage.retrieve(registrationKey, pair.key);
         if (!importedScript) {
@@ -157,14 +156,14 @@ static Ref<WorkQueue> registrationDatabaseWorkQueue()
     static LazyNeverDestroyed<Ref<WorkQueue>> workQueue;
     static std::once_flag onceKey;
     std::call_once(onceKey, [] {
-        workQueue.construct(WorkQueue::create("ServiceWorker I/O Thread", WorkQueue::Type::Serial));
+        workQueue.construct(WorkQueue::create("ServiceWorker I/O Thread"));
     });
     return workQueue;
 }
 
 RegistrationDatabase::RegistrationDatabase(RegistrationStore& store, String&& databaseDirectory)
     : m_workQueue(registrationDatabaseWorkQueue())
-    , m_store(makeWeakPtr(store))
+    , m_store(store)
     , m_databaseDirectory(WTFMove(databaseDirectory))
     , m_databaseFilePath(FileSystem::pathByAppendingComponent(m_databaseDirectory, databaseFilename()))
 {
@@ -189,7 +188,7 @@ void RegistrationDatabase::postTaskToWorkQueue(Function<void()>&& task)
     ASSERT(isMainThread());
 
     ++m_pushCounter;
-    m_workQueue->dispatch([protectedThis = makeRef(*this), task = WTFMove(task)]() mutable {
+    m_workQueue->dispatch([protectedThis = Ref { *this }, task = WTFMove(task)]() mutable {
         task();
     });
 }
@@ -242,7 +241,7 @@ bool RegistrationDatabase::openSQLiteDatabase(const String& fullFilename)
 
 String RegistrationDatabase::scriptStorageDirectory() const
 {
-    return FileSystem::pathByAppendingComponents(m_databaseDirectory, { "Scripts", "V1" });
+    return FileSystem::pathByAppendingComponents(m_databaseDirectory, { "Scripts"_s, "V1"_s });
 }
 
 SWScriptStorage& RegistrationDatabase::scriptStorage()
@@ -259,14 +258,14 @@ void RegistrationDatabase::importRecordsIfNecessary()
 
     if (FileSystem::fileExists(m_databaseFilePath)) {
         if (!openSQLiteDatabase(m_databaseFilePath)) {
-            callOnMainThread([this, protectedThis = makeRef(*this)] {
+            callOnMainThread([this, protectedThis = Ref { *this }] {
                 databaseFailedToOpen();
             });
             return;
         }
     }
 
-    callOnMainThread([this, protectedThis = makeRef(*this)] {
+    callOnMainThread([this, protectedThis = Ref { *this }] {
         databaseOpenedAndRecordsImported();
     });
 }
@@ -294,7 +293,7 @@ String RegistrationDatabase::ensureValidRecordsTable()
         }
 
         if (sqliteResult != SQLITE_ROW)
-            return "Error executing statement to fetch schema for the Records table.";
+            return "Error executing statement to fetch schema for the Records table."_s;
 
         currentSchema = statement->columnText(1);
     }
@@ -307,15 +306,15 @@ String RegistrationDatabase::ensureValidRecordsTable()
     return makeString("Unexpected schema: ", currentSchema);
 }
 
-static String updateViaCacheToString(ServiceWorkerUpdateViaCache update)
+static ASCIILiteral updateViaCacheToString(ServiceWorkerUpdateViaCache update)
 {
     switch (update) {
     case ServiceWorkerUpdateViaCache::Imports:
-        return "Imports";
+        return "Imports"_s;
     case ServiceWorkerUpdateViaCache::All:
-        return "All";
+        return "All"_s;
     case ServiceWorkerUpdateViaCache::None:
-        return "None";
+        return "None"_s;
     }
 
     RELEASE_ASSERT_NOT_REACHED();
@@ -323,23 +322,23 @@ static String updateViaCacheToString(ServiceWorkerUpdateViaCache update)
 
 static std::optional<ServiceWorkerUpdateViaCache> stringToUpdateViaCache(const String& update)
 {
-    if (update == "Imports")
+    if (update == "Imports"_s)
         return ServiceWorkerUpdateViaCache::Imports;
-    if (update == "All")
+    if (update == "All"_s)
         return ServiceWorkerUpdateViaCache::All;
-    if (update == "None")
+    if (update == "None"_s)
         return ServiceWorkerUpdateViaCache::None;
 
     return std::nullopt;
 }
 
-static String workerTypeToString(WorkerType workerType)
+static ASCIILiteral workerTypeToString(WorkerType workerType)
 {
     switch (workerType) {
     case WorkerType::Classic:
-        return "Classic";
+        return "Classic"_s;
     case WorkerType::Module:
-        return "Module";
+        return "Module"_s;
     }
 
     RELEASE_ASSERT_NOT_REACHED();
@@ -347,9 +346,9 @@ static String workerTypeToString(WorkerType workerType)
 
 static std::optional<WorkerType> stringToWorkerType(const String& type)
 {
-    if (type == "Classic")
+    if (type == "Classic"_s)
         return WorkerType::Classic;
-    if (type == "Module")
+    if (type == "Module"_s)
         return WorkerType::Module;
 
     return std::nullopt;
@@ -371,13 +370,13 @@ void RegistrationDatabase::pushChanges(const HashMap<ServiceWorkerRegistrationKe
 void RegistrationDatabase::schedulePushChanges(Vector<ServiceWorkerContextData>&& updatedRegistrations, Vector<ServiceWorkerRegistrationKey>&& removedRegistrations, ShouldRetry shouldRetry, CompletionHandler<void()>&& completionHandler)
 {
     auto pushCounter = shouldRetry == ShouldRetry::Yes ? m_pushCounter : 0;
-    postTaskToWorkQueue([this, protectedThis = makeRef(*this), pushCounter, updatedRegistrations = WTFMove(updatedRegistrations), removedRegistrations = WTFMove(removedRegistrations), completionHandler = WTFMove(completionHandler)]() mutable {
+    postTaskToWorkQueue([this, protectedThis = Ref { *this }, pushCounter, updatedRegistrations = WTFMove(updatedRegistrations), removedRegistrations = WTFMove(removedRegistrations), completionHandler = WTFMove(completionHandler)]() mutable {
         bool success = doPushChanges(updatedRegistrations, removedRegistrations);
         if (success) {
             updatedRegistrations.clear();
             removedRegistrations.clear();
         }
-        callOnMainThread([this, protectedThis = WTFMove(protectedThis), success, pushCounter, updatedRegistrations = WTFMove(updatedRegistrations).isolatedCopy(), removedRegistrations = WTFMove(removedRegistrations).isolatedCopy(), completionHandler = WTFMove(completionHandler)]() mutable {
+        callOnMainThread([this, protectedThis = WTFMove(protectedThis), success, pushCounter, updatedRegistrations = crossThreadCopy(WTFMove(updatedRegistrations)), removedRegistrations = crossThreadCopy(WTFMove(removedRegistrations)), completionHandler = WTFMove(completionHandler)]() mutable {
             if (!success && (pushCounter + 1) == m_pushCounter) {
                 // We retry writing once if no other change was pushed.
                 schedulePushChanges(WTFMove(updatedRegistrations), WTFMove(removedRegistrations), ShouldRetry::No, WTFMove(completionHandler));
@@ -422,7 +421,7 @@ bool RegistrationDatabase::doPushChanges(const Vector<ServiceWorkerContextData>&
     SQLiteTransaction transaction(*m_database);
     transaction.begin();
 
-    auto insertStatement = m_database->prepareStatement("INSERT INTO Records VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"_s);
+    auto insertStatement = m_database->prepareStatement("INSERT INTO Records VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"_s);
     if (!insertStatement) {
         RELEASE_LOG_ERROR(ServiceWorker, "Failed to prepare statement to store registration data into records table (%i) - %s", m_database->lastError(), m_database->lastErrorMsg());
         return false;
@@ -455,19 +454,23 @@ bool RegistrationDatabase::doPushChanges(const Vector<ServiceWorkerContextData>&
         WTF::Persistence::Encoder certificateInfoEncoder;
         certificateInfoEncoder << data.certificateInfo;
 
+        WTF::Persistence::Encoder navigationPreloadStateEncoder;
+        navigationPreloadStateEncoder << data.navigationPreloadState;
+
         if (insertStatement->bindText(1, data.registration.key.toDatabaseKey()) != SQLITE_OK
             || insertStatement->bindText(2, data.registration.scopeURL.protocolHostAndPort()) != SQLITE_OK
             || insertStatement->bindText(3, data.registration.scopeURL.path().toString()) != SQLITE_OK
             || insertStatement->bindText(4, data.registration.key.topOrigin().databaseIdentifier()) != SQLITE_OK
             || insertStatement->bindDouble(5, data.registration.lastUpdateTime.secondsSinceEpoch().value()) != SQLITE_OK
-            || insertStatement->bindText(6, updateViaCacheToString(data.registration.updateViaCache)) != SQLITE_OK
+            || insertStatement->bindText(6, StringView { updateViaCacheToString(data.registration.updateViaCache) }) != SQLITE_OK
             || insertStatement->bindText(7, data.scriptURL.string()) != SQLITE_OK
-            || insertStatement->bindText(8, workerTypeToString(data.workerType)) != SQLITE_OK
+            || insertStatement->bindText(8, StringView { workerTypeToString(data.workerType) }) != SQLITE_OK
             || insertStatement->bindBlob(9, Span { cspEncoder.buffer(), cspEncoder.bufferSize() }) != SQLITE_OK
             || insertStatement->bindBlob(10, Span { coepEncoder.buffer(), coepEncoder.bufferSize() }) != SQLITE_OK
             || insertStatement->bindText(11, data.referrerPolicy) != SQLITE_OK
             || insertStatement->bindBlob(12, Span { scriptResourceMapEncoder.buffer(), scriptResourceMapEncoder.bufferSize() }) != SQLITE_OK
             || insertStatement->bindBlob(13, Span { certificateInfoEncoder.buffer(), certificateInfoEncoder.bufferSize() }) != SQLITE_OK
+            || insertStatement->bindBlob(14, Span { navigationPreloadStateEncoder.buffer(), navigationPreloadStateEncoder.bufferSize() }) != SQLITE_OK
             || insertStatement->step() != SQLITE_DONE) {
             RELEASE_LOG_ERROR(ServiceWorker, "Failed to store registration data into records table (%i) - %s", m_database->lastError(), m_database->lastErrorMsg());
             return false;
@@ -478,14 +481,14 @@ bool RegistrationDatabase::doPushChanges(const Vector<ServiceWorkerContextData>&
         ASSERT(mainScript);
         if (!mainScript)
             return false;
-        HashMap<URL, ScriptBuffer> importedScripts;
-        for (auto& pair : data.scriptResourceMap) {
-            auto importedScript = scriptStorage.store(data.registration.key, pair.key, pair.value.script);
+        MemoryCompactRobinHoodHashMap<URL, ScriptBuffer> importedScripts;
+        for (auto& [scriptURL, script] : data.scriptResourceMap) {
+            auto importedScript = scriptStorage.store(data.registration.key, scriptURL, script.script);
             ASSERT(importedScript);
             if (importedScript)
-                importedScripts.add(crossThreadCopy(pair.key), crossThreadCopy(importedScript));
+                importedScripts.add(crossThreadCopy(scriptURL), crossThreadCopy(WTFMove(importedScript)));
         }
-        callOnMainThread([this, protectedThis = makeRef(*this), serviceWorkerIdentifier = data.serviceWorkerIdentifier, mainScript = crossThreadCopy(mainScript), importedScripts = WTFMove(importedScripts)]() mutable {
+        callOnMainThread([this, protectedThis = Ref { *this }, serviceWorkerIdentifier = data.serviceWorkerIdentifier, mainScript = crossThreadCopy(WTFMove(mainScript)), importedScripts = WTFMove(importedScripts)]() mutable {
             if (m_store)
                 m_store->didSaveWorkerScriptsToDisk(serviceWorkerIdentifier, WTFMove(mainScript), WTFMove(importedScripts));
         });
@@ -510,13 +513,17 @@ String RegistrationDatabase::importRecords()
     for (; result == SQLITE_ROW; result = sql->step()) {
         RELEASE_LOG(ServiceWorker, "RegistrationDatabase::importRecords: Importing a registration from the database");
         auto key = ServiceWorkerRegistrationKey::fromDatabaseKey(sql->columnText(0));
-        auto originURL = URL { URL(), sql->columnText(1) };
+        if (!key) {
+            RELEASE_LOG_ERROR(ServiceWorker, "RegistrationDatabase::importRecords: Failed to decode service worker registration key");
+            continue;
+        }
+        auto originURL = URL { sql->columnText(1) };
         auto scopePath = sql->columnText(2);
         auto scopeURL = URL { originURL, scopePath };
         auto topOrigin = SecurityOriginData::fromDatabaseIdentifier(sql->columnText(3));
         auto lastUpdateCheckTime = WallTime::fromRawSeconds(sql->columnDouble(4));
         auto updateViaCache = stringToUpdateViaCache(sql->columnText(5));
-        auto scriptURL = URL { URL(), sql->columnText(6) };
+        auto scriptURL = URL { sql->columnText(6) };
         auto workerType = stringToWorkerType(sql->columnText(7));
 
         std::optional<ContentSecurityPolicyResponseHeaders> contentSecurityPolicy;
@@ -543,7 +550,7 @@ String RegistrationDatabase::importRecords()
 
         auto referrerPolicy = sql->columnText(10);
 
-        HashMap<URL, ServiceWorkerContextData::ImportedScript> scriptResourceMap;
+        MemoryCompactRobinHoodHashMap<URL, ServiceWorkerContextData::ImportedScript> scriptResourceMap;
         auto scriptResourceMapDataSpan = sql->columnBlobAsSpan(11);
         if (scriptResourceMapDataSpan.size()) {
             WTF::Persistence::Decoder scriptResourceMapDecoder(scriptResourceMapDataSpan);
@@ -566,16 +573,29 @@ String RegistrationDatabase::importRecords()
             continue;
         }
 
+        auto navigationPreloadStateDataSpan = sql->columnBlobAsSpan(13);
+        std::optional<NavigationPreloadState> navigationPreloadState;
+
+        WTF::Persistence::Decoder navigationPreloadStateDecoder(navigationPreloadStateDataSpan);
+        navigationPreloadStateDecoder >> navigationPreloadState;
+        if (!navigationPreloadState) {
+            RELEASE_LOG_ERROR(ServiceWorker, "RegistrationDatabase::importRecords: Failed to decode navigationPreloadState");
+            continue;
+        }
+
         // Validate the input for this registration.
         // If any part of this input is invalid, let's skip this registration.
         // FIXME: Should we return an error skipping *all* registrations?
-        if (!key || !originURL.isValid() || !topOrigin || !updateViaCache || !scriptURL.isValid() || !workerType || !scopeURL.isValid()) {
+        if (!originURL.isValid() || !topOrigin || !updateViaCache || !scriptURL.isValid() || !workerType || !scopeURL.isValid()) {
             RELEASE_LOG_ERROR(ServiceWorker, "RegistrationDatabase::importRecords: Failed to decode part of the registration");
+            continue;
+        }
+        if (key->topOrigin() != *topOrigin) {
+            RELEASE_LOG_ERROR(ServiceWorker, "RegistrationDatabase::importRecords: Inconsistent registration");
             continue;
         }
 
         auto script = scriptStorage().retrieve(*key, scriptURL);
-        ASSERT(script);
         if (!script) {
             RELEASE_LOG_ERROR(ServiceWorker, "RegistrationDatabase::importRecords: Failed to retrieve main script for %s from disk", scriptURL.string().utf8().data());
             continue;
@@ -585,9 +605,9 @@ String RegistrationDatabase::importRecords()
         auto registrationIdentifier = ServiceWorkerRegistrationIdentifier::generate();
         auto serviceWorkerData = ServiceWorkerData { workerIdentifier, scriptURL, ServiceWorkerState::Activated, *workerType, registrationIdentifier };
         auto registration = ServiceWorkerRegistrationData { WTFMove(*key), registrationIdentifier, WTFMove(scopeURL), *updateViaCache, lastUpdateCheckTime, std::nullopt, std::nullopt, WTFMove(serviceWorkerData) };
-        auto contextData = ServiceWorkerContextData { std::nullopt, WTFMove(registration), workerIdentifier, WTFMove(script), WTFMove(*certificateInfo), WTFMove(*contentSecurityPolicy), WTFMove(*coep), WTFMove(referrerPolicy), WTFMove(scriptURL), *workerType, true, LastNavigationWasAppInitiated::Yes, WTFMove(scriptResourceMap) };
+        auto contextData = ServiceWorkerContextData { std::nullopt, WTFMove(registration), workerIdentifier, WTFMove(script), WTFMove(*certificateInfo), WTFMove(*contentSecurityPolicy), WTFMove(*coep), WTFMove(referrerPolicy), WTFMove(scriptURL), *workerType, true, LastNavigationWasAppInitiated::Yes, WTFMove(scriptResourceMap), std::nullopt, WTFMove(*navigationPreloadState) };
 
-        callOnMainThread([protectedThis = makeRef(*this), contextData = contextData.isolatedCopy()]() mutable {
+        callOnMainThread([protectedThis = Ref { *this }, contextData = WTFMove(contextData).isolatedCopy()]() mutable {
             protectedThis->addRegistrationToStore(WTFMove(contextData));
         });
     }

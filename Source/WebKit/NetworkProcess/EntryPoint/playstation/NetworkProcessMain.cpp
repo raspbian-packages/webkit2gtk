@@ -51,10 +51,12 @@ int main(int argc, char** argv)
         fprintf(stderr, "Failed to load SSL library.\n");
         exit(EXIT_FAILURE);
     }
-    loadLibraryOrExit("libcurl");
-    loadLibraryOrExit("libicu");
-    loadLibraryOrExit("libSceNKWebKitRequirements");
+    loadLibraryOrExit(CURL_LOAD_AT);
+    loadLibraryOrExit(ICU_LOAD_AT);
+    loadLibraryOrExit(WebKitRequirements_LOAD_AT);
+#if !ENABLE(STATIC_JSC)
     loadLibraryOrExit("libJavaScriptCore");
+#endif
     loadLibraryOrExit("libWebKit");
 
     char* coreProcessIdentifier = argv[1];

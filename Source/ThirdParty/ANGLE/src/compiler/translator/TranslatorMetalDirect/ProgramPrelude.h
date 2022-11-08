@@ -22,18 +22,16 @@ enum class MetalShaderType
     None,
     Vertex,
     Fragment,
-    Compute, // Unused currently
+    Compute,  // Unused currently
     Count,
 };
 
 struct ProgramPreludeConfig
 {
-public:
+  public:
     ProgramPreludeConfig() {}
-    explicit ProgramPreludeConfig(MetalShaderType shaderType)
-    : shaderType(shaderType)
-    {}
-    bool hasStructEq = false;
+    explicit ProgramPreludeConfig(MetalShaderType shaderType) : shaderType(shaderType) {}
+    bool hasStructEq           = false;
     MetalShaderType shaderType = MetalShaderType::None;
 };
 
@@ -41,9 +39,9 @@ public:
 // figure out the required what prelude MSL code is needed for various things in the AST. You can
 // think of this as effectively inlining various portions of a helper library into the emitted
 // Metal program.
-ANGLE_NO_DISCARD bool EmitProgramPrelude(TIntermBlock &root,
-                                         TInfoSinkBase &out,
-                                         const ProgramPreludeConfig &ppc);
+[[nodiscard]] bool EmitProgramPrelude(TIntermBlock &root,
+                                      TInfoSinkBase &out,
+                                      const ProgramPreludeConfig &ppc);
 
 }  // namespace sh
 

@@ -178,7 +178,7 @@ void WebPopupMenuProxyGtk::createPopupMenu(const Vector<WebPopupItem>& items, in
         } else {
             GtkTreeIter iter;
             bool isSelected = selectedIndex && static_cast<unsigned>(selectedIndex) == index;
-            gtk_tree_store_insert_with_values(model.get(), &iter, item.m_text.startsWith("    ") ? &parentIter : nullptr, -1,
+            gtk_tree_store_insert_with_values(model.get(), &iter, item.m_text.startsWith("    "_s) ? &parentIter : nullptr, -1,
                 Columns::Label, item.m_text.stripWhiteSpace().utf8().data(),
                 Columns::Tooltip, item.m_toolTip.isEmpty() ? nullptr : item.m_toolTip.utf8().data(),
                 Columns::IsGroup, FALSE,
@@ -412,6 +412,7 @@ void WebPopupMenuProxyGtk::hidePopupMenu()
     }
 
 #if USE(GTK4)
+    gtk_popover_popdown(GTK_POPOVER(m_popup));
     g_clear_pointer(&m_popup, gtk_widget_unparent);
 #else
     gtk_widget_destroy(m_popup);

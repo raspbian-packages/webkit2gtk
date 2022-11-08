@@ -41,11 +41,15 @@ GPUProcessCreationParameters::GPUProcessCreationParameters() = default;
 
 void GPUProcessCreationParameters::encode(IPC::Encoder& encoder) const
 {
+    encoder << auxiliaryProcessParameters;
 #if ENABLE(MEDIA_STREAM)
     encoder << useMockCaptureDevices;
 #if PLATFORM(MAC)
     encoder << microphoneSandboxExtensionHandle;
 #endif
+#endif
+#if HAVE(AVCONTENTKEYSPECIFIER)
+    encoder << sampleBufferContentKeySessionSupportEnabled;
 #endif
     encoder << parentPID;
 
@@ -56,16 +60,16 @@ void GPUProcessCreationParameters::encode(IPC::Encoder& encoder) const
 #if PLATFORM(IOS_FAMILY)
     encoder << compilerServiceExtensionHandles;
     encoder << dynamicIOKitExtensionHandles;
-    encoder << dynamicMachExtensionHandles;
 #endif
+    encoder << mobileGestaltExtensionHandle;
 
-    encoder << wtfLoggingChannels;
-    encoder << webCoreLoggingChannels;
-    encoder << webKitLoggingChannels;
+    encoder << applicationVisibleName;
 }
 
 bool GPUProcessCreationParameters::decode(IPC::Decoder& decoder, GPUProcessCreationParameters& result)
 {
+    if (!decoder.decode(result.auxiliaryProcessParameters))
+        return false;
 #if ENABLE(MEDIA_STREAM)
     if (!decoder.decode(result.useMockCaptureDevices))
         return false;
@@ -74,6 +78,11 @@ bool GPUProcessCreationParameters::decode(IPC::Decoder& decoder, GPUProcessCreat
         return false;
 #endif
 #endif
+#if HAVE(AVCONTENTKEYSPECIFIER)
+    if (!decoder.decode(result.sampleBufferContentKeySessionSupportEnabled))
+        return false;
+#endif
+
     if (!decoder.decode(result.parentPID))
         return false;
 
@@ -102,19 +111,15 @@ bool GPUProcessCreationParameters::decode(IPC::Decoder& decoder, GPUProcessCreat
     if (!dynamicIOKitExtensionHandles)
         return false;
     result.dynamicIOKitExtensionHandles = WTFMove(*dynamicIOKitExtensionHandles);
-
-    std::optional<Vector<SandboxExtension::Handle>> dynamicMachExtensionHandles;
-    decoder >> dynamicMachExtensionHandles;
-    if (!dynamicMachExtensionHandles)
-        return false;
-    result.dynamicMachExtensionHandles = WTFMove(*dynamicMachExtensionHandles);
 #endif
 
-    if (!decoder.decode(result.wtfLoggingChannels))
+    std::optional<std::optional<SandboxExtension::Handle>> mobileGestaltExtensionHandle;
+    decoder >> mobileGestaltExtensionHandle;
+    if (!mobileGestaltExtensionHandle)
         return false;
-    if (!decoder.decode(result.webCoreLoggingChannels))
-        return false;
-    if (!decoder.decode(result.webKitLoggingChannels))
+    result.mobileGestaltExtensionHandle = WTFMove(*mobileGestaltExtensionHandle);
+
+    if (!decoder.decode(result.applicationVisibleName))
         return false;
 
     return true;

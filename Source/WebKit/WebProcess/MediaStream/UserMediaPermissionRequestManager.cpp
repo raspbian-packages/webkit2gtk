@@ -30,6 +30,7 @@
 #include <WebCore/CaptureDevice.h>
 #include <WebCore/Document.h>
 #include <WebCore/Frame.h>
+#include <WebCore/FrameDestructionObserverInlines.h>
 #include <WebCore/FrameLoader.h>
 #include <WebCore/MediaConstraints.h>
 #include <WebCore/SecurityOrigin.h>
@@ -74,7 +75,7 @@ void UserMediaPermissionRequestManager::sendUserMediaRequest(UserMediaRequest& u
         return;
     }
 
-    m_ongoingUserMediaRequests.add(userRequest.identifier(), makeRef(userRequest));
+    m_ongoingUserMediaRequests.add(userRequest.identifier(), userRequest);
 
     WebFrame* webFrame = WebFrame::fromCoreFrame(*frame);
     ASSERT(webFrame);
@@ -151,7 +152,7 @@ void UserMediaPermissionRequestManager::enumerateMediaDevices(Document& document
 #if USE(GSTREAMER)
 void UserMediaPermissionRequestManager::updateCaptureDevices(ShouldNotify shouldNotify)
 {
-    WebCore::RealtimeMediaSourceCenter::singleton().getMediaStreamDevices([weakThis = makeWeakPtr(*this), this, shouldNotify](auto&& newDevices) mutable {
+    WebCore::RealtimeMediaSourceCenter::singleton().getMediaStreamDevices([weakThis = WeakPtr { *this }, this, shouldNotify](auto&& newDevices) mutable {
         if (!weakThis)
             return;
 

@@ -33,24 +33,30 @@
 #include "WebResourceInterceptController.h"
 #include <WebCore/FrameIdentifier.h>
 #include <WebCore/PageIdentifier.h>
+#include <WebCore/ResourceLoaderIdentifier.h>
+#include <wtf/MonotonicTime.h>
 #include <wtf/RefCounted.h>
 #include <wtf/RefPtr.h>
 
 namespace IPC {
 class FormDataReference;
+class SharedBufferReference;
 }
 
 namespace WebCore {
+class ContentFilterUnblockHandler;
 class NetworkLoadMetrics;
 class ResourceError;
 class ResourceLoader;
 class ResourceRequest;
 class ResourceResponse;
+class SubstituteData;
+enum class MainFrameMainResource : bool;
 }
 
 namespace WebKit {
 
-typedef uint64_t ResourceLoadIdentifier;
+enum class PrivateRelayed : bool;
 
 class WebResourceLoader : public RefCounted<WebResourceLoader>, public IPC::MessageSender {
 public:
@@ -58,7 +64,7 @@ public:
         WebPageProxyIdentifier webPageProxyID;
         WebCore::PageIdentifier pageID;
         WebCore::FrameIdentifier frameID;
-        ResourceLoadIdentifier resourceID { 0 };
+        WebCore::ResourceLoaderIdentifier resourceID;
     };
 
     static Ref<WebResourceLoader> create(Ref<WebCore::ResourceLoader>&&, const TrackingParameters&);
@@ -80,20 +86,27 @@ private:
 
     void willSendRequest(WebCore::ResourceRequest&&, IPC::FormDataReference&& requestBody, WebCore::ResourceResponse&&);
     void didSendData(uint64_t bytesSent, uint64_t totalBytesToBeSent);
-    void didReceiveResponse(const WebCore::ResourceResponse&, bool needsContinueDidReceiveResponseMessage);
-    void didReceiveData(const IPC::DataReference&, int64_t encodedDataLength);
-    void didFinishResourceLoad(const WebCore::NetworkLoadMetrics&);
+    void didReceiveResponse(WebCore::ResourceResponse&&, PrivateRelayed, bool needsContinueDidReceiveResponseMessage, std::optional<WebCore::NetworkLoadMetrics>&&);
+    void didReceiveData(IPC::SharedBufferReference&& data, int64_t encodedDataLength);
+    void didFinishResourceLoad(WebCore::NetworkLoadMetrics&&);
     void didFailResourceLoad(const WebCore::ResourceError&);
     void didFailServiceWorkerLoad(const WebCore::ResourceError&);
     void serviceWorkerDidNotHandle();
     void didBlockAuthenticationChallenge();
+    void setWorkerStart(MonotonicTime value) { m_workerStart = value; }
 
     void stopLoadingAfterXFrameOptionsOrContentSecurityPolicyDenied(const WebCore::ResourceResponse&);
 
+    WebCore::MainFrameMainResource mainFrameMainResource() const;
+    
 #if ENABLE(SHAREABLE_RESOURCE)
     void didReceiveResource(const ShareableResource::Handle&);
 #endif
 
+#if ENABLE(CONTENT_FILTERING_IN_NETWORKING_PROCESS)
+    void contentFilterDidBlockLoad(const WebCore::ContentFilterUnblockHandler&, String&& unblockRequestDeniedScript, const WebCore::ResourceError&, const URL& blockedPageURL, WebCore::SubstituteData&&);
+#endif
+    
     RefPtr<WebCore::ResourceLoader> m_coreLoader;
     TrackingParameters m_trackingParameters;
     WebResourceInterceptController m_interceptController;
@@ -102,6 +115,8 @@ private:
 #if ASSERT_ENABLED
     bool m_isProcessingNetworkResponse { false };
 #endif
+
+    MonotonicTime m_workerStart;
 };
 
 } // namespace WebKit

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010-2016 Apple Inc. All rights reserved.
+ * Copyright (C) 2010-2022 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -58,10 +58,12 @@ class IntRect;
 
 namespace WebKit {
 
+class InjectedBundleCSSStyleDeclarationHandle;
 class InjectedBundleHitTestResult;
 class InjectedBundleNodeHandle;
 class InjectedBundleRangeHandle;
 class InjectedBundleScriptWorld;
+class WebImage;
 class WebPage;
 struct FrameInfoData;
 struct WebsitePoliciesData;
@@ -69,7 +71,7 @@ struct WebsitePoliciesData;
 class WebFrame : public API::ObjectImpl<API::Object::Type::BundleFrame>, public CanMakeWeakPtr<WebFrame> {
 public:
     static Ref<WebFrame> create() { return adoptRef(*new WebFrame); }
-    static Ref<WebFrame> createSubframe(WebPage*, const String& frameName, WebCore::HTMLFrameOwnerElement*);
+    static Ref<WebFrame> createSubframe(WebPage*, const AtomString& frameName, WebCore::HTMLFrameOwnerElement*);
     ~WebFrame();
 
     void initWithCoreMainFrame(WebPage&, WebCore::Frame&);
@@ -115,6 +117,7 @@ public:
     Ref<API::Array> childFrames();
     JSGlobalContextRef jsContext();
     JSGlobalContextRef jsContextForWorld(InjectedBundleScriptWorld*);
+    JSGlobalContextRef jsContextForServiceWorkerWorld(InjectedBundleScriptWorld*);
     WebCore::IntRect contentBounds() const;
     WebCore::IntRect visibleContentBounds() const;
     WebCore::IntRect visibleContentBoundsExcludingScrollbars() const;
@@ -139,12 +142,12 @@ public:
     bool containsAnyFormElements() const;
     bool containsAnyFormControls() const;
     void stopLoading();
-    bool handlesPageScaleGesture() const;
-    bool requiresUnifiedScaleFactor() const;
-    void setAccessibleName(const String&);
+    void setAccessibleName(const AtomString&);
 
     static WebFrame* frameForContext(JSContextRef);
+    static WebFrame* contentFrameForWindowOrFrameElement(JSContextRef, JSValueRef);
 
+    JSValueRef jsWrapperForWorld(InjectedBundleCSSStyleDeclarationHandle*, InjectedBundleScriptWorld*);
     JSValueRef jsWrapperForWorld(InjectedBundleNodeHandle*, InjectedBundleScriptWorld*);
     JSValueRef jsWrapperForWorld(InjectedBundleRangeHandle*, InjectedBundleScriptWorld*);
 
@@ -172,7 +175,7 @@ public:
         virtual void didFinishLoad(WebFrame*) = 0;
         virtual void didFailLoad(WebFrame*, bool wasCancelled) = 0;
     };
-    void setLoadListener(LoadListener* loadListener) { m_loadListener = makeWeakPtr(loadListener); }
+    void setLoadListener(LoadListener* loadListener) { m_loadListener = loadListener; }
     LoadListener* loadListener() const { return m_loadListener.get(); }
     
 #if PLATFORM(COCOA)
@@ -180,7 +183,7 @@ public:
     RetainPtr<CFDataRef> webArchiveData(FrameFilterFunction, void* context);
 #endif
 
-    RefPtr<ShareableBitmap> createSelectionSnapshot() const;
+    RefPtr<WebImage> createSelectionSnapshot() const;
 
 #if PLATFORM(IOS_FAMILY)
     TransactionID firstLayerTreeTransactionIDAfterDidCommitLoad() const { return m_firstLayerTreeTransactionIDAfterDidCommitLoad; }

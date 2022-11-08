@@ -555,6 +555,8 @@ void TestAPI::promiseUnhandledRejection()
     static TestAPI* tester = this;
     static bool callbackCalled = false;
     auto callback = [](JSContextRef ctx, JSObjectRef, JSObjectRef, size_t argumentCount, const JSValueRef arguments[], JSValueRef*) -> JSValueRef {
+        if (callbackCalled)
+            return JSValueMakeUndefined(ctx);
         tester->check(argumentCount && JSValueIsStrictEqual(ctx, arguments[0], promise), "callback should receive rejected promise as first argument");
         tester->check(argumentCount > 1 && JSValueIsStrictEqual(ctx, arguments[1], reason), "callback should receive rejection reason as second argument");
         tester->check(argumentCount == 2, "callback should not receive a third argument");
@@ -617,16 +619,7 @@ void TestAPI::promiseEarlyHandledRejections()
 void TestAPI::promiseDrainDoesNotEatExceptions()
 {
 #if PLATFORM(COCOA)
-    bool useLegacyDrain = false;
-#if PLATFORM(MAC)
-    useLegacyDrain = applicationSDKVersion() < DYLD_MACOSX_VERSION_12_00;
-#elif PLATFORM(WATCH)
-        // Don't check, JSC isn't API on watch anyway.
-#elif PLATFORM(IOS_FAMILY)
-    useLegacyDrain = applicationSDKVersion() < DYLD_IOS_VERSION_15_0;
-#else
-#error "Unsupported Cocoa Platform"
-#endif
+    bool useLegacyDrain = !linkedOnOrAfterSDKWithBehavior(SDKAlignedBehavior::DoesNotDrainTheMicrotaskQueueWhenCallingObjC);
     if (useLegacyDrain)
         return;
 #endif

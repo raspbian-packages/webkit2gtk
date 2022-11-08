@@ -53,7 +53,7 @@ ViewUpdateDispatcher::~ViewUpdateDispatcher()
 
 void ViewUpdateDispatcher::initializeConnection(IPC::Connection* connection)
 {
-    connection->addWorkQueueMessageReceiver(Messages::ViewUpdateDispatcher::messageReceiverName(), m_queue.get(), this);
+    connection->addWorkQueueMessageReceiver(Messages::ViewUpdateDispatcher::messageReceiverName(), m_queue.get(), *this);
 }
 
 void ViewUpdateDispatcher::visibleContentRectUpdate(WebCore::PageIdentifier pageID, const VisibleContentRectUpdateInfo& visibleContentRectUpdateInfo)
@@ -69,7 +69,7 @@ void ViewUpdateDispatcher::visibleContentRectUpdate(WebCore::PageIdentifier page
             iterator->value.get().visibleContentRectUpdateInfo = visibleContentRectUpdateInfo;
     }
     if (updateListWasEmpty) {
-        RunLoop::main().dispatch([protectedThis = makeRef(*this)]() mutable {
+        RunLoop::main().dispatch([protectedThis = Ref { *this }]() mutable {
             protectedThis->dispatchVisibleContentRectUpdate();
         });
     }

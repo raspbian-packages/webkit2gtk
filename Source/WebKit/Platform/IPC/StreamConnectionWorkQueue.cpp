@@ -26,6 +26,10 @@
 #include "config.h"
 #include "StreamConnectionWorkQueue.h"
 
+#if USE(FOUNDATION)
+#include <wtf/AutodrainedPool.h>
+#endif
+
 namespace IPC {
 
 StreamConnectionWorkQueue::StreamConnectionWorkQueue(const char* name)
@@ -33,45 +37,62 @@ StreamConnectionWorkQueue::StreamConnectionWorkQueue(const char* name)
 {
 }
 
+StreamConnectionWorkQueue::~StreamConnectionWorkQueue()
+{
+    // `StreamConnectionWorkQueue::stopAndWaitForCompletion()` should be called if anything has been dispatched or listened to.
+    ASSERT(!m_processingThread);
+}
+
 void StreamConnectionWorkQueue::dispatch(WTF::Function<void()>&& function)
 {
+    ASSERT(!m_shouldQuit); // Re-entering during shutdown not supported.
     {
         Locker locker { m_lock };
         m_functions.append(WTFMove(function));
-        ASSERT(!m_shouldQuit); // Re-entering during shutdown not supported.
+        if (!m_shouldQuit && !m_processingThread) {
+            startProcessingThread();
+            return;
+        }
     }
-    wakeUpProcessingThread();
-
+    wakeUp();
 }
-void StreamConnectionWorkQueue::addStreamConnection(StreamServerConnectionBase& connection)
+
+void StreamConnectionWorkQueue::addStreamConnection(StreamServerConnection& connection)
 {
     {
         Locker locker { m_lock };
         m_connections.add(connection);
-        ASSERT(!m_shouldQuit); // Re-entering during shutdown not supported.
+        if (!m_shouldQuit && !m_processingThread) {
+            startProcessingThread();
+            return;
+        }
     }
-    wakeUpProcessingThread();
+    wakeUp();
 }
 
-void StreamConnectionWorkQueue::removeStreamConnection(StreamServerConnectionBase& connection)
+void StreamConnectionWorkQueue::removeStreamConnection(StreamServerConnection& connection)
 {
-    ASSERT(m_processingThread);
     {
         Locker locker { m_lock };
         m_connections.remove(connection);
-        ASSERT(!m_shouldQuit); // Re-entering during shutdown not supported.
     }
-    m_wakeUpSemaphore.signal();
+    wakeUp();
 }
 
-void StreamConnectionWorkQueue::stop()
+void StreamConnectionWorkQueue::stopAndWaitForCompletion(WTF::Function<void()>&& cleanupFunction)
 {
+    RefPtr<Thread> processingThread;
+    {
+        Locker locker { m_lock };
+        m_cleanupFunction = WTFMove(cleanupFunction);
+        processingThread = WTFMove(m_processingThread);
+    }
     m_shouldQuit = true;
-    if (!m_processingThread)
+    if (!processingThread)
         return;
-    m_wakeUpSemaphore.signal();
-    m_processingThread->waitForCompletion();
-    m_processingThread = nullptr;
+    ASSERT(Thread::current().uid() != processingThread->uid());
+    wakeUp();
+    processingThread->waitForCompletion();
 }
 
 void StreamConnectionWorkQueue::wakeUp()
@@ -84,18 +105,18 @@ IPC::Semaphore& StreamConnectionWorkQueue::wakeUpSemaphore()
     return m_wakeUpSemaphore;
 }
 
-void StreamConnectionWorkQueue::wakeUpProcessingThread()
+void StreamConnectionWorkQueue::startProcessingThread()
 {
-    if (m_processingThread) {
-        m_wakeUpSemaphore.signal();
-        return;
-    }
-
     auto task = [this]() mutable {
         for (;;) {
             processStreams();
             if (m_shouldQuit) {
                 processStreams();
+                {
+                    Locker locker { m_lock };
+                    if (m_cleanupFunction)
+                        m_cleanupFunction();
+                }
                 return;
             }
             m_wakeUpSemaphore.wait();
@@ -109,20 +130,31 @@ void StreamConnectionWorkQueue::processStreams()
     constexpr size_t defaultMessageLimit = 1000;
     bool hasMoreToProcess = false;
     do {
+#if USE(FOUNDATION)
+        AutodrainedPool perProcessingIterationPool;
+#endif
         Deque<WTF::Function<void()>> functions;
-        HashSet<Ref<StreamServerConnectionBase>> connections;
+        Vector<Ref<StreamServerConnection>> connections;
         {
             Locker locker { m_lock };
             functions.swap(m_functions);
-            connections = m_connections;
+            connections = copyToVector(m_connections.values());
         }
         for (auto& function : functions)
             WTFMove(function)();
 
         hasMoreToProcess = false;
         for (auto& connection : connections)
-            hasMoreToProcess |= connection->dispatchStreamMessages(defaultMessageLimit) == StreamServerConnectionBase::HasMoreMessages;
+            hasMoreToProcess |= connection->dispatchStreamMessages(defaultMessageLimit) == StreamServerConnection::HasMoreMessages;
     } while (hasMoreToProcess);
 }
 
+#if ASSERT_ENABLED
+void StreamConnectionWorkQueue::assertIsCurrent() const
+{
+    Locker locker { m_lock };
+    ASSERT(m_processingThread);
+    WTF::assertIsCurrent(*m_processingThread);
+}
+#endif
 }

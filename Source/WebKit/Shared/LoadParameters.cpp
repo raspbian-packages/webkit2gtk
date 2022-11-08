@@ -56,10 +56,14 @@ void LoadParameters::encode(IPC::Encoder& encoder) const
     encoder << lockHistory;
     encoder << lockBackForwardList;
     encoder << clientRedirectSourceForHistory;
+    encoder << effectiveSandboxFlags;
     encoder << isNavigatingToAppBoundDomain;
     encoder << existingNetworkResourceLoadIdentifierToResume;
+    encoder << isServiceWorkerLoad;
     encoder << sessionHistoryVisibility;
-
+#if ENABLE(PUBLIC_SUFFIX_LIST)
+    encoder << topPrivatelyControlledDomain;
+#endif
     platformEncode(encoder);
 }
 
@@ -135,16 +139,30 @@ bool LoadParameters::decode(IPC::Decoder& decoder, LoadParameters& data)
     if (!clientRedirectSourceForHistory)
         return false;
     data.clientRedirectSourceForHistory = WTFMove(*clientRedirectSourceForHistory);
+
+    std::optional<WebCore::SandboxFlags> effectiveSandboxFlags;
+    decoder >> effectiveSandboxFlags;
+    if (!effectiveSandboxFlags)
+        return false;
+    data.effectiveSandboxFlags = *effectiveSandboxFlags;
     
     if (!decoder.decode(data.isNavigatingToAppBoundDomain))
         return false;
 
     if (!decoder.decode(data.existingNetworkResourceLoadIdentifierToResume))
         return false;
+
+    if (!decoder.decode(data.isServiceWorkerLoad))
+        return false;
     
     if (!decoder.decode(data.sessionHistoryVisibility))
         return false;
-    
+
+#if ENABLE(PUBLIC_SUFFIX_LIST)
+    if (!decoder.decode(data.topPrivatelyControlledDomain))
+        return false;
+#endif
+
     if (!platformDecode(decoder, data))
         return false;
 

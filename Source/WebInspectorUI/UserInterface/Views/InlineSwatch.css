@@ -58,15 +58,15 @@
     margin-right: 2px;
 }
 
-.inline-swatch:not(.read-only):matches(.bezier, .box-shadow, .spring, .variable):hover {
+.inline-swatch:not(.read-only):matches(.bezier, .box-shadow, .spring, .variable, .alignment):hover {
     filter: brightness(0.9);
 }
 
-.inline-swatch:not(.read-only):matches(.bezier, .box-shadow, .spring, .variable):active {
+.inline-swatch:not(.read-only):matches(.bezier, .box-shadow, .spring, .variable, .alignment):active {
     filter: brightness(0.8);
 }
 
-@media (-webkit-max-device-pixel-ratio: 1) {
+@media (max-resolution: 1dppx) {
     /* Ensure the color swatch is even by even so that it looks okay checkered. */
     .inline-swatch {
         vertical-align: -1px;
@@ -98,9 +98,13 @@
     display: none;
 }
 
-.inline-swatch.image > span {
+.inline-swatch:is(.image, .alignment) > span {
     background-size: cover;
     background-repeat: no-repeat;
+}
+
+.inline-swatch.alignment > span.rotate-left {
+    rotate: -90deg;
 }
 
 .inline-swatch-variable-popover {
@@ -119,8 +123,14 @@
     padding: 0 3px;
 }
 
+.inline-swatch-variable-popover .CodeMirror-sizer {
+    /* Override min-height set as inline style by CodeMirror which sizes its container disproportionally tall. */
+    min-height: fit-content !important;
+}
+
 @media (prefers-color-scheme: dark) {
-    .inline-swatch.box-shadow > svg {
+    .inline-swatch.box-shadow > svg,
+    .inline-swatch.alignment > span {
         filter: invert();
     }
 }

@@ -14,7 +14,7 @@
 #include "libANGLE/renderer/gl/FunctionsGL.h"
 #include "libANGLE/renderer/gl/RendererGL.h"
 #include "libANGLE/trace.h"
-#include "platform/FeaturesGL.h"
+#include "platform/FeaturesGL_autogen.h"
 
 #include <iostream>
 
@@ -246,8 +246,8 @@ std::shared_ptr<WaitableCompileEvent> ShaderGL::compile(const gl::Context *conte
 
     ShCompileOptions additionalOptions = SH_INIT_GL_POSITION;
 
-    bool isWebGL = context->getExtensions().webglCompatibility;
-    if (isWebGL && (mState.getShaderType() != gl::ShaderType::Compute))
+    bool isWebGL = context->isWebGL();
+    if (isWebGL && mState.getShaderType() != gl::ShaderType::Compute)
     {
         additionalOptions |= SH_INIT_OUTPUT_VARIABLES;
     }
@@ -258,6 +258,11 @@ std::shared_ptr<WaitableCompileEvent> ShaderGL::compile(const gl::Context *conte
     }
 
     const angle::FeaturesGL &features = GetFeaturesGL(context);
+
+    if (features.initFragmentOutputVariables.enabled)
+    {
+        additionalOptions |= SH_INIT_FRAGMENT_OUTPUT_VARIABLES;
+    }
 
     if (features.doWhileGLSLCausesGPUHang.enabled)
     {
@@ -309,11 +314,6 @@ std::shared_ptr<WaitableCompileEvent> ShaderGL::compile(const gl::Context *conte
         additionalOptions |= SH_CLAMP_POINT_SIZE;
     }
 
-    if (features.rewriteVectorScalarArithmetic.enabled)
-    {
-        additionalOptions |= SH_REWRITE_VECTOR_SCALAR_ARITHMETIC;
-    }
-
     if (features.dontUseLoopsToInitializeVariables.enabled)
     {
         additionalOptions |= SH_DONT_USE_LOOPS_TO_INITIALIZE_VARIABLES;
@@ -340,7 +340,7 @@ std::shared_ptr<WaitableCompileEvent> ShaderGL::compile(const gl::Context *conte
         additionalOptions |= SH_CLAMP_INDIRECT_ARRAY_BOUNDS;
     }
 
-    if (features.addBaseVertexToVertexID.enabled)
+    if (features.vertexIDDoesNotIncludeBaseVertex.enabled)
     {
         additionalOptions |= SH_ADD_BASE_VERTEX_TO_VERTEX_ID;
     }
@@ -372,7 +372,7 @@ std::shared_ptr<WaitableCompileEvent> ShaderGL::compile(const gl::Context *conte
 
     options |= additionalOptions;
 
-    auto workerThreadPool = context->getWorkerThreadPool();
+    auto workerThreadPool = context->getShaderCompileThreadPool();
 
     const std::string &source = mState.getSource();
 

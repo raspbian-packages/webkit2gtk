@@ -79,11 +79,13 @@ public:
 #if USE(COORDINATED_GRAPHICS) || USE(TEXTURE_MAPPER)
     // The timeout we use when waiting for a DidUpdateGeometry message.
     static constexpr Seconds didUpdateBackingStoreStateTimeout() { return Seconds::fromMilliseconds(500); }
+    virtual void targetRefreshRateDidChange(unsigned) { }
 #endif
 
     virtual void colorSpaceDidChange() { }
     virtual void minimumSizeForAutoLayoutDidChange() { }
     virtual void sizeToContentAutoSizeMaximumSizeDidChange() { }
+    virtual void windowKindDidChange() { }
 
     virtual void adjustTransientZoom(double, WebCore::FloatPoint) { }
     virtual void commitTransientZoom(double, WebCore::FloatPoint) { }

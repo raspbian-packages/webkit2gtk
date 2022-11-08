@@ -31,6 +31,7 @@
 #include <WebCore/IntRect.h>
 #include <WebCore/PageOverlay.h>
 #include <WebCore/SimpleRange.h>
+#include <wtf/CompletionHandler.h>
 #include <wtf/Forward.h>
 #include <wtf/Noncopyable.h>
 #include <wtf/Vector.h>
@@ -48,9 +49,10 @@ enum class DidWrap : bool;
 namespace WebKit {
 
 class CallbackID;
+class PluginView;
 class WebPage;
 
-class FindController : private WebCore::PageOverlay::Client {
+class FindController final : private WebCore::PageOverlay::Client {
     WTF_MAKE_FAST_ALLOCATED;
     WTF_MAKE_NONCOPYABLE(FindController);
 
@@ -60,6 +62,7 @@ public:
 
     void findString(const String&, OptionSet<FindOptions>, unsigned maxMatchCount, CompletionHandler<void(bool)>&&);
     void findStringMatches(const String&, OptionSet<FindOptions>, unsigned maxMatchCount);
+    void findRectsForStringMatches(const String&, OptionSet<WebKit::FindOptions>, unsigned maxMatchCount, CompletionHandler<void(Vector<WebCore::FloatRect>&&)>&&);
     void getImageForFindMatch(uint32_t matchIndex);
     void selectFindMatch(uint32_t matchIndex);
     void indicateFindMatch(uint32_t matchIndex);
@@ -100,6 +103,10 @@ private:
     bool shouldHideFindIndicatorOnScroll() const;
     void didScrollAffectingFindIndicatorPosition();
 
+#if ENABLE(PDFKIT_PLUGIN)
+    PluginView* mainFramePlugIn();
+#endif
+
     WebPage* m_webPage;
     WebCore::PageOverlay* m_findPageOverlay { nullptr };
 
@@ -116,7 +123,5 @@ private:
     std::unique_ptr<FindIndicatorOverlayClientIOS> m_findIndicatorOverlayClient;
 #endif
 };
-
-WebCore::FindOptions core(OptionSet<FindOptions>);
 
 } // namespace WebKit

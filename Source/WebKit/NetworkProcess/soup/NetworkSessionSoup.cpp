@@ -39,7 +39,7 @@
 namespace WebKit {
 using namespace WebCore;
 
-NetworkSessionSoup::NetworkSessionSoup(NetworkProcess& networkProcess, NetworkSessionCreationParameters&& parameters)
+NetworkSessionSoup::NetworkSessionSoup(NetworkProcess& networkProcess, const NetworkSessionCreationParameters& parameters)
     : NetworkSession(networkProcess, parameters)
     , m_networkSession(makeUnique<SoupNetworkSession>(m_sessionID))
     , m_persistentCredentialStorageEnabled(parameters.persistentCredentialStorageEnabled)
@@ -52,7 +52,7 @@ NetworkSessionSoup::NetworkSessionSoup(NetworkProcess& networkProcess, NetworkSe
     setIgnoreTLSErrors(parameters.ignoreTLSErrors);
 
     if (parameters.proxySettings.mode != SoupNetworkProxySettings::Mode::Default)
-        setProxySettings(WTFMove(parameters.proxySettings));
+        setProxySettings(parameters.proxySettings);
 
     if (!parameters.cookiePersistentStoragePath.isEmpty())
         setCookiePersistentStorage(parameters.cookiePersistentStoragePath, parameters.cookiePersistentStorageType);
@@ -119,13 +119,13 @@ static void webSocketMessageNetworkEventCallback(SoupMessage* soupMessage, GSock
 }
 #endif
 
-std::unique_ptr<WebSocketTask> NetworkSessionSoup::createWebSocketTask(WebPageProxyIdentifier, NetworkSocketChannel& channel, const ResourceRequest& request, const String& protocol)
+std::unique_ptr<WebSocketTask> NetworkSessionSoup::createWebSocketTask(WebPageProxyIdentifier, NetworkSocketChannel& channel, const ResourceRequest& request, const String& protocol, const ClientOrigin&, bool)
 {
     GRefPtr<SoupMessage> soupMessage = request.createSoupMessage(blobRegistry());
     if (!soupMessage)
         return nullptr;
 
-    if (request.url().protocolIs("wss")) {
+    if (request.url().protocolIs("wss"_s)) {
 #if USE(SOUP2)
         g_signal_connect(soupMessage.get(), "network-event", G_CALLBACK(webSocketMessageNetworkEventCallback), this);
 #else
@@ -145,9 +145,9 @@ void NetworkSessionSoup::setIgnoreTLSErrors(bool ignoreTLSErrors)
     m_networkSession->setIgnoreTLSErrors(ignoreTLSErrors);
 }
 
-void NetworkSessionSoup::setProxySettings(SoupNetworkProxySettings&& settings)
+void NetworkSessionSoup::setProxySettings(const SoupNetworkProxySettings& settings)
 {
-    m_networkSession->setProxySettings(WTFMove(settings));
+    m_networkSession->setProxySettings(settings);
 }
 
 } // namespace WebKit

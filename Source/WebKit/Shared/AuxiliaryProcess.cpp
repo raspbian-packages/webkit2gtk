@@ -26,6 +26,7 @@
 #include "config.h"
 #include "AuxiliaryProcess.h"
 
+#include "AuxiliaryProcessCreationParameters.h"
 #include "ContentWorldShared.h"
 #include "LogInitialization.h"
 #include "Logging.h"
@@ -34,6 +35,7 @@
 #include <WebCore/LogInitialization.h>
 #include <pal/SessionID.h>
 #include <wtf/LogInitialization.h>
+#include <wtf/SetForScope.h>
 
 #if !OS(WINDOWS)
 #include <unistd.h>
@@ -48,18 +50,25 @@ using namespace WebCore;
 
 AuxiliaryProcess::AuxiliaryProcess()
     : m_terminationCounter(0)
-    , m_terminationTimer(RunLoop::main(), this, &AuxiliaryProcess::terminationTimerFired)
     , m_processSuppressionDisabled("Process Suppression Disabled by UIProcess")
 {
 }
 
 AuxiliaryProcess::~AuxiliaryProcess()
 {
+    if (m_connection)
+        m_connection->invalidate();
 }
 
 void AuxiliaryProcess::didClose(IPC::Connection&)
 {
+// Stop the run loop for GTK and WPE to ensure a normal exit, since we need
+// atexit handlers to be called to cleanup resources like EGL displays.
+#if PLATFORM(GTK) || PLATFORM(WPE)
+    stopRunLoop();
+#else
     _exit(EXIT_SUCCESS);
+#endif
 }
 
 void AuxiliaryProcess::initialize(const AuxiliaryProcessInitializationParameters& parameters)
@@ -77,10 +86,10 @@ void AuxiliaryProcess::initialize(const AuxiliaryProcessInitializationParameters
     m_priorityBoostMessage = parameters.priorityBoostMessage;
 #endif
 
-    initializeProcess(parameters);
-
     SandboxInitializationParameters sandboxParameters;
     initializeSandbox(parameters, sandboxParameters);
+
+    initializeProcess(parameters);
 
 #if !LOG_DISABLED || !RELEASE_LOG_DISABLED
     WTF::logChannels().initializeLogChannelsIfNecessary();
@@ -148,7 +157,6 @@ void AuxiliaryProcess::removeMessageReceiver(IPC::MessageReceiver& messageReceiv
 void AuxiliaryProcess::disableTermination()
 {
     m_terminationCounter++;
-    m_terminationTimer.stop();
 }
 
 void AuxiliaryProcess::enableTermination()
@@ -156,15 +164,11 @@ void AuxiliaryProcess::enableTermination()
     ASSERT(m_terminationCounter > 0);
     m_terminationCounter--;
 
-    if (m_terminationCounter)
+    if (m_terminationCounter || m_isInShutDown)
         return;
 
-    if (!m_terminationTimeout) {
-        terminationTimerFired();
-        return;
-    }
-
-    m_terminationTimer.startOneShot(m_terminationTimeout);
+    if (shouldTerminate())
+        terminate();
 }
 
 void AuxiliaryProcess::mainThreadPing(CompletionHandler<void()>&& completionHandler)
@@ -180,14 +184,6 @@ IPC::Connection* AuxiliaryProcess::messageSenderConnection() const
 uint64_t AuxiliaryProcess::messageSenderDestinationID() const
 {
     return 0;
-}
-
-void AuxiliaryProcess::terminationTimerFired()
-{
-    if (!shouldTerminate())
-        return;
-
-    terminate();
 }
 
 void AuxiliaryProcess::stopRunLoop()
@@ -211,44 +207,32 @@ void AuxiliaryProcess::terminate()
 
 void AuxiliaryProcess::shutDown()
 {
+    SetForScope<bool> isInShutDown(m_isInShutDown, true);
     terminate();
 }
 
-std::optional<std::pair<IPC::Connection::Identifier, IPC::Attachment>> AuxiliaryProcess::createIPCConnectionPair()
+void AuxiliaryProcess::applyProcessCreationParameters(const AuxiliaryProcessCreationParameters& parameters)
 {
-#if USE(UNIX_DOMAIN_SOCKETS)
-    IPC::Connection::SocketPair socketPair = IPC::Connection::createPlatformConnection();
-    return std::make_pair(socketPair.server, IPC::Attachment { socketPair.client });
-#elif OS(DARWIN)
-    // Create the listening port.
-    mach_port_t listeningPort = MACH_PORT_NULL;
-    auto kr = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &listeningPort);
-    if (kr != KERN_SUCCESS) {
-        RELEASE_LOG_ERROR(Process, "AuxiliaryProcess::createIPCConnectionPair: Could not allocate mach port, error %x", kr);
-        CRASH();
-    }
-    if (!MACH_PORT_VALID(listeningPort)) {
-        RELEASE_LOG_ERROR(Process, "AuxiliaryProcess::createIPCConnectionPair: Could not allocate mach port, returned port was invalid");
-        CRASH();
-    }
-    return std::make_pair(IPC::Connection::Identifier { listeningPort }, IPC::Attachment { listeningPort, MACH_MSG_TYPE_MAKE_SEND });
-#elif OS(WINDOWS)
-    IPC::Connection::Identifier serverIdentifier, clientIdentifier;
-    if (!IPC::Connection::createServerAndClientIdentifiers(serverIdentifier, clientIdentifier)) {
-        LOG_ERROR("Failed to create server and client identifiers");
-        CRASH();
-    }
-    return std::make_pair(serverIdentifier, IPC::Attachment { clientIdentifier });
-#else
-    notImplemented();
-    return { };
+#if !LOG_DISABLED || !RELEASE_LOG_DISABLED
+    WTF::logChannels().initializeLogChannelsIfNecessary(parameters.wtfLoggingChannels);
+    WebCore::logChannels().initializeLogChannelsIfNecessary(parameters.webCoreLoggingChannels);
+    WebKit::logChannels().initializeLogChannelsIfNecessary(parameters.webKitLoggingChannels);
 #endif
 }
 
+#if !PLATFORM(IOS_FAMILY) || PLATFORM(MACCATALYST)
+void AuxiliaryProcess::populateMobileGestaltCache(std::optional<SandboxExtension::Handle>&&)
+{
+}
+#endif
+
 #if !PLATFORM(COCOA)
+
+#if !OS(UNIX)
 void AuxiliaryProcess::platformInitialize(const AuxiliaryProcessInitializationParameters&)
 {
 }
+#endif
 
 void AuxiliaryProcess::initializeSandbox(const AuxiliaryProcessInitializationParameters&, SandboxInitializationParameters&)
 {

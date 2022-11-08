@@ -32,6 +32,7 @@
 #include "MessageReceiver.h"
 #include "RemoteSourceBufferIdentifier.h"
 #include "RemoteSourceBufferProxyMessagesReplies.h"
+#include "SharedMemory.h"
 #include "TrackPrivateRemoteIdentifier.h"
 #include <WebCore/MediaDescription.h>
 #include <WebCore/SourceBufferPrivate.h>
@@ -42,6 +43,7 @@
 namespace IPC {
 class Connection;
 class Decoder;
+class SharedBufferReference;
 }
 
 namespace WebCore {
@@ -68,7 +70,7 @@ private:
     RemoteSourceBufferProxy(GPUConnectionToWebProcess&, RemoteSourceBufferIdentifier, Ref<WebCore::SourceBufferPrivate>&&, RemoteMediaPlayerProxy&);
 
     // SourceBufferPrivateClient
-    void sourceBufferPrivateDidReceiveInitializationSegment(InitializationSegment&&, CompletionHandler<void()>&&) final;
+    void sourceBufferPrivateDidReceiveInitializationSegment(InitializationSegment&&, CompletionHandler<void(ReceiveResult)>&&) final;
     void sourceBufferPrivateStreamEndedWithDecodeError() final;
     void sourceBufferPrivateAppendError(bool decodeError) final;
     void sourceBufferPrivateAppendComplete(WebCore::SourceBufferPrivateClient::AppendResult) final;
@@ -87,7 +89,7 @@ private:
     void setActive(bool);
     void canSwitchToType(const WebCore::ContentType&, CompletionHandler<void(bool)>&&);
     void setMode(WebCore::SourceBufferAppendMode);
-    void append(const IPC::DataReference&);
+    void append(IPC::SharedBufferReference&&, CompletionHandler<void(std::optional<WebKit::SharedMemory::Handle>&&)>&&);
     void abort();
     void resetParserState();
     void removedFromMediaSource();

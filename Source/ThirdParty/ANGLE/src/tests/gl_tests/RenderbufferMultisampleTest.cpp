@@ -14,7 +14,7 @@ using namespace angle;
 namespace
 {
 
-class RenderbufferMultisampleTest : public ANGLETest
+class RenderbufferMultisampleTest : public ANGLETest<>
 {
   protected:
     RenderbufferMultisampleTest()
@@ -123,5 +123,6 @@ TEST_P(RenderbufferMultisampleTest, OddSampleCount)
     }
 }
 
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(RenderbufferMultisampleTest);
 ANGLE_INSTANTIATE_TEST_ES3_AND_ES31(RenderbufferMultisampleTest);
 }  // namespace

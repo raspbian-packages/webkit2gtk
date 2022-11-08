@@ -1,99 +1,128 @@
 ================
-WebKitGTK 2.34.6
+WebKitGTK 2.38.2
 ================
 
-What's new in WebKitGTK 2.34.6?
+What's new in WebKitGTK 2.38.2?
 
-  - Fix accessibility not working when the Bubblewrap sandbox is enabled.
-  - Fix rendering of scrollbars when overlay scrollbars are disabled.
-  - Fix the build when the X11 support is disabled.
-  - Fix the build in a number of situations where the main OpenGL library is
-    not called libGL or libgl, as is the case on systems that use libglvnd.
+  - Fix scrolling issues in some sites having fixed background.
+  - Fix prolonged buffering during progressive live playback.
+  - Fix the build with accessibility disabled.
   - Fix several crashes and rendering issues.
 
 ================
-WebKitGTK 2.34.5
+WebKitGTK 2.38.1
 ================
 
-What's new in WebKitGTK 2.34.5?
+What's new in WebKitGTK 2.38.1?
 
-  - Improve VP8 codec selection when using GStreamer 1.20.
-  - Fix connecting to the accessiblity bus when using the Bubblewrap sandbox.
-  - Fix links being incorrectly activated when starting a pinch zoom gesture.
-  - Fix touch-based scrolling.
-  - Fix the build with recent toolchains based on GCC 12 and on older ones as
-    included e.g. in Ubuntu 18.04.
-  - Fix the build with ICU 60, version 61 is no longer required.
+  - Make xdg-dbus-proxy work if host session bus address is an abstract socket.
+  - Use a single xdg-dbus-proxy process when sandbox is enabled.
+  - Fix high resolution video playback due to unimplemented changeType operation.
+  - Ensure GSubprocess uses posix_spawn() again and inherit file descriptors.
+  - Fix player stucking in buffering (paused) state for progressive streaming.
+  - Do not try to preconnect on link click when link preconnect setting is disabled.
+  - Fix close status code returned when the client closes a WebSocket in some cases.
+  - Fix media player duration calculation.
   - Fix several crashes and rendering issues.
 
 ================
-WebKitGTK 2.34.4
+WebKitGTK 2.38.0
 ================
 
-What's new in WebKitGTK 2.34.4?
+What's new in WebKitGTK 2.38.0?
 
+  - Fix jumpy elements whewn scrolling gitlab with async scrolling.
+  - Fix web-process-terminated signal not being emitted for the first web view when sandbox is enabled.
+  - Fix build with CMake < 3.17.
+  - Fix the build with GStreamer < 1.18.
+  - Fix several crashes and rendering issues.
+
+=================
+WebKitGTK 2.37.91
+=================
+
+What's new in WebKitGTK 2.37.91?
+
+  - Cache and reuse image-based backing stores to improve memory consumption.
+  - Fix printing with bubblewrap sandbox enabled
+  - Deprecate enable-frame-flattening setting because the functionality will be removed for 2.40.
+  - Fix deadlock when disposing player while handling rotation tag.
+  - Fix several crashes and rendering issues.
+  - Translation updates: Polish.
+
+=================
+WebKitGTK 2.37.90
+=================
+
+What's new in WebKitGTK 2.37.90?
+
+  - Remove libnotify dependency.
+  - Add support for service worker notifications.
+  - Add support for loading the notification icon.
+  - Add support for pac proxy type in WebDriver.
+  - Fix several crashes and rendering issues.
+  - Translation updates: Swedish.
+
+================
+WebKitGTK 2.37.1
+================
+
+What's new in WebKitGTK 2.37.1?
+
+  - Add initial implementation of WebRTC using GstWebRTC if GStreamer 1.20 is available,
+    disabled by default via web view settings.
+  - Add new API to set WebView's Content-Security-Policy for web extensions support.
+  - Add new API to run async JavaScript functions.
+  - Expose typed arrays in JavaScriptCore GLib API.
+  - Add support for PDF documents using PDF.js.
+  - Show font name and font variant settings in the inspector.
+  - MediaSession is enabled by default, allowing remote media control using MPRIS.
+  - Modernized media controls UI.
+  - Add Support Google Dynamic Ad Insertion (DAI).
+  - Add support for capturing encoded video streams from a webcam.
+  - Make it possible to use the remote inspector from other browsers using WEBKIT_INSPECTOR_HTTP_SERVER env var.
+  - Add support for IPv6 in the remote inspector.
+  - Update form elements style to match libadwaita.
+  - Fix canvas animations and images with threaded rendering enabled.
+  - Switch to use gi-docgen for API documentation instead of gtk-doc.
+  - Remove the ATK a11y implementation that has been replaced by AT-SPI DBus interfaces.
   - Fix several crashes and rendering issues.
 
 ================
-WebKitGTK 2.34.3
+WebKitGTK 2.35.3
 ================
 
-What's new in WebKitGTK 2.34.3?
+What's new in WebKitGTK 2.35.3?
 
-  - Make audio tools (like mixers) display the actual name of the application
-    producing sound, instead of a generic one.
+  - Fix a crash at startup when bubblewrap sandbox is enabled.
+  - Fix a crash when starting a drag an drop on touchscreen.
   - Fix several crashes and rendering issues.
 
 ================
-WebKitGTK 2.34.2
+WebKitGTK 2.35.2
 ================
 
-What's new in WebKitGTK 2.34.2?
+What's new in WebKitGTK 2.35.2?
 
-  - Fix scrolling issues when pressing Home and PgDown keys.
-  - Update effective appearance after web process switch on navigation.
-  - Fix the build with video disabled.
-
-================
-WebKitGTK 2.34.1
-================
-
-What's new in WebKitGTK 2.34.1?
-
-  - Update user agent browser versions.
-  - Fix a crash with GTK >= 3.24.30.
-  - Fix a crash when loading videos on reddit.
-  - Fix file type detection when application calls g_desktop_app_info_set_as_default_for_extension() passing html.
+  - Add new accessibility implementation using ATSPI DBus interfaces instead of ATK.
+  - Use native GtkWidgets for form validation popups.
+  - Add support for requestVideoFrameCallback.
+  - Add support for accent colors.
+  - Fix pinch zooming from a link to not activate the link.
+  - Fix kinetic scrolling via touch screen.
+  - Fix several crashes and rendering issues.
 
 ================
-WebKitGTK 2.34.0
+WebKitGTK 2.35.1
 ================
 
-What's new in WebKitGTK 2.34.0?
+What's new in WebKitGTK 2.35.1?
 
-  - Fix another regression in JavaScriptCore on 32bit systems.
-
-=================
-WebKitGTK 2.33.91
-=================
-
-What's new in WebKitGTK 2.33.91?
-
-  - Use the right display refresh monitor for animations in accelerated compositng mode.
-  - Fix several issues in JavaScriptCore on 32bit systems.
-  - Prefer python3 over python2 in CMake.
-
-=================
-WebKitGTK 2.33.90
-=================
-
-What's new in WebKitGTK 2.33.90?
-
-  - Show TLS protocol version and ciphersuite name in the inspector when building with libsoup3.
-  - Add multi-track support to media backend.
-  - Avoid strong alias computations in font fallback code.
-  - Fix deadlock tearing down pipeline when using fallback sink.
-  - Fix the build with gtk-doc enabled.
+  - Make user interactive threads (event handler, scrolling, ...) real time in linux.
+  - Add new API to set HTTP response information to custom uri schemes.
+  - Add support for media session.
+  - Change hardware-acceleration-policy setting default value to always.
+  - Fix jsc_value_object_define_property_accessor() to work with objects not having a wrapped instance.
   - Fix several crashes and rendering issues.
 
 ================

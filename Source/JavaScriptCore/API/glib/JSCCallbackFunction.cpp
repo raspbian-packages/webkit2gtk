@@ -50,7 +50,7 @@ static JSObjectRef callAsConstructor(JSContextRef callerContext, JSObjectRef con
     return static_cast<JSCCallbackFunction*>(toJS(constructor))->construct(callerContext, argumentCount, arguments, exception);
 }
 
-const ClassInfo JSCCallbackFunction::s_info = { "CallbackFunction", &InternalFunction::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(JSCCallbackFunction) };
+const ClassInfo JSCCallbackFunction::s_info = { "CallbackFunction"_s, &InternalFunction::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(JSCCallbackFunction) };
 
 static JSC_DECLARE_HOST_FUNCTION(callJSCCallbackFunction);
 static JSC_DECLARE_HOST_FUNCTION(constructJSCCallbackFunction);
@@ -68,7 +68,7 @@ JSC_DEFINE_HOST_FUNCTION(constructJSCCallbackFunction, (JSGlobalObject* globalOb
 JSCCallbackFunction* JSCCallbackFunction::create(VM& vm, JSGlobalObject* globalObject, const String& name, Type type, JSCClass* jscClass, GRefPtr<GClosure>&& closure, GType returnType, std::optional<Vector<GType>>&& parameters)
 {
     Structure* structure = globalObject->glibCallbackFunctionStructure();
-    JSCCallbackFunction* function = new (NotNull, allocateCell<JSCCallbackFunction>(vm.heap)) JSCCallbackFunction(vm, structure, type, jscClass, WTFMove(closure), returnType, WTFMove(parameters));
+    JSCCallbackFunction* function = new (NotNull, allocateCell<JSCCallbackFunction>(vm)) JSCCallbackFunction(vm, structure, type, jscClass, WTFMove(closure), returnType, WTFMove(parameters));
     function->finishCreation(vm, 0, name);
     return function;
 }

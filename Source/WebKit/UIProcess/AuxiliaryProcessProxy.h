@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012-2019 Apple Inc. All rights reserved.
+ * Copyright (C) 2012-2022 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -25,10 +25,12 @@
 
 #pragma once
 
+#include "AuxiliaryProcessCreationParameters.h"
 #include "Connection.h"
 #include "MessageReceiverMap.h"
 #include "ProcessLauncher.h"
 #include "ResponsivenessTimer.h"
+#include "SandboxExtension.h"
 #include <WebCore/ProcessIdentifier.h>
 #include <wtf/ProcessID.h>
 #include <wtf/SystemTracing.h>
@@ -43,10 +45,12 @@ class AuxiliaryProcessProxy : public ThreadSafeRefCounted<AuxiliaryProcessProxy,
     WTF_MAKE_NONCOPYABLE(AuxiliaryProcessProxy);
 
 protected:
-    explicit AuxiliaryProcessProxy(bool alwaysRunsAtBackgroundPriority = false);
+    AuxiliaryProcessProxy(bool alwaysRunsAtBackgroundPriority = false, Seconds responsivenessTimeout = ResponsivenessTimer::defaultResponsivenessTimeout);
 
 public:
     virtual ~AuxiliaryProcessProxy();
+
+    static AuxiliaryProcessCreationParameters auxiliaryProcessParameters();
 
     void connect();
     virtual void terminate();
@@ -141,6 +145,8 @@ public:
     void ref() final { ThreadSafeRefCounted::ref(); }
     void deref() final { ThreadSafeRefCounted::deref(); }
 
+    std::optional<SandboxExtension::Handle> createMobileGestaltSandboxExtensionIfNeeded() const;
+
 protected:
     // ProcessLauncher::Client
     void didFinishLaunching(ProcessLauncher*, IPC::Connection::Identifier) override;
@@ -162,6 +168,8 @@ protected:
 
     virtual bool shouldSendPendingMessage(const PendingMessage&) { return true; }
 
+    void beginResponsivenessChecks();
+
     // ResponsivenessTimer::Client.
     void didBecomeUnresponsive() override;
     void didBecomeResponsive() override { }
@@ -169,9 +177,16 @@ protected:
     void didChangeIsResponsive() override { }
     bool mayBecomeUnresponsive() override;
 
+#if HAVE(AUDIO_COMPONENT_SERVER_REGISTRATIONS)
+    static RefPtr<WebCore::SharedBuffer> fetchAudioComponentServerRegistrations();
+#endif
+
 private:
     virtual void connectionWillOpen(IPC::Connection&);
     virtual void processWillShutDown(IPC::Connection&) = 0;
+
+    void populateOverrideLanguagesLaunchOptions(ProcessLauncher::LaunchOptions&) const;
+    Vector<String> platformOverrideLanguages() const;
 
     ResponsivenessTimer m_responsivenessTimer;
     Vector<PendingMessage> m_pendingMessages;
@@ -179,14 +194,16 @@ private:
     RefPtr<IPC::Connection> m_connection;
     IPC::MessageReceiverMap m_messageReceiverMap;
     bool m_alwaysRunsAtBackgroundPriority { false };
+    bool m_didBeginResponsivenessChecks { false };
     WebCore::ProcessIdentifier m_processIdentifier { WebCore::ProcessIdentifier::generate() };
-    std::optional<UseLazyStop> m_shouldStartResponsivenessTimerWhenLaunched;
+    std::optional<UseLazyStop> m_delayedResponsivenessCheck;
+    MonotonicTime m_processStart;
 };
 
 template<typename T>
 bool AuxiliaryProcessProxy::send(T&& message, uint64_t destinationID, OptionSet<IPC::SendOption> sendOptions)
 {
-    COMPILE_ASSERT(!T::isSync, AsyncMessageExpected);
+    static_assert(!T::isSync, "Async message expected");
 
     auto encoder = makeUniqueRef<IPC::Encoder>(T::name(), destinationID);
     encoder.get() << message.arguments();
@@ -197,7 +214,7 @@ bool AuxiliaryProcessProxy::send(T&& message, uint64_t destinationID, OptionSet<
 template<typename U> 
 AuxiliaryProcessProxy::SendSyncResult AuxiliaryProcessProxy::sendSync(U&& message, typename U::Reply&& reply, uint64_t destinationID, IPC::Timeout timeout, OptionSet<IPC::SendSyncOption> sendSyncOptions)
 {
-    COMPILE_ASSERT(U::isSync, SyncMessageExpected);
+    static_assert(U::isSync, "Sync message expected");
 
     if (!m_connection)
         return { };
@@ -210,7 +227,7 @@ AuxiliaryProcessProxy::SendSyncResult AuxiliaryProcessProxy::sendSync(U&& messag
 template<typename T, typename C>
 uint64_t AuxiliaryProcessProxy::sendWithAsyncReply(T&& message, C&& completionHandler, uint64_t destinationID, OptionSet<IPC::SendOption> sendOptions, ShouldStartProcessThrottlerActivity shouldStartProcessThrottlerActivity)
 {
-    COMPILE_ASSERT(!T::isSync, AsyncMessageExpected);
+    static_assert(!T::isSync, "Async message expected");
 
     auto encoder = makeUniqueRef<IPC::Encoder>(T::name(), destinationID);
     uint64_t listenerID = IPC::nextAsyncReplyHandlerID();

@@ -25,6 +25,7 @@
 
 #pragma once
 
+#include "SameDocumentNavigationType.h"
 #include "WebPageProxyIdentifier.h"
 #include <WebCore/FrameLoaderClient.h>
 #include <pal/SessionID.h>
@@ -52,7 +53,7 @@ public:
     std::optional<WebCore::PageIdentifier> pageID() const final;
     std::optional<WebCore::FrameIdentifier> frameID() const final;
 
-#if ENABLE(RESOURCE_LOAD_STATISTICS)
+#if ENABLE(INTELLIGENT_TRACKING_PREVENTION)
     bool hasFrameSpecificStorageAccess() final { return !!m_frameSpecificStorageAccessIdentifier; }
     
     struct FrameSpecificStorageAccessIdentifier {
@@ -81,21 +82,21 @@ private:
     void detachedFromParent2() final;
     void detachedFromParent3() final;
     
-    void assignIdentifierToInitialRequest(unsigned long identifier, WebCore::DocumentLoader*, const WebCore::ResourceRequest&) final;
+    void assignIdentifierToInitialRequest(WebCore::ResourceLoaderIdentifier, WebCore::DocumentLoader*, const WebCore::ResourceRequest&) final;
     
-    void dispatchWillSendRequest(WebCore::DocumentLoader*, unsigned long identifier, WebCore::ResourceRequest&, const WebCore::ResourceResponse& redirectResponse) final;
-    bool shouldUseCredentialStorage(WebCore::DocumentLoader*, unsigned long identifier) final;
-    void dispatchDidReceiveAuthenticationChallenge(WebCore::DocumentLoader*, unsigned long identifier, const WebCore::AuthenticationChallenge&) final;
+    void dispatchWillSendRequest(WebCore::DocumentLoader*, WebCore::ResourceLoaderIdentifier, WebCore::ResourceRequest&, const WebCore::ResourceResponse& redirectResponse) final;
+    bool shouldUseCredentialStorage(WebCore::DocumentLoader*, WebCore::ResourceLoaderIdentifier) final;
+    void dispatchDidReceiveAuthenticationChallenge(WebCore::DocumentLoader*, WebCore::ResourceLoaderIdentifier, const WebCore::AuthenticationChallenge&) final;
 #if USE(PROTECTION_SPACE_AUTH_CALLBACK)
-    bool canAuthenticateAgainstProtectionSpace(WebCore::DocumentLoader*, unsigned long identifier, const WebCore::ProtectionSpace&) final;
+    bool canAuthenticateAgainstProtectionSpace(WebCore::DocumentLoader*, WebCore::ResourceLoaderIdentifier, const WebCore::ProtectionSpace&) final;
 #endif
 #if PLATFORM(IOS_FAMILY)
-    RetainPtr<CFDictionaryRef> connectionProperties(WebCore::DocumentLoader*, unsigned long identifier) final;
+    RetainPtr<CFDictionaryRef> connectionProperties(WebCore::DocumentLoader*, WebCore::ResourceLoaderIdentifier) final;
 #endif
-    void dispatchDidReceiveResponse(WebCore::DocumentLoader*, unsigned long identifier, const WebCore::ResourceResponse&) final;
-    void dispatchDidReceiveContentLength(WebCore::DocumentLoader*, unsigned long identifier, int dataLength) final;
-    void dispatchDidFinishLoading(WebCore::DocumentLoader*, unsigned long identifier) final;
-    void dispatchDidFailLoading(WebCore::DocumentLoader*, unsigned long identifier, const WebCore::ResourceError&) final;
+    void dispatchDidReceiveResponse(WebCore::DocumentLoader*, WebCore::ResourceLoaderIdentifier, const WebCore::ResourceResponse&) final;
+    void dispatchDidReceiveContentLength(WebCore::DocumentLoader*, WebCore::ResourceLoaderIdentifier, int dataLength) final;
+    void dispatchDidFinishLoading(WebCore::DocumentLoader*, WebCore::ResourceLoaderIdentifier) final;
+    void dispatchDidFailLoading(WebCore::DocumentLoader*, WebCore::ResourceLoaderIdentifier, const WebCore::ResourceError&) final;
     bool dispatchDidLoadResourceFromMemoryCache(WebCore::DocumentLoader*, const WebCore::ResourceRequest&, const WebCore::ResourceResponse&, int length) final;
 #if ENABLE(DATA_DETECTION)
     void dispatchDidFinishDataDetection(NSArray *detectionResults) final;
@@ -112,6 +113,7 @@ private:
     void dispatchDidPushStateWithinPage() final;
     void dispatchDidReplaceStateWithinPage() final;
     void dispatchDidPopStateWithinPage() final;
+    void didSameDocumentNavigationForFrameViaJSHistoryAPI(SameDocumentNavigationType);
     void dispatchWillClose() final;
     void dispatchDidStartProvisionalLoad() final;
     void dispatchDidReceiveTitle(const WebCore::StringWithDirection&) final;
@@ -129,7 +131,7 @@ private:
     WebCore::Frame* dispatchCreatePage(const WebCore::NavigationAction&, WebCore::NewFrameOpenerPolicy) final;
     void dispatchShow() final;
     
-    void dispatchDecidePolicyForResponse(const WebCore::ResourceResponse&, const WebCore::ResourceRequest&, WebCore::PolicyCheckIdentifier, const String&, WebCore::BrowsingContextGroupSwitchDecision, WebCore::FramePolicyFunction&&) final;
+    void dispatchDecidePolicyForResponse(const WebCore::ResourceResponse&, const WebCore::ResourceRequest&, WebCore::PolicyCheckIdentifier, const String&, WebCore::FramePolicyFunction&&) final;
     void dispatchDecidePolicyForNewWindowAction(const WebCore::NavigationAction&, const WebCore::ResourceRequest&, WebCore::FormState*, const String& frameName, WebCore::PolicyCheckIdentifier, WebCore::FramePolicyFunction&&) final;
     void dispatchDecidePolicyForNavigationAction(const WebCore::NavigationAction&, const WebCore::ResourceRequest&, const WebCore::ResourceResponse& redirectResponse, WebCore::FormState*, WebCore::PolicyDecisionMode, WebCore::PolicyCheckIdentifier, WebCore::FramePolicyFunction&&) final;
     void cancelPolicyCheck() final;
@@ -152,7 +154,7 @@ private:
     void willReplaceMultipartContent() final;
     void didReplaceMultipartContent() final;
 
-    void committedLoad(WebCore::DocumentLoader*, const uint8_t*, int) final;
+    void committedLoad(WebCore::DocumentLoader*, const WebCore::SharedBuffer&) final;
     void finishedLoading(WebCore::DocumentLoader*) final;
     
     void updateGlobalHistory() final;
@@ -163,6 +165,10 @@ private:
     void didDisplayInsecureContent() final;
     void didRunInsecureContent(WebCore::SecurityOrigin&, const URL&) final;
     void didDetectXSS(const URL&, bool didBlockEntirePage) final;
+
+#if ENABLE(SERVICE_WORKER)
+    void didFinishServiceWorkerPageRegistration(bool success) final;
+#endif
 
     WebCore::ResourceError cancelledError(const WebCore::ResourceRequest&) const final;
     WebCore::ResourceError blockedError(const WebCore::ResourceRequest&) const final;
@@ -182,8 +188,8 @@ private:
     bool canHandleRequest(const WebCore::ResourceRequest&) const final;
     bool canShowMIMEType(const String& MIMEType) const final;
     bool canShowMIMETypeAsHTML(const String& MIMEType) const final;
-    bool representationExistsForURLScheme(const String& URLScheme) const final;
-    String generatedMIMETypeForURLScheme(const String& URLScheme) const final;
+    bool representationExistsForURLScheme(StringView URLScheme) const final;
+    String generatedMIMETypeForURLScheme(StringView URLScheme) const final;
     
     void frameLoadCompleted() final;
     void saveViewStateToItem(WebCore::HistoryItem&) final;
@@ -213,9 +219,9 @@ private:
     bool canCachePage() const final;
     void convertMainResourceLoadToDownload(WebCore::DocumentLoader*, const WebCore::ResourceRequest&, const WebCore::ResourceResponse&) final;
 
-    RefPtr<WebCore::Frame> createFrame(const String& name, WebCore::HTMLFrameOwnerElement&) final;
+    RefPtr<WebCore::Frame> createFrame(const AtomString& name, WebCore::HTMLFrameOwnerElement&) final;
 
-    RefPtr<WebCore::Widget> createPlugin(const WebCore::IntSize&, WebCore::HTMLPlugInElement&, const URL&, const Vector<String>&, const Vector<String>&, const String&, bool loadManually) final;
+    RefPtr<WebCore::Widget> createPlugin(const WebCore::IntSize&, WebCore::HTMLPlugInElement&, const URL&, const Vector<AtomString>&, const Vector<AtomString>&, const String&, bool loadManually) final;
     void redirectDataToPlugin(WebCore::Widget&) final;
     
 #if ENABLE(WEBGL)
@@ -229,6 +235,7 @@ private:
     void dispatchDidClearWindowObjectInWorld(WebCore::DOMWrapperWorld&) final;
     
     void dispatchGlobalObjectAvailable(WebCore::DOMWrapperWorld&) final;
+    void dispatchServiceWorkerGlobalObjectAvailable(WebCore::DOMWrapperWorld&) final;
     void dispatchWillDisconnectDOMWindowExtensionFromGlobalObject(WebCore::DOMWindowExtension*) final;
     void dispatchDidReconnectDOMWindowExtensionToGlobalObject(WebCore::DOMWindowExtension*) final;
     void dispatchWillDestroyGlobalObjectForDOMWindowExtension(WebCore::DOMWindowExtension*) final;
@@ -238,7 +245,7 @@ private:
 #if PLATFORM(COCOA)
     RemoteAXObjectRef accessibilityRemoteObject() final;
     
-    void willCacheResponse(WebCore::DocumentLoader*, unsigned long identifier, NSCachedURLResponse*, CompletionHandler<void(NSCachedURLResponse *)>&&) const final;
+    void willCacheResponse(WebCore::DocumentLoader*, WebCore::ResourceLoaderIdentifier, NSCachedURLResponse*, CompletionHandler<void(NSCachedURLResponse *)>&&) const final;
 
     NSDictionary *dataDetectionContext() final;
 #endif
@@ -270,18 +277,20 @@ private:
 
     void didCreateWindow(WebCore::DOMWindow&) final;
 
-#if ENABLE(APPLICATION_MANIFEST)
-    void finishedLoadingApplicationManifest(uint64_t, const std::optional<WebCore::ApplicationManifest>&) final;
-#endif
+    inline bool hasPlugInView() const;
 
     Ref<WebFrame> m_frame;
+
+#if ENABLE(PDFKIT_PLUGIN)
     RefPtr<PluginView> m_pluginView;
     bool m_hasSentResponseToPluginView { false };
+#endif
+
     bool m_didCompletePageTransition { false };
     bool m_frameHasCustomContentProvider { false };
     bool m_frameCameFromBackForwardCache { false };
     bool m_useIconLoadingClient { false };
-#if ENABLE(RESOURCE_LOAD_STATISTICS)
+#if ENABLE(INTELLIGENT_TRACKING_PREVENTION)
     std::optional<FrameSpecificStorageAccessIdentifier> m_frameSpecificStorageAccessIdentifier;
 #endif
 
@@ -295,6 +304,10 @@ private:
 #endif
 
     bool isParentProcessAFullWebBrowser() const final;
+
+#if ENABLE(ARKIT_INLINE_PREVIEW_MAC)
+    void modelInlinePreviewUUIDs(CompletionHandler<void(Vector<String>)>&&) const final;
+#endif
 };
 
 // As long as EmptyFrameLoaderClient exists in WebCore, this can return nullptr.
@@ -302,6 +315,7 @@ inline WebFrameLoaderClient* toWebFrameLoaderClient(WebCore::FrameLoaderClient& 
 {
     return client.isEmptyFrameLoaderClient() ? nullptr : static_cast<WebFrameLoaderClient*>(&client);
 }
+
 inline const WebFrameLoaderClient* toWebFrameLoaderClient(const WebCore::FrameLoaderClient& client)
 {
     return client.isEmptyFrameLoaderClient() ? nullptr : static_cast<const WebFrameLoaderClient*>(&client);

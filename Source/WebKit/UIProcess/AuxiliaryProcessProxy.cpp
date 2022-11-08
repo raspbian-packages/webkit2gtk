@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012-2018 Apple Inc. All rights reserved.
+ * Copyright (C) 2012-2022 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -28,6 +28,8 @@
 
 #include "AuxiliaryProcessMessages.h"
 #include "Logging.h"
+#include "OverrideLanguages.h"
+#include "UIProcessLogInitialization.h"
 #include "WebPageProxy.h"
 #include "WebProcessProxy.h"
 #include <wtf/RunLoop.h>
@@ -38,10 +40,14 @@
 #include <wtf/spi/darwin/SandboxSPI.h>
 #endif
 
+#if PLATFORM(IOS_FAMILY) && !PLATFORM(MACCATALYST)
+#import <pal/spi/ios/MobileGestaltSPI.h>
+#endif
+
 namespace WebKit {
 
-AuxiliaryProcessProxy::AuxiliaryProcessProxy(bool alwaysRunsAtBackgroundPriority)
-    : m_responsivenessTimer(*this)
+AuxiliaryProcessProxy::AuxiliaryProcessProxy(bool alwaysRunsAtBackgroundPriority, Seconds responsivenessTimeout)
+    : m_responsivenessTimer(*this, responsivenessTimeout)
     , m_alwaysRunsAtBackgroundPriority(alwaysRunsAtBackgroundPriority)
 {
 }
@@ -59,15 +65,38 @@ AuxiliaryProcessProxy::~AuxiliaryProcessProxy()
     replyToPendingMessages();
 }
 
+void AuxiliaryProcessProxy::populateOverrideLanguagesLaunchOptions(ProcessLauncher::LaunchOptions& launchOptions) const
+{
+    LOG(Language, "WebProcessProxy is getting launch options.");
+    auto overrideLanguages = WebKit::overrideLanguages();
+    if (overrideLanguages.isEmpty()) {
+        LOG(Language, "overrideLanguages() reports empty. Calling platformOverrideLanguages()");
+        overrideLanguages = platformOverrideLanguages();
+    }
+    if (!overrideLanguages.isEmpty()) {
+        StringBuilder languageString;
+        for (size_t i = 0; i < overrideLanguages.size(); ++i) {
+            if (i)
+                languageString.append(',');
+            languageString.append(overrideLanguages[i]);
+        }
+        LOG_WITH_STREAM(Language, stream << "Setting WebProcess's launch OverrideLanguages to " << languageString);
+        launchOptions.extraInitializationData.add<HashTranslatorASCIILiteral>("OverrideLanguages"_s, languageString.toString());
+    } else
+        LOG(Language, "overrideLanguages is still empty. Not setting WebProcess's launch OverrideLanguages.");
+}
+
 void AuxiliaryProcessProxy::getLaunchOptions(ProcessLauncher::LaunchOptions& launchOptions)
 {
     launchOptions.processIdentifier = m_processIdentifier;
 
-    if (const char* userDirectorySuffix = getenv("DIRHELPER_USER_DIR_SUFFIX"))
-        launchOptions.extraInitializationData.add("user-directory-suffix"_s, userDirectorySuffix);
+    if (const char* userDirectorySuffix = getenv("DIRHELPER_USER_DIR_SUFFIX")) {
+        if (auto userDirectorySuffixString = String::fromUTF8(userDirectorySuffix); !userDirectorySuffixString.isNull())
+            launchOptions.extraInitializationData.add<HashTranslatorASCIILiteral>("user-directory-suffix"_s, userDirectorySuffixString);
+    }
 
     if (m_alwaysRunsAtBackgroundPriority)
-        launchOptions.extraInitializationData.add("always-runs-at-background-priority"_s, "true");
+        launchOptions.extraInitializationData.add<HashTranslatorASCIILiteral>("always-runs-at-background-priority"_s, "true"_s);
 
 #if ENABLE(DEVELOPER_MODE) && (PLATFORM(GTK) || PLATFORM(WPE))
     const char* varname;
@@ -75,22 +104,12 @@ void AuxiliaryProcessProxy::getLaunchOptions(ProcessLauncher::LaunchOptions& lau
     case ProcessLauncher::ProcessType::Web:
         varname = "WEB_PROCESS_CMD_PREFIX";
         break;
-#if ENABLE(NETSCAPE_PLUGIN_API)
-    case ProcessLauncher::ProcessType::Plugin:
-        varname = "PLUGIN_PROCESS_CMD_PREFIX";
-        break;
-#endif
     case ProcessLauncher::ProcessType::Network:
         varname = "NETWORK_PROCESS_CMD_PREFIX";
         break;
 #if ENABLE(GPU_PROCESS)
     case ProcessLauncher::ProcessType::GPU:
         varname = "GPU_PROCESS_CMD_PREFIX";
-        break;
-#endif
-#if ENABLE(WEB_AUTHN)
-    case ProcessLauncher::ProcessType::WebAuthn:
-        varname = "WEBAUTHN_PROCESS_CMD_PREFIX";
         break;
 #endif
 #if ENABLE(BUBBLEWRAP_SANDBOX)
@@ -104,12 +123,15 @@ void AuxiliaryProcessProxy::getLaunchOptions(ProcessLauncher::LaunchOptions& lau
         launchOptions.processCmdPrefix = String::fromUTF8(processCmdPrefix);
 #endif // ENABLE(DEVELOPER_MODE) && (PLATFORM(GTK) || PLATFORM(WPE))
 
+    populateOverrideLanguagesLaunchOptions(launchOptions);
+
     platformGetLaunchOptions(launchOptions);
 }
 
 void AuxiliaryProcessProxy::connect()
 {
     ASSERT(!m_processLauncher);
+    m_processStart = MonotonicTime::now();
     ProcessLauncher::LaunchOptions launchOptions;
     getLaunchOptions(launchOptions);
     m_processLauncher = ProcessLauncher::create(this, WTFMove(launchOptions));
@@ -185,7 +207,7 @@ bool AuxiliaryProcessProxy::sendMessage(UniqueRef<IPC::Encoder>&& encoder, Optio
     // FIXME: We should turn this into a RELEASE_ASSERT().
     ASSERT(isMainRunLoop());
     if (!isMainRunLoop()) {
-        callOnMainRunLoop([protectedThis = makeRef(*this), encoder = WTFMove(encoder), sendOptions, asyncReplyInfo = WTFMove(asyncReplyInfo), shouldStartProcessThrottlerActivity]() mutable {
+        callOnMainRunLoop([protectedThis = Ref { *this }, encoder = WTFMove(encoder), sendOptions, asyncReplyInfo = WTFMove(asyncReplyInfo), shouldStartProcessThrottlerActivity]() mutable {
             protectedThis->sendMessage(WTFMove(encoder), sendOptions, WTFMove(asyncReplyInfo), shouldStartProcessThrottlerActivity);
         });
         return true;
@@ -193,7 +215,7 @@ bool AuxiliaryProcessProxy::sendMessage(UniqueRef<IPC::Encoder>&& encoder, Optio
 
     if (asyncReplyInfo && canSendMessage() && shouldStartProcessThrottlerActivity == ShouldStartProcessThrottlerActivity::Yes) {
         auto completionHandler = std::exchange(asyncReplyInfo->first, nullptr);
-        asyncReplyInfo->first = [activity = throttler().backgroundActivity(ASCIILiteral::null()), completionHandler = WTFMove(completionHandler)](IPC::Decoder* decoder) mutable {
+        asyncReplyInfo->first = [activity = throttler().backgroundActivity({ }), completionHandler = WTFMove(completionHandler)](IPC::Decoder* decoder) mutable {
             completionHandler(decoder);
         };
     }
@@ -259,6 +281,10 @@ void AuxiliaryProcessProxy::didFinishLaunching(ProcessLauncher*, IPC::Connection
     ASSERT(!m_connection);
     ASSERT(isMainRunLoop());
 
+    auto launchTime = MonotonicTime::now() - m_processStart;
+    if (launchTime > 1_s)
+        RELEASE_LOG_FAULT(Process, "%s process (%p) took %f seconds to launch", processName().characters(), this, launchTime.value());
+    
     if (!IPC::Connection::identifierIsValid(connectionIdentifier))
         return;
 
@@ -273,11 +299,6 @@ void AuxiliaryProcessProxy::didFinishLaunching(ProcessLauncher*, IPC::Connection
         if (pendingMessage.asyncReplyInfo)
             IPC::addAsyncReplyHandler(*connection(), pendingMessage.asyncReplyInfo->second, WTFMove(pendingMessage.asyncReplyInfo->first));
         m_connection->sendMessage(WTFMove(pendingMessage.encoder), pendingMessage.sendOptions);
-    }
-
-    if (m_shouldStartResponsivenessTimerWhenLaunched) {
-        auto useLazyStop = *std::exchange(m_shouldStartResponsivenessTimerWhenLaunched, std::nullopt);
-        startResponsivenessTimer(useLazyStop);
     }
 }
 
@@ -367,10 +388,18 @@ void AuxiliaryProcessProxy::stopResponsivenessTimer()
     responsivenessTimer().stop();
 }
 
+void AuxiliaryProcessProxy::beginResponsivenessChecks()
+{
+    m_didBeginResponsivenessChecks = true;
+    if (m_delayedResponsivenessCheck)
+        startResponsivenessTimer(*std::exchange(m_delayedResponsivenessCheck, std::nullopt));
+}
+
 void AuxiliaryProcessProxy::startResponsivenessTimer(UseLazyStop useLazyStop)
 {
-    if (isLaunching()) {
-        m_shouldStartResponsivenessTimerWhenLaunched = useLazyStop;
+    if (!m_didBeginResponsivenessChecks) {
+        if (!m_delayedResponsivenessCheck)
+            m_delayedResponsivenessCheck = useLazyStop;
         return;
     }
 
@@ -393,7 +422,7 @@ void AuxiliaryProcessProxy::didBecomeUnresponsive()
 void AuxiliaryProcessProxy::checkForResponsiveness(CompletionHandler<void()>&& responsivenessHandler, UseLazyStop useLazyStop)
 {
     startResponsivenessTimer(useLazyStop);
-    sendWithAsyncReply(Messages::AuxiliaryProcess::MainThreadPing(), [weakThis = makeWeakPtr(*this), responsivenessHandler = WTFMove(responsivenessHandler)]() mutable {
+    sendWithAsyncReply(Messages::AuxiliaryProcess::MainThreadPing(), [weakThis = WeakPtr { *this }, responsivenessHandler = WTFMove(responsivenessHandler)]() mutable {
         // Schedule an asynchronous task because our completion handler may have been called as a result of the AuxiliaryProcessProxy
         // being in the middle of destruction.
         RunLoop::main().dispatch([weakThis = WTFMove(weakThis), responsivenessHandler = WTFMove(responsivenessHandler)]() mutable {
@@ -405,5 +434,37 @@ void AuxiliaryProcessProxy::checkForResponsiveness(CompletionHandler<void()>&& r
         });
     });
 }
+
+AuxiliaryProcessCreationParameters AuxiliaryProcessProxy::auxiliaryProcessParameters()
+{
+    AuxiliaryProcessCreationParameters parameters;
+#if !LOG_DISABLED || !RELEASE_LOG_DISABLED
+    parameters.wtfLoggingChannels = UIProcess::wtfLogLevelString();
+    parameters.webCoreLoggingChannels = UIProcess::webCoreLogLevelString();
+    parameters.webKitLoggingChannels = UIProcess::webKitLogLevelString();
+#endif
+    return parameters;
+}
+
+std::optional<SandboxExtension::Handle> AuxiliaryProcessProxy::createMobileGestaltSandboxExtensionIfNeeded() const
+{
+#if PLATFORM(IOS_FAMILY) && !PLATFORM(MACCATALYST)
+    if (_MGCacheValid())
+        return std::nullopt;
+    
+    RELEASE_LOG_FAULT(Sandbox, "MobileGestalt cache is invalid! Creating a sandbox extension to repopulate cache in memory.");
+
+    return SandboxExtension::createHandleForMachLookup("com.apple.mobilegestalt.xpc"_s, std::nullopt);
+#else
+    return std::nullopt;
+#endif
+}
+
+#if !PLATFORM(COCOA)
+Vector<String> AuxiliaryProcessProxy::platformOverrideLanguages() const
+{
+    return { };
+}
+#endif
 
 } // namespace WebKit

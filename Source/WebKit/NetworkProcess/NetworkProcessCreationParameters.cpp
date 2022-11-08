@@ -43,15 +43,10 @@ NetworkProcessCreationParameters& NetworkProcessCreationParameters::operator=(Ne
 
 void NetworkProcessCreationParameters::encode(IPC::Encoder& encoder) const
 {
+    encoder << auxiliaryProcessParameters;
     encoder << cacheModel;
 #if PLATFORM(MAC) || PLATFORM(MACCATALYST)
     encoder << uiProcessCookieStorageIdentifier;
-#endif
-#if PLATFORM(IOS_FAMILY)
-    encoder << cookieStorageDirectoryExtensionHandle;
-    encoder << containerCachesDirectoryExtensionHandle;
-    encoder << parentBundleDirectoryExtensionHandle;
-    encoder << tempDirectoryExtensionHandle;
 #endif
     encoder << shouldSuppressMemoryPressureHandler;
     encoder << urlSchemesRegisteredForCustomProtocols;
@@ -71,43 +66,21 @@ void NetworkProcessCreationParameters::encode(IPC::Encoder& encoder) const
     encoder << urlSchemesRegisteredAsNoAccess;
 
     encoder << enablePrivateClickMeasurement;
-    encoder << enablePrivateClickMeasurementDebugMode;
+    encoder << ftpEnabled;
     encoder << websiteDataStoreParameters;
 }
 
 bool NetworkProcessCreationParameters::decode(IPC::Decoder& decoder, NetworkProcessCreationParameters& result)
 {
+    if (!decoder.decode(result.auxiliaryProcessParameters))
+        return false;
+
     if (!decoder.decode(result.cacheModel))
         return false;
 
 #if PLATFORM(MAC) || PLATFORM(MACCATALYST)
     if (!decoder.decode(result.uiProcessCookieStorageIdentifier))
         return false;
-#endif
-#if PLATFORM(IOS_FAMILY)
-    std::optional<SandboxExtension::Handle> cookieStorageDirectoryExtensionHandle;
-    decoder >> cookieStorageDirectoryExtensionHandle;
-    if (!cookieStorageDirectoryExtensionHandle)
-        return false;
-    result.cookieStorageDirectoryExtensionHandle = WTFMove(*cookieStorageDirectoryExtensionHandle);
-
-    std::optional<SandboxExtension::Handle> containerCachesDirectoryExtensionHandle;
-    decoder >> containerCachesDirectoryExtensionHandle;
-    if (!containerCachesDirectoryExtensionHandle)
-        return false;
-    result.containerCachesDirectoryExtensionHandle = WTFMove(*containerCachesDirectoryExtensionHandle);
-
-    std::optional<SandboxExtension::Handle> parentBundleDirectoryExtensionHandle;
-    decoder >> parentBundleDirectoryExtensionHandle;
-    if (!parentBundleDirectoryExtensionHandle)
-        return false;
-    result.parentBundleDirectoryExtensionHandle = WTFMove(*parentBundleDirectoryExtensionHandle);
-
-    std::optional<SandboxExtension::Handle> tempDirectoryExtensionHandle;
-    decoder >> tempDirectoryExtensionHandle;
-    if (!tempDirectoryExtensionHandle)
-        return false;
-    result.tempDirectoryExtensionHandle = WTFMove(*tempDirectoryExtensionHandle);
 #endif
     if (!decoder.decode(result.shouldSuppressMemoryPressureHandler))
         return false;
@@ -144,7 +117,7 @@ bool NetworkProcessCreationParameters::decode(IPC::Decoder& decoder, NetworkProc
 
     if (!decoder.decode(result.enablePrivateClickMeasurement))
         return false;
-    if (!decoder.decode(result.enablePrivateClickMeasurementDebugMode))
+    if (!decoder.decode(result.ftpEnabled))
         return false;
 
     std::optional<Vector<WebsiteDataStoreParameters>> websiteDataStoreParameters;

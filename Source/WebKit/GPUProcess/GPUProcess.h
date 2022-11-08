@@ -28,9 +28,12 @@
 #if ENABLE(GPU_PROCESS)
 
 #include "AuxiliaryProcess.h"
+#include "GPUProcessPreferences.h"
 #include "SandboxExtension.h"
+#include "ShareableBitmap.h"
 #include "WebPageProxyIdentifier.h"
 #include <WebCore/LibWebRTCEnumTraits.h>
+#include <WebCore/MediaPlayerIdentifier.h>
 #include <WebCore/Timer.h>
 #include <pal/SessionID.h>
 #include <wtf/Function.h>
@@ -42,9 +45,15 @@
 #include <CoreGraphics/CGDisplayConfiguration.h>
 #endif
 
+#if USE(GRAPHICS_LAYER_WC)
+#include "WCSharedSceneContextHolder.h"
+#endif
+
 namespace WebCore {
+class CaptureDevice;
 class NowPlayingManager;
 struct MockMediaDevice;
+struct ScreenProperties;
 struct SecurityOriginData;
 }
 
@@ -65,7 +74,7 @@ public:
 
     void removeGPUConnectionToWebProcess(GPUConnectionToWebProcess&);
 
-    void prepareToSuspend(bool isSuspensionImminent, CompletionHandler<void()>&&);
+    void prepareToSuspend(bool isSuspensionImminent, MonotonicTime estimatedSuspendTime, CompletionHandler<void()>&&);
     void processDidResume();
     void resume();
 
@@ -86,9 +95,14 @@ public:
 
 #if ENABLE(MEDIA_STREAM) && PLATFORM(COCOA)
     WorkQueue& videoMediaStreamTrackRendererQueue();
+    void sandboxWasUpatedForCapture();
 #endif
 #if USE(LIBWEBRTC) && PLATFORM(COCOA)
     WorkQueue& libWebRTCCodecsQueue();
+#endif
+
+#if USE(GRAPHICS_LAYER_WC)
+    WCSharedSceneContextHolder& sharedSceneContext() { return m_sharedSceneContext; }
 #endif
 
 #if ENABLE(VP9)
@@ -96,6 +110,16 @@ public:
 #endif
 
     void tryExitIfUnusedAndUnderMemoryPressure();
+
+    const String& applicationVisibleName() const { return m_applicationVisibleName; }
+
+    void webProcessConnectionCountForTesting(CompletionHandler<void(uint64_t)>&&);
+
+#if PLATFORM(COCOA) && ENABLE(MEDIA_STREAM)
+    void processIsStartingToCaptureAudio(GPUConnectionToWebProcess&);
+#endif
+
+    void requestBitmapImageForCurrentTime(WebCore::ProcessIdentifier, WebCore::MediaPlayerIdentifier, CompletionHandler<void(const ShareableBitmap::Handle&)>&&);
 
 private:
     void lowMemoryHandler(Critical, Synchronous);
@@ -115,9 +139,12 @@ private:
 
     // Message Handlers
     void initializeGPUProcess(GPUProcessCreationParameters&&);
-    void createGPUConnectionToWebProcess(WebCore::ProcessIdentifier, PAL::SessionID, GPUProcessConnectionParameters&&, CompletionHandler<void(std::optional<IPC::Attachment>&&)>&&);
+    void updateGPUProcessPreferences(GPUProcessPreferences&&);
+    void createGPUConnectionToWebProcess(WebCore::ProcessIdentifier, PAL::SessionID, IPC::Attachment&&, GPUProcessConnectionParameters&&, CompletionHandler<void()>&&);
     void addSession(PAL::SessionID, GPUProcessSessionParameters&&);
     void removeSession(PAL::SessionID);
+    
+    bool updatePreference(std::optional<bool>& oldPreference, std::optional<bool>& newPreference);
 
 #if ENABLE(MEDIA_STREAM)
     void setMockCaptureDevicesEnabled(bool);
@@ -129,35 +156,40 @@ private:
     void clearMockMediaDevices();
     void removeMockMediaDevice(const String& persistentId);
     void resetMockMediaDevices();
+    void setMockCaptureDevicesInterrupted(bool isCameraInterrupted, bool isMicrophoneInterrupted);
     bool setCaptureAttributionString(const String&);
+#endif
+#if HAVE(SC_CONTENT_SHARING_SESSION)
+    void showWindowPicker(CompletionHandler<void(std::optional<WebCore::CaptureDevice>)>&&);
+    void showScreenPicker(CompletionHandler<void(std::optional<WebCore::CaptureDevice>)>&&);
 #endif
 #if PLATFORM(MAC)
     void displayConfigurationChanged(CGDirectDisplayID, CGDisplayChangeSummaryFlags);
+    void setScreenProperties(const WebCore::ScreenProperties&);
 #endif
 
 #if USE(OS_STATE)
     RetainPtr<NSDictionary> additionalStateForDiagnosticReport() const final;
 #endif
 
-#if ENABLE(MEDIA_SOURCE)
-    void setWebMParserEnabled(bool);
+#if ENABLE(CFPREFS_DIRECT_MODE)
+    void notifyPreferencesChanged(const String& domain, const String& key, const std::optional<String>& encodedValue);
+    void dispatchSimulatedNotificationsForPreferenceChange(const String& key) final;
 #endif
 
-#if ENABLE(WEBM_FORMAT_READER)
-    void setWebMFormatReaderEnabled(bool);
+#if PLATFORM(MAC)
+    void openDirectoryCacheInvalidated(SandboxExtension::Handle&&);
 #endif
 
-#if ENABLE(OPUS)
-    void setOpusDecoderEnabled(bool);
-#endif
-
-#if ENABLE(VORBIS)
-    void setVorbisDecoderEnabled(bool);
+#if HAVE(POWERLOG_TASK_MODE_QUERY)
+    void enablePowerLogging(SandboxExtension::Handle&&);
 #endif
 
     // Connections to WebProcesses.
     HashMap<WebCore::ProcessIdentifier, Ref<GPUConnectionToWebProcess>> m_webProcessConnections;
     MonotonicTime m_creationTime { MonotonicTime::now() };
+    
+    GPUProcessPreferences m_preferences;
 
 #if ENABLE(MEDIA_STREAM)
     struct MediaCaptureAccess {
@@ -175,6 +207,10 @@ private:
     RefPtr<WorkQueue> m_libWebRTCCodecsQueue;
 #endif
 
+#if USE(GRAPHICS_LAYER_WC)
+    WCSharedSceneContextHolder m_sharedSceneContext;
+#endif
+
     struct GPUSession {
         String mediaCacheDirectory;
 #if ENABLE(LEGACY_ENCRYPTED_MEDIA)
@@ -184,6 +220,7 @@ private:
     HashMap<PAL::SessionID, GPUSession> m_sessions;
     WebCore::Timer m_idleExitTimer;
     std::unique_ptr<WebCore::NowPlayingManager> m_nowPlayingManager;
+    String m_applicationVisibleName;
 #if ENABLE(GPU_PROCESS) && USE(AUDIO_SESSION)
     mutable std::unique_ptr<RemoteAudioSessionProxyManager> m_audioSessionManager;
 #endif
@@ -192,18 +229,7 @@ private:
     bool m_enableVP9Decoder { false };
     bool m_enableVP9SWDecoder { false };
 #endif
-#if ENABLE(MEDIA_SOURCE)
-    bool m_webMParserEnabled { false };
-#endif
-#if ENABLE(WEBM_FORMAT_READER)
-    bool m_webMFormatReaderEnabled { false };
-#endif
-#if ENABLE(OPUS)
-    bool m_opusEnabled { false };
-#endif
-#if ENABLE(VORBIS)
-    bool m_vorbisEnabled { false };
-#endif
+
 };
 
 } // namespace WebKit

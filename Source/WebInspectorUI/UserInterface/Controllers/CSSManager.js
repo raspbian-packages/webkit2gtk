@@ -48,6 +48,8 @@ WI.CSSManager = class CSSManager extends WI.Object
         this._modifiedStyles = new Map;
         this._defaultAppearance = null;
         this._forcedAppearance = null;
+
+        this._propertyNameCompletions = null;
     }
 
     // Target
@@ -56,6 +58,90 @@ WI.CSSManager = class CSSManager extends WI.Object
     {
         if (target.hasDomain("CSS"))
             target.CSSAgent.enable();
+    }
+
+    initializeCSSPropertyNameCompletions(target)
+    {
+        console.assert(target.hasDomain("CSS"));
+
+        if (this._propertyNameCompletions)
+            return;
+
+        target.CSSAgent.getSupportedCSSProperties((error, cssProperties) => {
+            if (error)
+                return;
+
+            this._propertyNameCompletions = new WI.CSSPropertyNameCompletions(cssProperties);
+
+            WI.CSSKeywordCompletions.addCustomCompletions(cssProperties);
+
+            // CodeMirror is not included by tests so we shouldn't assume it always exists.
+            // If it isn't available we skip MIME type associations.
+            if (!window.CodeMirror)
+                return;
+
+            let propertyNamesForCodeMirror = {};
+            let valueKeywordsForCodeMirror = {"inherit": true, "initial": true, "unset": true, "revert": true, "revert-layer": true, "var": true, "env": true};
+            let colorKeywordsForCodeMirror = {};
+
+            function nameForCodeMirror(name) {
+                // CodeMirror parses the vendor prefix separate from the property or keyword name,
+                // so we need to strip vendor prefixes from our names. Also strip function parenthesis.
+                return name.replace(/^-[^-]+-/, "").replace(/\(\)$/, "").toLowerCase();
+            }
+
+            for (let property of cssProperties) {
+                // Properties can also be value keywords, like when used in a transition.
+                // So we add them to both lists.
+                let codeMirrorPropertyName = nameForCodeMirror(property.name);
+                propertyNamesForCodeMirror[codeMirrorPropertyName] = true;
+                valueKeywordsForCodeMirror[codeMirrorPropertyName] = true;
+            }
+
+            for (let propertyName in WI.CSSKeywordCompletions._propertyKeywordMap) {
+                let keywords = WI.CSSKeywordCompletions._propertyKeywordMap[propertyName];
+                for (let keyword of keywords) {
+                    // Skip numbers, like the ones defined for font-weight.
+                    if (keyword === WI.CSSKeywordCompletions.AllPropertyNamesPlaceholder || !isNaN(Number(keyword)))
+                        continue;
+                    valueKeywordsForCodeMirror[nameForCodeMirror(keyword)] = true;
+                }
+            }
+
+            for (let color of WI.CSSKeywordCompletions._colors)
+                colorKeywordsForCodeMirror[nameForCodeMirror(color)] = true;
+
+            // TODO: Remove these keywords once they are built-in codemirror or once we get values from WebKit itself.
+            valueKeywordsForCodeMirror["conic-gradient"] = true;
+            valueKeywordsForCodeMirror["repeating-conic-gradient"] = true;
+
+            function updateCodeMirrorCSSMode(mimeType) {
+                let modeSpec = CodeMirror.resolveMode(mimeType);
+
+                console.assert(modeSpec.propertyKeywords);
+                console.assert(modeSpec.valueKeywords);
+                console.assert(modeSpec.colorKeywords);
+
+                modeSpec.propertyKeywords = propertyNamesForCodeMirror;
+                modeSpec.valueKeywords = valueKeywordsForCodeMirror;
+                modeSpec.colorKeywords = colorKeywordsForCodeMirror;
+
+                CodeMirror.defineMIME(mimeType, modeSpec);
+            }
+
+            updateCodeMirrorCSSMode("text/css");
+            updateCodeMirrorCSSMode("text/x-scss");
+        });
+
+        if (target.hasCommand("CSS.getSupportedSystemFontFamilyNames")) {
+            target.CSSAgent.getSupportedSystemFontFamilyNames((error, fontFamilyNames) =>{
+                if (error)
+                    return;
+
+                WI.CSSKeywordCompletions.addPropertyCompletionValues("font-family", fontFamilyNames);
+                WI.CSSKeywordCompletions.addPropertyCompletionValues("font", fontFamilyNames);
+            });
+        }
     }
 
     // Static
@@ -178,7 +264,32 @@ WI.CSSManager = class CSSManager extends WI.Object
         }
     }
 
+    static displayNameForForceablePseudoClass(pseudoClass)
+    {
+        switch (pseudoClass) {
+        case WI.CSSManager.ForceablePseudoClass.Active:
+            return WI.unlocalizedString(":active");
+        case WI.CSSManager.ForceablePseudoClass.Focus:
+            return WI.unlocalizedString(":focus");
+        case WI.CSSManager.ForceablePseudoClass.FocusVisible:
+            return WI.unlocalizedString(":focus-visible");
+        case WI.CSSManager.ForceablePseudoClass.FocusWithin:
+            return WI.unlocalizedString(":focus-within");
+        case WI.CSSManager.ForceablePseudoClass.Hover:
+            return WI.unlocalizedString(":hover");
+        case WI.CSSManager.ForceablePseudoClass.Target:
+            return WI.unlocalizedString(":target");
+        case WI.CSSManager.ForceablePseudoClass.Visited:
+            return WI.unlocalizedString(":visited");
+        }
+
+        console.assert(false, "Unknown pseudo class", pseudoClass);
+        return "";
+    }
+
     // Public
+
+    get propertyNameCompletions() { return this._propertyNameCompletions; }
 
     get preferredColorFormat()
     {
@@ -252,9 +363,30 @@ WI.CSSManager = class CSSManager extends WI.Object
         return InspectorBackend.hasCommand("Page.setForcedAppearance") && this._defaultAppearance;
     }
 
-    canForcePseudoClasses()
+    canForcePseudoClass(pseudoClass)
     {
-        return InspectorBackend.hasCommand("CSS.forcePseudoState");
+        if (!InspectorBackend.hasCommand("CSS.forcePseudoState"))
+            return false;
+
+        if (!pseudoClass)
+            return true;
+
+        switch (pseudoClass) {
+        case WI.CSSManager.ForceablePseudoClass.Active:
+        case WI.CSSManager.ForceablePseudoClass.Focus:
+        case WI.CSSManager.ForceablePseudoClass.Hover:
+        case WI.CSSManager.ForceablePseudoClass.Visited:
+            return true;
+
+        case WI.CSSManager.ForceablePseudoClass.FocusVisible:
+        case WI.CSSManager.ForceablePseudoClass.FocusWithin:
+        case WI.CSSManager.ForceablePseudoClass.Target:
+            // COMPATIBILITY (macOS 12.3, iOS 15.4): CSS.ForceablePseudoClass did not exist yet.
+            return !!InspectorBackend.Enum.CSS.ForceablePseudoClass;
+        }
+
+        console.assert(false, "Unknown pseudo class", pseudoClass);
+        return false;
     }
 
     propertyNameHasOtherVendorPrefix(name)
@@ -283,6 +415,7 @@ WI.CSSManager = class CSSManager extends WI.Object
         if (!name || name.length < 8 || name.charAt(0) !== "-")
             return name;
 
+        // Keep in sync with prefix list from Source/WebInspectorUI/Scripts/update-inspector-css-documentation
         var match = name.match(/^(?:-webkit-|-khtml-|-apple-)(.+)/);
         if (!match)
             return name;
@@ -712,5 +845,15 @@ WI.CSSManager.LayoutContextTypeChangedMode = {
 };
 
 WI.CSSManager.PseudoElementNames = ["before", "after"];
-WI.CSSManager.ForceablePseudoClasses = ["active", "focus", "hover", "visited"];
+
+WI.CSSManager.ForceablePseudoClass = {
+    Active: "active",
+    Focus: "focus",
+    FocusVisible: "focus-visible",
+    FocusWithin: "focus-within",
+    Hover: "hover",
+    Target: "target",
+    Visited: "visited",
+};
+
 WI.CSSManager.PreferredInspectorStyleSheetSymbol = Symbol("css-manager-preferred-inspector-style-sheet");

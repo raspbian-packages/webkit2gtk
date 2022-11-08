@@ -29,12 +29,6 @@ AcceleratedCompositedAnimationsEnabled:
     WebCore:
       default: true
 
-AcceleratedFiltersEnabled:
-  type: bool
-  defaultValue:
-    WebCore:
-      default: false
-
 AnimatedImageDebugCanvasDrawingEnabled:
   type: bool
   defaultValue:
@@ -319,14 +313,6 @@ LangAttributeAwareFormControlUIEnabled:
     WebCore:
       default: false
 
-LegacyBeforeLoadEventEnabled:
-  comment: >-
-    FIMXE: This does not appear to ever be set to true. Remove once verified.
-  type: bool
-  defaultValue:
-    WebCore:
-      default: false
-
 LocalStorageDatabasePath:
   type: String
   defaultValue:
@@ -442,12 +428,6 @@ PrivateClickMeasurementFraudPreventionEnabled:
   defaultValue:
     WebCore:
       "HAVE(RSA_BSSA)": true
-      default: false
-
-QuickTimePluginReplacementEnabled:
-  type: bool
-  defaultValue:
-    WebCore:
       default: false
 
 RepaintOutsideLayoutEnabled:
@@ -642,4 +622,5 @@ YouTubeFlashPluginReplacementEnabled:
   type: bool
   defaultValue:
     WebCore:
+      PLATFORM(COCOA): true
       default: false

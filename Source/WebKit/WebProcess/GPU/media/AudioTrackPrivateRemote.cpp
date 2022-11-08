@@ -29,17 +29,17 @@
 
 #if ENABLE(GPU_PROCESS)
 
+#include "AudioTrackPrivateRemoteConfiguration.h"
 #include "GPUProcessConnection.h"
 #include "MediaPlayerPrivateRemote.h"
 #include "RemoteMediaPlayerProxyMessages.h"
-#include "TrackPrivateRemoteConfiguration.h"
 
 namespace WebKit {
 
-AudioTrackPrivateRemote::AudioTrackPrivateRemote(GPUProcessConnection& gpuProcessConnection, WebCore::MediaPlayerIdentifier playerIdentifier, TrackPrivateRemoteIdentifier idendifier, TrackPrivateRemoteConfiguration&& configuration)
-    : m_gpuProcessConnection(makeWeakPtr(gpuProcessConnection))
+AudioTrackPrivateRemote::AudioTrackPrivateRemote(GPUProcessConnection& gpuProcessConnection, WebCore::MediaPlayerIdentifier playerIdentifier, TrackPrivateRemoteIdentifier identifier, AudioTrackPrivateRemoteConfiguration&& configuration)
+    : m_gpuProcessConnection(gpuProcessConnection)
     , m_playerIdentifier(playerIdentifier)
-    , m_idendifier(idendifier)
+    , m_identifier(identifier)
 {
     updateConfiguration(WTFMove(configuration));
 }
@@ -50,12 +50,12 @@ void AudioTrackPrivateRemote::setEnabled(bool enabled)
         return;
 
     if (enabled != this->enabled())
-        m_gpuProcessConnection->connection().send(Messages::RemoteMediaPlayerProxy::AudioTrackSetEnabled(m_idendifier, enabled), m_playerIdentifier);
+        m_gpuProcessConnection->connection().send(Messages::RemoteMediaPlayerProxy::AudioTrackSetEnabled(m_identifier, enabled), m_playerIdentifier);
 
     AudioTrackPrivate::setEnabled(enabled);
 }
 
-void AudioTrackPrivateRemote::updateConfiguration(TrackPrivateRemoteConfiguration&& configuration)
+void AudioTrackPrivateRemote::updateConfiguration(AudioTrackPrivateRemoteConfiguration&& configuration)
 {
     if (configuration.trackId != m_id) {
         auto changed = !m_id.isEmpty();
@@ -80,7 +80,9 @@ void AudioTrackPrivateRemote::updateConfiguration(TrackPrivateRemoteConfiguratio
 
     m_trackIndex = configuration.trackIndex;
     m_startTimeVariance = configuration.startTimeVariance;
-    m_kind = configuration.audioKind;
+    m_kind = configuration.kind;
+    setConfiguration(WTFMove(configuration.trackConfiguration));
+    
     AudioTrackPrivate::setEnabled(configuration.enabled);
 }
 

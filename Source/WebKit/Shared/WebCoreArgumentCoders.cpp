@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2021 Apple Inc. All rights reserved.
+ * Copyright (C) 2011-2022 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,23 +26,25 @@
 #include "config.h"
 #include "WebCoreArgumentCoders.h"
 
-#include "DataReference.h"
 #include "ShareableBitmap.h"
 #include "ShareableResource.h"
-#include "SharedBufferDataReference.h"
 #include "StreamConnectionEncoder.h"
 #include <JavaScriptCore/GenericTypedArrayViewInlines.h>
 #include <JavaScriptCore/JSGenericTypedArrayViewInlines.h>
+#include <WebCore/ARKitBadgeSystemImage.h>
+#include <WebCore/ApplePayButtonSystemImage.h>
+#include <WebCore/ApplePayLogoSystemImage.h>
+#include <WebCore/AuthenticationChallenge.h>
 #include <WebCore/AuthenticationChallenge.h>
 #include <WebCore/BlobPart.h>
 #include <WebCore/CacheQueryOptions.h>
 #include <WebCore/CacheStorageConnection.h>
-#include <WebCore/CertificateInfo.h>
 #include <WebCore/CompositionUnderline.h>
 #include <WebCore/Credential.h>
 #include <WebCore/Cursor.h>
 #include <WebCore/DOMCacheEngine.h>
 #include <WebCore/DatabaseDetails.h>
+#include <WebCore/DecomposedGlyphs.h>
 #include <WebCore/DictationAlternative.h>
 #include <WebCore/DictionaryPopupInfo.h>
 #include <WebCore/DisplayListItems.h>
@@ -64,6 +66,7 @@
 #include <WebCore/Length.h>
 #include <WebCore/LengthBox.h>
 #include <WebCore/MediaSelectionOption.h>
+#include <WebCore/NotificationResources.h>
 #include <WebCore/Pasteboard.h>
 #include <WebCore/PluginData.h>
 #include <WebCore/PromisedAttachmentInfo.h>
@@ -76,6 +79,7 @@
 #include <WebCore/ResourceRequest.h>
 #include <WebCore/ResourceResponse.h>
 #include <WebCore/ScriptBuffer.h>
+#include <WebCore/ScriptExecutionContextIdentifier.h>
 #include <WebCore/ScrollingConstraints.h>
 #include <WebCore/ScrollingCoordinator.h>
 #include <WebCore/SearchPopupMenu.h>
@@ -83,9 +87,10 @@
 #include <WebCore/SerializedAttachmentData.h>
 #include <WebCore/SerializedPlatformDataCueValue.h>
 #include <WebCore/ServiceWorkerClientData.h>
-#include <WebCore/ServiceWorkerClientIdentifier.h>
 #include <WebCore/ServiceWorkerData.h>
 #include <WebCore/ShareData.h>
+#include <WebCore/SharedBuffer.h>
+#include <WebCore/SystemImage.h>
 #include <WebCore/TextCheckerClient.h>
 #include <WebCore/TextIndicator.h>
 #include <WebCore/TimingFunction.h>
@@ -104,7 +109,6 @@
 
 #if PLATFORM(IOS_FAMILY)
 #include <WebCore/SelectionGeometry.h>
-#include <WebCore/SharedBuffer.h>
 #endif // PLATFORM(IOS_FAMILY)
 
 #if ENABLE(WIRELESS_PLAYBACK_TARGET)
@@ -126,121 +130,44 @@ namespace IPC {
 using namespace WebCore;
 using namespace WebKit;
 
-static void encodeSharedBuffer(Encoder& encoder, const SharedBuffer* buffer)
-{
-    bool isNull = !buffer;
-    encoder << isNull;
-    if (isNull)
-        return;
+#define DEFINE_SIMPLE_ARGUMENT_CODER_FOR_SOURCE(Type) \
+    template<typename Encoder> \
+    void ArgumentCoder<Type>::encode(Encoder& encoder, const Type& value) { SimpleArgumentCoder<Type>::encode(encoder, value); } \
+    bool ArgumentCoder<Type>::decode(Decoder& decoder, Type& value) { return SimpleArgumentCoder<Type>::decode(decoder, value); } \
+    std::optional<Type> ArgumentCoder<Type>::decode(Decoder& decoder) \
+    { \
+        Type value; \
+        if (!decode(decoder, value)) \
+            return std::nullopt; \
+        return value; \
+    } \
+    template void ArgumentCoder<Type>::encode<Encoder>(Encoder&, const Type&); \
+    template void ArgumentCoder<Type>::encode<StreamConnectionEncoder>(StreamConnectionEncoder&, const Type&);
 
-    uint64_t bufferSize = buffer->size();
-    encoder << bufferSize;
-    if (!bufferSize)
-        return;
+DEFINE_SIMPLE_ARGUMENT_CODER_FOR_SOURCE(AffineTransform)
+DEFINE_SIMPLE_ARGUMENT_CODER_FOR_SOURCE(FloatBoxExtent)
+DEFINE_SIMPLE_ARGUMENT_CODER_FOR_SOURCE(FloatPoint)
+DEFINE_SIMPLE_ARGUMENT_CODER_FOR_SOURCE(FloatPoint3D)
+DEFINE_SIMPLE_ARGUMENT_CODER_FOR_SOURCE(FloatRect)
+DEFINE_SIMPLE_ARGUMENT_CODER_FOR_SOURCE(FloatRoundedRect)
+DEFINE_SIMPLE_ARGUMENT_CODER_FOR_SOURCE(FloatSize)
+DEFINE_SIMPLE_ARGUMENT_CODER_FOR_SOURCE(IntPoint)
+DEFINE_SIMPLE_ARGUMENT_CODER_FOR_SOURCE(IntRect)
+DEFINE_SIMPLE_ARGUMENT_CODER_FOR_SOURCE(IntSize)
+DEFINE_SIMPLE_ARGUMENT_CODER_FOR_SOURCE(LayoutPoint)
+DEFINE_SIMPLE_ARGUMENT_CODER_FOR_SOURCE(LayoutSize)
 
-#if USE(UNIX_DOMAIN_SOCKETS)
-    // Do not use shared memory for SharedBuffer encoding in Unix, because it's easy to reach the
-    // maximum number of file descriptors open per process when sending large data in small chunks
-    // over the IPC. ConnectionUnix.cpp already uses shared memory to send any IPC message that is
-    // too large. See https://bugs.webkit.org/show_bug.cgi?id=208571.
-    for (const auto& element : *buffer)
-        encoder.encodeFixedLengthData(element.segment->data(), element.segment->size(), 1);
-#else
-    SharedMemory::Handle handle;
-    auto sharedMemoryBuffer = SharedMemory::copyBuffer(*buffer);
-    sharedMemoryBuffer->createHandle(handle, SharedMemory::Protection::ReadOnly);
-    encoder << SharedMemory::IPCHandle { WTFMove(handle), bufferSize };
-#endif
-}
-
-static WARN_UNUSED_RETURN bool decodeSharedBuffer(Decoder& decoder, RefPtr<SharedBuffer>& buffer)
-{
-    std::optional<bool> isNull;
-    decoder >> isNull;
-    if (!isNull)
-        return false;
-
-    if (*isNull) {
-        buffer = nullptr;
-        return true;
-    }
-
-    uint64_t bufferSize = 0;
-    if (!decoder.decode(bufferSize))
-        return false;
-
-    if (!bufferSize) {
-        buffer = SharedBuffer::create();
-        return true;
-    }
-
-#if USE(UNIX_DOMAIN_SOCKETS)
-    if (!decoder.bufferIsLargeEnoughToContain<uint8_t>(bufferSize))
-        return false;
-
-    Vector<uint8_t> data;
-    data.grow(bufferSize);
-    if (!decoder.decodeFixedLengthData(data.data(), data.size(), 1))
-        return false;
-
-    buffer = SharedBuffer::create(WTFMove(data));
-#else
-    SharedMemory::IPCHandle ipcHandle;
-    if (!decoder.decode(ipcHandle))
-        return false;
-
-    auto sharedMemoryBuffer = SharedMemory::map(ipcHandle.handle, SharedMemory::Protection::ReadOnly);
-    if (!sharedMemoryBuffer)
-        return false;
-
-    if (sharedMemoryBuffer->size() < bufferSize)
-        return false;
-
-    buffer = SharedBuffer::create(static_cast<unsigned char*>(sharedMemoryBuffer->data()), bufferSize);
+#if USE(CG)
+DEFINE_SIMPLE_ARGUMENT_CODER_FOR_SOURCE(CGRect)
+DEFINE_SIMPLE_ARGUMENT_CODER_FOR_SOURCE(CGSize)
+DEFINE_SIMPLE_ARGUMENT_CODER_FOR_SOURCE(CGPoint)
+DEFINE_SIMPLE_ARGUMENT_CODER_FOR_SOURCE(CGAffineTransform)
 #endif
 
-    return true;
-}
+DEFINE_SIMPLE_ARGUMENT_CODER_FOR_SOURCE(DisplayList::SetInlineFillColor)
+DEFINE_SIMPLE_ARGUMENT_CODER_FOR_SOURCE(DisplayList::SetInlineStrokeColor)
 
-static void encodeTypesAndData(Encoder& encoder, const Vector<String>& types, const Vector<RefPtr<SharedBuffer>>& data)
-{
-    ASSERT(types.size() == data.size());
-    encoder << types;
-    encoder << static_cast<uint64_t>(data.size());
-    for (auto& buffer : data)
-        encodeSharedBuffer(encoder, buffer.get());
-}
-
-static WARN_UNUSED_RETURN bool decodeTypesAndData(Decoder& decoder, Vector<String>& types, Vector<RefPtr<SharedBuffer>>& data)
-{
-    if (!decoder.decode(types))
-        return false;
-
-    uint64_t dataSize;
-    if (!decoder.decode(dataSize))
-        return false;
-
-    ASSERT(dataSize == types.size());
-
-    for (uint64_t i = 0; i < dataSize; i++) {
-        RefPtr<SharedBuffer> buffer;
-        if (!decodeSharedBuffer(decoder, buffer))
-            return false;
-        data.append(WTFMove(buffer));
-    }
-
-    return true;
-}
-
-void ArgumentCoder<AffineTransform>::encode(Encoder& encoder, const AffineTransform& affineTransform)
-{
-    SimpleArgumentCoder<AffineTransform>::encode(encoder, affineTransform);
-}
-
-bool ArgumentCoder<AffineTransform>::decode(Decoder& decoder, AffineTransform& affineTransform)
-{
-    return SimpleArgumentCoder<AffineTransform>::decode(decoder, affineTransform);
-}
+#undef DEFINE_SIMPLE_ARGUMENT_CODER_FOR_SOURCE
 
 void ArgumentCoder<CacheQueryOptions>::encode(Encoder& encoder, const CacheQueryOptions& options)
 {
@@ -330,7 +257,7 @@ void ArgumentCoder<DOMCacheEngine::Record>::encode(Encoder& encoder, const DOMCa
 
     WTF::switchOn(record.responseBody, [&](const Ref<SharedBuffer>& buffer) {
         encoder << true;
-        encodeSharedBuffer(encoder, buffer.ptr());
+        encoder << buffer;
     }, [&](const Ref<FormData>& formData) {
         encoder << false;
         encoder << true;
@@ -386,11 +313,10 @@ std::optional<DOMCacheEngine::Record> ArgumentCoder<DOMCacheEngine::Record>::dec
         return std::nullopt;
 
     if (hasSharedBufferBody) {
-        RefPtr<SharedBuffer> buffer;
-        if (!decodeSharedBuffer(decoder, buffer))
+        auto buffer = decoder.decode<Ref<SharedBuffer>>();
+        if (!buffer)
             return std::nullopt;
-        if (buffer)
-            responseBody = buffer.releaseNonNull();
+        responseBody = WTFMove(*buffer);
     } else {
         bool hasFormDataBody;
         if (!decoder.decode(hasFormDataBody))
@@ -418,7 +344,7 @@ bool ArgumentCoder<EventTrackingRegions>::decode(Decoder& decoder, EventTracking
     decoder >> asynchronousDispatchRegion;
     if (!asynchronousDispatchRegion)
         return false;
-    HashMap<String, Region> eventSpecificSynchronousDispatchRegions;
+    EventTrackingRegions::EventSpecificSynchronousDispatchRegions eventSpecificSynchronousDispatchRegions;
     if (!decoder.decode(eventSpecificSynchronousDispatchRegions))
         return false;
     eventTrackingRegions.asynchronousDispatchRegion = WTFMove(*asynchronousDispatchRegion);
@@ -426,6 +352,7 @@ bool ArgumentCoder<EventTrackingRegions>::decode(Decoder& decoder, EventTracking
     return true;
 }
 
+template<typename Encoder>
 void ArgumentCoder<TransformationMatrix>::encode(Encoder& encoder, const TransformationMatrix& transformationMatrix)
 {
     encoder << transformationMatrix.m11();
@@ -506,6 +433,9 @@ bool ArgumentCoder<TransformationMatrix>::decode(Decoder& decoder, Transformatio
     transformationMatrix.setMatrix(m11, m12, m13, m14, m21, m22, m23, m24, m31, m32, m33, m34, m41, m42, m43, m44);
     return true;
 }
+
+template void ArgumentCoder<TransformationMatrix>::encode<Encoder>(Encoder&, const TransformationMatrix&);
+template void ArgumentCoder<TransformationMatrix>::encode<StreamConnectionEncoder>(StreamConnectionEncoder&, const TransformationMatrix&);
 
 void ArgumentCoder<LinearTimingFunction>::encode(Encoder& encoder, const LinearTimingFunction& timingFunction)
 {
@@ -618,84 +548,14 @@ bool ArgumentCoder<SpringTimingFunction>::decode(Decoder& decoder, SpringTimingF
     return true;
 }
 
-void ArgumentCoder<FloatPoint>::encode(Encoder& encoder, const FloatPoint& floatPoint)
+void ArgumentCoder<RectEdges<bool>>::encode(Encoder& encoder, const RectEdges<bool>& boxEdges)
 {
-    SimpleArgumentCoder<FloatPoint>::encode(encoder, floatPoint);
-}
-
-bool ArgumentCoder<FloatPoint>::decode(Decoder& decoder, FloatPoint& floatPoint)
-{
-    return SimpleArgumentCoder<FloatPoint>::decode(decoder, floatPoint);
-}
-
-std::optional<FloatPoint> ArgumentCoder<FloatPoint>::decode(Decoder& decoder)
-{
-    FloatPoint floatPoint;
-    if (!SimpleArgumentCoder<FloatPoint>::decode(decoder, floatPoint))
-        return std::nullopt;
-    return floatPoint;
-}
-
-void ArgumentCoder<FloatPoint3D>::encode(Encoder& encoder, const FloatPoint3D& floatPoint)
-{
-    SimpleArgumentCoder<FloatPoint3D>::encode(encoder, floatPoint);
-}
-
-bool ArgumentCoder<FloatPoint3D>::decode(Decoder& decoder, FloatPoint3D& floatPoint)
-{
-    return SimpleArgumentCoder<FloatPoint3D>::decode(decoder, floatPoint);
-}
-
-
-void ArgumentCoder<FloatRect>::encode(Encoder& encoder, const FloatRect& floatRect)
-{
-    SimpleArgumentCoder<FloatRect>::encode(encoder, floatRect);
-}
-
-bool ArgumentCoder<FloatRect>::decode(Decoder& decoder, FloatRect& floatRect)
-{
-    return SimpleArgumentCoder<FloatRect>::decode(decoder, floatRect);
-}
-
-std::optional<FloatRect> ArgumentCoder<FloatRect>::decode(Decoder& decoder)
-{
-    FloatRect floatRect;
-    if (!SimpleArgumentCoder<FloatRect>::decode(decoder, floatRect))
-        return std::nullopt;
-    return floatRect;
-}
-
-
-void ArgumentCoder<FloatBoxExtent>::encode(Encoder& encoder, const FloatBoxExtent& floatBoxExtent)
-{
-    SimpleArgumentCoder<FloatBoxExtent>::encode(encoder, floatBoxExtent);
+    SimpleArgumentCoder<RectEdges<bool>>::encode(encoder, boxEdges);
 }
     
-bool ArgumentCoder<FloatBoxExtent>::decode(Decoder& decoder, FloatBoxExtent& floatBoxExtent)
+bool ArgumentCoder<RectEdges<bool>>::decode(Decoder& decoder, RectEdges<bool>& boxEdges)
 {
-    return SimpleArgumentCoder<FloatBoxExtent>::decode(decoder, floatBoxExtent);
-}
-    
-
-void ArgumentCoder<FloatSize>::encode(Encoder& encoder, const FloatSize& floatSize)
-{
-    SimpleArgumentCoder<FloatSize>::encode(encoder, floatSize);
-}
-
-bool ArgumentCoder<FloatSize>::decode(Decoder& decoder, FloatSize& floatSize)
-{
-    return SimpleArgumentCoder<FloatSize>::decode(decoder, floatSize);
-}
-
-
-void ArgumentCoder<FloatRoundedRect>::encode(Encoder& encoder, const FloatRoundedRect& roundedRect)
-{
-    SimpleArgumentCoder<FloatRoundedRect>::encode(encoder, roundedRect);
-}
-
-bool ArgumentCoder<FloatRoundedRect>::decode(Decoder& decoder, FloatRoundedRect& roundedRect)
-{
-    return SimpleArgumentCoder<FloatRoundedRect>::decode(decoder, roundedRect);
+    return SimpleArgumentCoder<RectEdges<bool>>::decode(decoder, boxEdges);
 }
 
 #if ENABLE(META_VIEWPORT)
@@ -729,87 +589,6 @@ bool ArgumentCoder<ViewportAttributes>::decode(Decoder& decoder, ViewportAttribu
     return SimpleArgumentCoder<ViewportAttributes>::decode(decoder, viewportAttributes);
 }
 
-void ArgumentCoder<IntPoint>::encode(Encoder& encoder, const IntPoint& intPoint)
-{
-    SimpleArgumentCoder<IntPoint>::encode(encoder, intPoint);
-}
-
-bool ArgumentCoder<IntPoint>::decode(Decoder& decoder, IntPoint& intPoint)
-{
-    return SimpleArgumentCoder<IntPoint>::decode(decoder, intPoint);
-}
-
-std::optional<WebCore::IntPoint> ArgumentCoder<IntPoint>::decode(Decoder& decoder)
-{
-    IntPoint intPoint;
-    if (!SimpleArgumentCoder<IntPoint>::decode(decoder, intPoint))
-        return std::nullopt;
-    return intPoint;
-}
-
-void ArgumentCoder<IntRect>::encode(Encoder& encoder, const IntRect& intRect)
-{
-    SimpleArgumentCoder<IntRect>::encode(encoder, intRect);
-}
-
-bool ArgumentCoder<IntRect>::decode(Decoder& decoder, IntRect& intRect)
-{
-    return SimpleArgumentCoder<IntRect>::decode(decoder, intRect);
-}
-
-std::optional<IntRect> ArgumentCoder<IntRect>::decode(Decoder& decoder)
-{
-    IntRect rect;
-    if (!decode(decoder, rect))
-        return std::nullopt;
-    return rect;
-}
-
-template<typename Encoder>
-void ArgumentCoder<IntSize>::encode(Encoder& encoder, const IntSize& intSize)
-{
-    SimpleArgumentCoder<IntSize>::encode(encoder, intSize);
-}
-
-template
-void ArgumentCoder<IntSize>::encode<Encoder>(Encoder&, const IntSize&);
-template
-void ArgumentCoder<IntSize>::encode<StreamConnectionEncoder>(StreamConnectionEncoder&, const IntSize&);
-
-bool ArgumentCoder<IntSize>::decode(Decoder& decoder, IntSize& intSize)
-{
-    return SimpleArgumentCoder<IntSize>::decode(decoder, intSize);
-}
-
-std::optional<IntSize> ArgumentCoder<IntSize>::decode(Decoder& decoder)
-{
-    IntSize intSize;
-    if (!SimpleArgumentCoder<IntSize>::decode(decoder, intSize))
-        return std::nullopt;
-    return intSize;
-}
-
-void ArgumentCoder<LayoutSize>::encode(Encoder& encoder, const LayoutSize& layoutSize)
-{
-    SimpleArgumentCoder<LayoutSize>::encode(encoder, layoutSize);
-}
-
-bool ArgumentCoder<LayoutSize>::decode(Decoder& decoder, LayoutSize& layoutSize)
-{
-    return SimpleArgumentCoder<LayoutSize>::decode(decoder, layoutSize);
-}
-
-
-void ArgumentCoder<LayoutPoint>::encode(Encoder& encoder, const LayoutPoint& layoutPoint)
-{
-    SimpleArgumentCoder<LayoutPoint>::encode(encoder, layoutPoint);
-}
-
-bool ArgumentCoder<LayoutPoint>::decode(Decoder& decoder, LayoutPoint& layoutPoint)
-{
-    return SimpleArgumentCoder<LayoutPoint>::decode(decoder, layoutPoint);
-}
-
 void ArgumentCoder<RecentSearch>::encode(Encoder& encoder, const RecentSearch& recentSearch)
 {
     encoder << recentSearch.string << recentSearch.time;
@@ -832,12 +611,84 @@ std::optional<RecentSearch> ArgumentCoder<RecentSearch>::decode(Decoder& decoder
 
 void ArgumentCoder<Length>::encode(Encoder& encoder, const Length& length)
 {
-    SimpleArgumentCoder<Length>::encode(encoder, length);
+    encoder << length.type() << length.hasQuirk();
+
+    switch (length.type()) {
+    case LengthType::Auto:
+    case LengthType::Content:
+    case LengthType::Undefined:
+        break;
+    case LengthType::Fixed:
+    case LengthType::Relative:
+    case LengthType::Intrinsic:
+    case LengthType::MinIntrinsic:
+    case LengthType::MinContent:
+    case LengthType::MaxContent:
+    case LengthType::FillAvailable:
+    case LengthType::FitContent:
+    case LengthType::Percent:
+        encoder << length.isFloat();
+        if (length.isFloat())
+            encoder << length.value();
+        else
+            encoder << length.intValue();
+        break;
+    case LengthType::Calculated:
+        ASSERT_NOT_REACHED();
+        break;
+    }
 }
 
 bool ArgumentCoder<Length>::decode(Decoder& decoder, Length& length)
 {
-    return SimpleArgumentCoder<Length>::decode(decoder, length);
+    LengthType type;
+    if (!decoder.decode(type))
+        return false;
+
+    bool hasQuirk;
+    if (!decoder.decode(hasQuirk))
+        return false;
+
+    switch (type) {
+    case LengthType::Auto:
+    case LengthType::Content:
+    case LengthType::Undefined:
+        length = Length(type);
+        return true;
+    case LengthType::Fixed:
+    case LengthType::Relative:
+    case LengthType::Intrinsic:
+    case LengthType::MinIntrinsic:
+    case LengthType::MinContent:
+    case LengthType::MaxContent:
+    case LengthType::FillAvailable:
+    case LengthType::FitContent:
+    case LengthType::Percent: {
+        bool isFloat;
+        if (!decoder.decode(isFloat))
+            return false;
+
+        if (isFloat) {
+            float value;
+            if (!decoder.decode(value))
+                return false;
+
+            length = Length(value, type, hasQuirk);
+        } else {
+            int value;
+            if (!decoder.decode(value))
+                return false;
+
+            length = Length(value, type, hasQuirk);
+        }
+        return true;
+    }
+    case LengthType::Calculated:
+        ASSERT_NOT_REACHED();
+        return false;
+    }
+
+    return false;
 }
 
 void ArgumentCoder<VelocityData>::encode(Encoder& encoder, const VelocityData& velocityData)
@@ -1009,11 +860,11 @@ bool ArgumentCoder<ProtectionSpace>::decode(Decoder& decoder, ProtectionSpace& s
     if (!decoder.decode(realm))
         return false;
     
-    ProtectionSpaceAuthenticationScheme authenticationScheme;
+    ProtectionSpace::AuthenticationScheme authenticationScheme;
     if (!decoder.decode(authenticationScheme))
         return false;
 
-    ProtectionSpaceServerType serverType;
+    ProtectionSpace::ServerType serverType;
     if (!decoder.decode(serverType))
         return false;
 
@@ -1061,7 +912,7 @@ bool ArgumentCoder<Credential>::decode(Decoder& decoder, Credential& credential)
 
 static void encodeImage(Encoder& encoder, Image& image)
 {
-    RefPtr<ShareableBitmap> bitmap = ShareableBitmap::createShareable(IntSize(image.size()), { });
+    RefPtr<ShareableBitmap> bitmap = ShareableBitmap::create(IntSize(image.size()), { });
     auto graphicsContext = bitmap->createGraphicsContext();
     encoder << !!graphicsContext;
     if (!graphicsContext)
@@ -1118,19 +969,19 @@ static WARN_UNUSED_RETURN bool decodeOptionalImage(Decoder& decoder, RefPtr<Imag
     return decodeImage(decoder, image);
 }
 
-void ArgumentCoder<Ref<Font>>::encode(Encoder& encoder, const Ref<WebCore::Font>& font)
+void ArgumentCoder<WebCore::Font>::encode(Encoder& encoder, const WebCore::Font& font)
 {
-    encoder << font->origin();
-    encoder << (font->isInterstitial() ? Font::Interstitial::Yes : Font::Interstitial::No);
-    encoder << font->visibility();
-    encoder << (font->isTextOrientationFallback() ? Font::OrientationFallback::Yes : Font::OrientationFallback::No);
-    encoder << font->renderingResourceIdentifier();
+    encoder << font.origin();
+    encoder << (font.isInterstitial() ? Font::Interstitial::Yes : Font::Interstitial::No);
+    encoder << font.visibility();
+    encoder << (font.isTextOrientationFallback() ? Font::OrientationFallback::Yes : Font::OrientationFallback::No);
+    encoder << font.renderingResourceIdentifier();
     // Intentionally don't encode m_isBrokenIdeographFallback because it doesn't affect drawGlyphs().
 
     encodePlatformData(encoder, font);
 }
 
-std::optional<Ref<Font>> ArgumentCoder<Ref<Font>>::decode(Decoder& decoder)
+std::optional<Ref<Font>> ArgumentCoder<Font>::decode(Decoder& decoder)
 {
     std::optional<Font::Origin> origin;
     decoder >> origin;
@@ -1162,6 +1013,27 @@ std::optional<Ref<Font>> ArgumentCoder<Ref<Font>>::decode(Decoder& decoder)
         return std::nullopt;
 
     return Font::create(platformData.value(), origin.value(), isInterstitial.value(), visibility.value(), isTextOrientationFallback.value(), renderingResourceIdentifier);
+}
+
+void ArgumentCoder<DecomposedGlyphs>::encode(Encoder& encoder, const DecomposedGlyphs& decomposedGlyphs)
+{
+    encoder << decomposedGlyphs.positionedGlyphs();
+    encoder << decomposedGlyphs.renderingResourceIdentifier();
+}
+
+std::optional<Ref<DecomposedGlyphs>> ArgumentCoder<DecomposedGlyphs>::decode(Decoder& decoder)
+{
+    std::optional<PositionedGlyphs> positionedGlyphs;
+    decoder >> positionedGlyphs;
+    if (!positionedGlyphs)
+        return std::nullopt;
+
+    std::optional<RenderingResourceIdentifier> renderingResourceIdentifier;
+    decoder >> renderingResourceIdentifier;
+    if (!renderingResourceIdentifier)
+        return std::nullopt;
+
+    return DecomposedGlyphs::create(WTFMove(*positionedGlyphs), *renderingResourceIdentifier);
 }
 
 void ArgumentCoder<Cursor>::encode(Encoder& encoder, const Cursor& cursor)
@@ -1237,6 +1109,14 @@ bool ArgumentCoder<Cursor>::decode(Decoder& decoder, Cursor& cursor)
 
 void ArgumentCoder<ResourceRequest>::encode(Encoder& encoder, const ResourceRequest& resourceRequest)
 {
+    if (resourceRequest.encodingRequiresPlatformData()) {
+        encoder << true;
+        encodePlatformData(encoder, resourceRequest);
+    } else {
+        encoder << false;
+        resourceRequest.encodeWithoutPlatformData(encoder);
+    }
+
     encoder << resourceRequest.cachePartition();
     encoder << resourceRequest.hiddenFromInspector();
 
@@ -1247,18 +1127,18 @@ void ArgumentCoder<ResourceRequest>::encode(Encoder& encoder, const ResourceRequ
     } else
         encoder << false;
 #endif
-
-    if (resourceRequest.encodingRequiresPlatformData()) {
-        encoder << true;
-        encodePlatformData(encoder, resourceRequest);
-        return;
-    }
-    encoder << false;
-    resourceRequest.encodeWithoutPlatformData(encoder);
 }
 
 bool ArgumentCoder<ResourceRequest>::decode(Decoder& decoder, ResourceRequest& resourceRequest)
 {
+    bool hasPlatformData;
+    if (!decoder.decode(hasPlatformData))
+        return false;
+
+    bool decodeSuccess = hasPlatformData ? decodePlatformData(decoder, resourceRequest) : resourceRequest.decodeWithoutPlatformData(decoder);
+    if (!decodeSuccess)
+        return false;
+
     String cachePartition;
     if (!decoder.decode(cachePartition))
         return false;
@@ -1282,13 +1162,7 @@ bool ArgumentCoder<ResourceRequest>::decode(Decoder& decoder, ResourceRequest& r
     }
 #endif
 
-    bool hasPlatformData;
-    if (!decoder.decode(hasPlatformData))
-        return false;
-    if (hasPlatformData)
-        return decodePlatformData(decoder, resourceRequest);
-
-    return resourceRequest.decodeWithoutPlatformData(decoder);
+    return true;
 }
 
 void ArgumentCoder<ResourceError>::encode(Encoder& encoder, const ResourceError& resourceError)
@@ -1587,54 +1461,12 @@ template<> struct ArgumentCoder<PasteboardCustomData::Entry> {
 
 void ArgumentCoder<PasteboardCustomData::Entry>::encode(Encoder& encoder, const PasteboardCustomData::Entry& data)
 {
-    encoder << data.type << data.customData;
-
-    auto& platformData = data.platformData;
-    bool hasString = WTF::holds_alternative<String>(platformData);
-    encoder << hasString;
-    if (hasString)
-        encoder << WTF::get<String>(platformData);
-
-    bool hasBuffer = WTF::holds_alternative<Ref<SharedBuffer>>(platformData);
-    encoder << hasBuffer;
-    if (hasBuffer)
-        encodeSharedBuffer(encoder, WTF::get<Ref<SharedBuffer>>(platformData).ptr());
+    encoder << data.type << data.customData << data.platformData;
 }
 
 bool ArgumentCoder<PasteboardCustomData::Entry>::decode(Decoder& decoder, PasteboardCustomData::Entry& data)
 {
-    if (!decoder.decode(data.type))
-        return false;
-
-    if (!decoder.decode(data.customData))
-        return false;
-
-    bool hasString;
-    if (!decoder.decode(hasString))
-        return false;
-
-    if (hasString) {
-        String value;
-        if (!decoder.decode(value))
-            return false;
-        data.platformData = { WTFMove(value) };
-    }
-
-    bool hasBuffer;
-    if (!decoder.decode(hasBuffer))
-        return false;
-
-    if (hasString && hasBuffer)
-        return false;
-
-    if (hasBuffer) {
-        RefPtr<SharedBuffer> value;
-        if (!decodeSharedBuffer(decoder, value) || !value)
-            return false;
-        data.platformData = { value.releaseNonNull() };
-    }
-
-    return true;
+    return decoder.decode(data.type) && decoder.decode(data.customData) && decoder.decode(data.platformData);
 }
 
 void ArgumentCoder<PasteboardCustomData>::encode(Encoder& encoder, const PasteboardCustomData& data)
@@ -1702,6 +1534,7 @@ void ArgumentCoder<InspectorOverlay::Highlight>::encode(Encoder& encoder, const 
     encoder << highlight.marginColor;
     encoder << highlight.quads;
     encoder << highlight.gridHighlightOverlays;
+    encoder << highlight.flexHighlightOverlays;
 }
 
 bool ArgumentCoder<InspectorOverlay::Highlight>::decode(Decoder& decoder, InspectorOverlay::Highlight& highlight)
@@ -1727,6 +1560,8 @@ bool ArgumentCoder<InspectorOverlay::Highlight>::decode(Decoder& decoder, Inspec
         return false;
     if (!decoder.decode(highlight.gridHighlightOverlays))
         return false;
+    if (!decoder.decode(highlight.flexHighlightOverlays))
+        return false;
     return true;
 }
 
@@ -1737,12 +1572,13 @@ void ArgumentCoder<PasteboardWebContent>::encode(Encoder& encoder, const Pastebo
     encoder << content.dataInStringFormat;
     encoder << content.dataInHTMLFormat;
 
-    encodeSharedBuffer(encoder, content.dataInWebArchiveFormat.get());
-    encodeSharedBuffer(encoder, content.dataInRTFDFormat.get());
-    encodeSharedBuffer(encoder, content.dataInRTFFormat.get());
-    encodeSharedBuffer(encoder, content.dataInAttributedStringFormat.get());
+    encoder << content.dataInWebArchiveFormat;
+    encoder << content.dataInRTFDFormat;
+    encoder << content.dataInRTFFormat;
+    encoder << content.dataInAttributedStringFormat;
 
-    encodeTypesAndData(encoder, content.clientTypes, content.clientData);
+    encoder << content.clientTypes;
+    encoder << content.clientData;
 }
 
 bool ArgumentCoder<PasteboardWebContent>::decode(Decoder& decoder, PasteboardWebContent& content)
@@ -1755,16 +1591,20 @@ bool ArgumentCoder<PasteboardWebContent>::decode(Decoder& decoder, PasteboardWeb
         return false;
     if (!decoder.decode(content.dataInHTMLFormat))
         return false;
-    if (!decodeSharedBuffer(decoder, content.dataInWebArchiveFormat))
+
+    if (!decoder.decode(content.dataInWebArchiveFormat))
         return false;
-    if (!decodeSharedBuffer(decoder, content.dataInRTFDFormat))
+    if (!decoder.decode(content.dataInRTFDFormat))
         return false;
-    if (!decodeSharedBuffer(decoder, content.dataInRTFFormat))
+    if (!decoder.decode(content.dataInRTFFormat))
         return false;
-    if (!decodeSharedBuffer(decoder, content.dataInAttributedStringFormat))
+    if (!decoder.decode(content.dataInAttributedStringFormat))
         return false;
-    if (!decodeTypesAndData(decoder, content.clientTypes, content.clientData))
+    if (!decoder.decode(content.clientTypes))
         return false;
+    if (!decoder.decode(content.clientData))
+        return false;
+
     return true;
 }
 
@@ -1776,9 +1616,9 @@ void ArgumentCoder<PasteboardImage>::encode(Encoder& encoder, const PasteboardIm
     encoder << pasteboardImage.resourceMIMEType;
     encoder << pasteboardImage.suggestedName;
     encoder << pasteboardImage.imageSize;
-    if (pasteboardImage.resourceData)
-        encodeSharedBuffer(encoder, pasteboardImage.resourceData.get());
-    encodeTypesAndData(encoder, pasteboardImage.clientTypes, pasteboardImage.clientData);
+    encoder << pasteboardImage.resourceData;
+    encoder << pasteboardImage.clientTypes;
+    encoder << pasteboardImage.clientData;
 }
 
 bool ArgumentCoder<PasteboardImage>::decode(Decoder& decoder, PasteboardImage& pasteboardImage)
@@ -1795,10 +1635,13 @@ bool ArgumentCoder<PasteboardImage>::decode(Decoder& decoder, PasteboardImage& p
         return false;
     if (!decoder.decode(pasteboardImage.imageSize))
         return false;
-    if (!decodeSharedBuffer(decoder, pasteboardImage.resourceData))
+    if (!decoder.decode(pasteboardImage.resourceData))
         return false;
-    if (!decodeTypesAndData(decoder, pasteboardImage.clientTypes, pasteboardImage.clientData))
+    if (!decoder.decode(pasteboardImage.clientTypes))
         return false;
+    if (!decoder.decode(pasteboardImage.clientData))
+        return false;
+
     return true;
 }
 
@@ -1876,14 +1719,14 @@ bool ArgumentCoder<FileChooserSettings>::decode(Decoder& decoder, FileChooserSet
 void ArgumentCoder<RawFile>::encode(Encoder& encoder, const RawFile& file)
 {
     encoder << file.fileName;
-    encodeSharedBuffer(encoder, file.fileData.get());
+    encoder << file.fileData;
 }
 
 bool ArgumentCoder<RawFile>::decode(Decoder& decoder, RawFile& file)
 {
     if (!decoder.decode(file.fileName))
         return false;
-    if (!decodeSharedBuffer(decoder, file.fileData))
+    if (!decoder.decode(file.fileData))
         return false;
     return true;
 }
@@ -2066,6 +1909,9 @@ void ArgumentCoder<ScrollableAreaParameters>::encode(Encoder& encoder, const Scr
 
     encoder << parameters.horizontalScrollbarMode;
     encoder << parameters.verticalScrollbarMode;
+    
+    encoder << parameters.horizontalOverscrollBehavior;
+    encoder << parameters.verticalOverscrollBehavior;
 
     encoder << parameters.allowsHorizontalScrolling;
     encoder << parameters.allowsVerticalScrolling;
@@ -2086,6 +1932,11 @@ bool ArgumentCoder<ScrollableAreaParameters>::decode(Decoder& decoder, Scrollabl
     if (!decoder.decode(params.horizontalScrollbarMode))
         return false;
     if (!decoder.decode(params.verticalScrollbarMode))
+        return false;
+    
+    if (!decoder.decode(params.horizontalOverscrollBehavior))
+        return false;
+    if (!decoder.decode(params.verticalOverscrollBehavior))
         return false;
 
     if (!decoder.decode(params.allowsHorizontalScrolling))
@@ -2791,12 +2642,12 @@ bool ArgumentCoder<MediaConstraints>::decode(Decoder& decoder, WebCore::MediaCon
 
 void ArgumentCoder<IDBKeyPath>::encode(Encoder& encoder, const IDBKeyPath& keyPath)
 {
-    bool isString = WTF::holds_alternative<String>(keyPath);
+    bool isString = std::holds_alternative<String>(keyPath);
     encoder << isString;
     if (isString)
-        encoder << WTF::get<String>(keyPath);
+        encoder << std::get<String>(keyPath);
     else
-        encoder << WTF::get<Vector<String>>(keyPath);
+        encoder << std::get<Vector<String>>(keyPath);
 }
 
 bool ArgumentCoder<IDBKeyPath>::decode(Decoder& decoder, IDBKeyPath& keyPath)
@@ -2821,12 +2672,12 @@ bool ArgumentCoder<IDBKeyPath>::decode(Decoder& decoder, IDBKeyPath& keyPath)
 #if ENABLE(SERVICE_WORKER)
 void ArgumentCoder<ServiceWorkerOrClientData>::encode(Encoder& encoder, const ServiceWorkerOrClientData& data)
 {
-    bool isServiceWorkerData = WTF::holds_alternative<ServiceWorkerData>(data);
+    bool isServiceWorkerData = std::holds_alternative<ServiceWorkerData>(data);
     encoder << isServiceWorkerData;
     if (isServiceWorkerData)
-        encoder << WTF::get<ServiceWorkerData>(data);
+        encoder << std::get<ServiceWorkerData>(data);
     else
-        encoder << WTF::get<ServiceWorkerClientData>(data);
+        encoder << std::get<ServiceWorkerClientData>(data);
 }
 
 bool ArgumentCoder<ServiceWorkerOrClientData>::decode(Decoder& decoder, ServiceWorkerOrClientData& data)
@@ -2854,12 +2705,12 @@ bool ArgumentCoder<ServiceWorkerOrClientData>::decode(Decoder& decoder, ServiceW
 
 void ArgumentCoder<ServiceWorkerOrClientIdentifier>::encode(Encoder& encoder, const ServiceWorkerOrClientIdentifier& identifier)
 {
-    bool isServiceWorkerIdentifier = WTF::holds_alternative<ServiceWorkerIdentifier>(identifier);
+    bool isServiceWorkerIdentifier = std::holds_alternative<ServiceWorkerIdentifier>(identifier);
     encoder << isServiceWorkerIdentifier;
     if (isServiceWorkerIdentifier)
-        encoder << WTF::get<ServiceWorkerIdentifier>(identifier);
+        encoder << std::get<ServiceWorkerIdentifier>(identifier);
     else
-        encoder << WTF::get<ServiceWorkerClientIdentifier>(identifier);
+        encoder << std::get<ScriptExecutionContextIdentifier>(identifier);
 }
 
 bool ArgumentCoder<ServiceWorkerOrClientIdentifier>::decode(Decoder& decoder, ServiceWorkerOrClientIdentifier& identifier)
@@ -2875,7 +2726,7 @@ bool ArgumentCoder<ServiceWorkerOrClientIdentifier>::decode(Decoder& decoder, Se
 
         identifier = WTFMove(*workerIdentifier);
     } else {
-        std::optional<ServiceWorkerClientIdentifier> clientIdentifier;
+        std::optional<ScriptExecutionContextIdentifier> clientIdentifier;
         decoder >> clientIdentifier;
         if (!clientIdentifier)
             return false;
@@ -2887,33 +2738,13 @@ bool ArgumentCoder<ServiceWorkerOrClientIdentifier>::decode(Decoder& decoder, Se
 
 #endif
 
-void ArgumentCoder<MediaSelectionOption>::encode(Encoder& encoder, const MediaSelectionOption& option)
-{
-    encoder << option.displayName;
-    encoder << option.type;
-}
-
-std::optional<MediaSelectionOption> ArgumentCoder<MediaSelectionOption>::decode(Decoder& decoder)
-{
-    std::optional<String> displayName;
-    decoder >> displayName;
-    if (!displayName)
-        return std::nullopt;
-    
-    std::optional<MediaSelectionOption::Type> type;
-    decoder >> type;
-    if (!type)
-        return std::nullopt;
-    
-    return {{ WTFMove(*displayName), WTFMove(*type) }};
-}
-
 void ArgumentCoder<PromisedAttachmentInfo>::encode(Encoder& encoder, const PromisedAttachmentInfo& info)
 {
 #if ENABLE(ATTACHMENT_ELEMENT)
     encoder << info.attachmentIdentifier;
 #endif
-    encodeTypesAndData(encoder, info.additionalTypes, info.additionalData);
+    encoder << info.additionalTypes;
+    encoder << info.additionalData;
 }
 
 bool ArgumentCoder<PromisedAttachmentInfo>::decode(Decoder& decoder, PromisedAttachmentInfo& info)
@@ -2923,7 +2754,9 @@ bool ArgumentCoder<PromisedAttachmentInfo>::decode(Decoder& decoder, PromisedAtt
         return false;
 #endif
 
-    if (!decodeTypesAndData(decoder, info.additionalTypes, info.additionalData))
+    if (!decoder.decode(info.additionalTypes))
+        return false;
+    if (!decoder.decode(info.additionalData))
         return false;
 
     return true;
@@ -2944,76 +2777,90 @@ std::optional<RefPtr<SecurityOrigin>> ArgumentCoder<RefPtr<SecurityOrigin>>::dec
 
 void ArgumentCoder<FontAttributes>::encode(Encoder& encoder, const FontAttributes& attributes)
 {
-    encoder << attributes.backgroundColor << attributes.foregroundColor << attributes.fontShadow << attributes.hasUnderline << attributes.hasStrikeThrough << attributes.textLists;
+    encoder << attributes.backgroundColor;
+    encoder << attributes.foregroundColor;
+    encoder << attributes.fontShadow;
+    encoder << attributes.hasUnderline;
+    encoder << attributes.hasStrikeThrough;
+    encoder << attributes.hasMultipleFonts;
+    encoder << attributes.textLists;
     encoder << attributes.horizontalAlignment;
     encoder << attributes.subscriptOrSuperscript;
-
-    if (attributes.encodingRequiresPlatformData()) {
-        encoder << true;
-        encodePlatformData(encoder, attributes);
-        return;
-    }
+    encoder << attributes.font;
 }
 
 std::optional<FontAttributes> ArgumentCoder<FontAttributes>::decode(Decoder& decoder)
 {
-    FontAttributes attributes;
-
-    if (!decoder.decode(attributes.backgroundColor))
+    std::optional<Color> backgroundColor;
+    decoder >> backgroundColor;
+    if (!backgroundColor)
         return std::nullopt;
 
-    if (!decoder.decode(attributes.foregroundColor))
+    std::optional<Color> foregroundColor;
+    decoder >> foregroundColor;
+    if (!foregroundColor)
         return std::nullopt;
 
-    if (!decoder.decode(attributes.fontShadow))
+    std::optional<FontShadow> fontShadow;
+    decoder >> fontShadow;
+    if (!fontShadow)
         return std::nullopt;
 
-    if (!decoder.decode(attributes.hasUnderline))
+    std::optional<bool> hasUnderline;
+    decoder >> hasUnderline;
+    if (!hasUnderline)
         return std::nullopt;
 
-    if (!decoder.decode(attributes.hasStrikeThrough))
+    std::optional<bool> hasStrikeThrough;
+    decoder >> hasStrikeThrough;
+    if (!hasStrikeThrough)
         return std::nullopt;
 
-    if (!decoder.decode(attributes.textLists))
+    std::optional<bool> hasMultipleFonts;
+    decoder >> hasMultipleFonts;
+    if (!hasMultipleFonts)
         return std::nullopt;
 
-    if (!decoder.decode(attributes.horizontalAlignment))
+    std::optional<Vector<TextList>> textLists;
+    decoder >> textLists;
+    if (!textLists)
         return std::nullopt;
 
-    if (!decoder.decode(attributes.subscriptOrSuperscript))
+    std::optional<FontAttributes::HorizontalAlignment> horizontalAlignment;
+    decoder >> horizontalAlignment;
+    if (!horizontalAlignment)
         return std::nullopt;
 
-    bool hasPlatformData;
-    if (!decoder.decode(hasPlatformData))
+    std::optional<FontAttributes::SubscriptOrSuperscript> subscriptOrSuperscript;
+    decoder >> subscriptOrSuperscript;
+    if (!subscriptOrSuperscript)
         return std::nullopt;
-    if (hasPlatformData)
-        return decodePlatformData(decoder, attributes);
 
-    return attributes;
+    std::optional<RefPtr<Font>> font;
+    decoder >> font;
+    if (!font)
+        return std::nullopt;
+
+    return { { WTFMove(*font), WTFMove(*backgroundColor), WTFMove(*foregroundColor), WTFMove(*fontShadow), *subscriptOrSuperscript, *horizontalAlignment, WTFMove(*textLists), *hasUnderline, *hasStrikeThrough, *hasMultipleFonts } };
 }
 
 #if ENABLE(ATTACHMENT_ELEMENT)
 
 void ArgumentCoder<SerializedAttachmentData>::encode(IPC::Encoder& encoder, const WebCore::SerializedAttachmentData& data)
 {
-    encoder << data.identifier << data.mimeType << IPC::SharedBufferDataReference { data.data.get() };
+    encoder << data.identifier << data.mimeType << data.data;
 }
 
 std::optional<SerializedAttachmentData> ArgumentCoder<WebCore::SerializedAttachmentData>::decode(IPC::Decoder& decoder)
 {
-    String identifier;
-    if (!decoder.decode(identifier))
+    auto identifier = decoder.decode<String>();
+    auto mimeType = decoder.decode<String>();
+    auto data = decoder.decode<Ref<SharedBuffer>>();
+
+    if (UNLIKELY(!decoder.isValid()))
         return std::nullopt;
 
-    String mimeType;
-    if (!decoder.decode(mimeType))
-        return std::nullopt;
-
-    IPC::DataReference data;
-    if (!decoder.decode(data))
-        return std::nullopt;
-
-    return {{ WTFMove(identifier), WTFMove(mimeType), WebCore::SharedBuffer::create(data.data(), data.size()) }};
+    return { { WTFMove(*identifier), WTFMove(*mimeType), WTFMove(*data) } };
 }
 
 #endif // ENABLE(ATTACHMENT_ELEMENT)
@@ -3047,32 +2894,75 @@ std::optional<SerializedPlatformDataCueValue> ArgumentCoder<WebCore::SerializedP
 }
 #endif
 
-void ArgumentCoder<RefPtr<WebCore::SharedBuffer>>::encode(Encoder& encoder, const RefPtr<WebCore::SharedBuffer>& buffer)
+void ArgumentCoder<WebCore::FragmentedSharedBuffer>::encode(Encoder& encoder, const WebCore::FragmentedSharedBuffer& buffer)
 {
-    encodeSharedBuffer(encoder, buffer.get());
+    uint64_t bufferSize = buffer.size();
+    encoder << bufferSize;
+    if (!bufferSize)
+        return;
+
+#if USE(UNIX_DOMAIN_SOCKETS)
+    // Do not use shared memory for FragmentedSharedBuffer encoding in Unix, because it's easy to reach the
+    // maximum number of file descriptors open per process when sending large data in small chunks
+    // over the IPC. ConnectionUnix.cpp already uses shared memory to send any IPC message that is
+    // too large. See https://bugs.webkit.org/show_bug.cgi?id=208571.
+    for (const auto& element : buffer)
+        encoder.encodeFixedLengthData(element.segment->data(), element.segment->size(), 1);
+#else
+    SharedMemory::Handle handle;
+    {
+        auto sharedMemoryBuffer = SharedMemory::copyBuffer(buffer);
+        sharedMemoryBuffer->createHandle(handle, SharedMemory::Protection::ReadOnly);
+    }
+    encoder << WTFMove(handle);
+#endif
 }
 
-std::optional<RefPtr<SharedBuffer>> ArgumentCoder<RefPtr<WebCore::SharedBuffer>>::decode(Decoder& decoder)
+std::optional<Ref<WebCore::FragmentedSharedBuffer>> ArgumentCoder<WebCore::FragmentedSharedBuffer>::decode(Decoder& decoder)
 {
-    RefPtr<SharedBuffer> buffer;
-    if (!decodeSharedBuffer(decoder, buffer))
+    uint64_t bufferSize = 0;
+    if (!decoder.decode(bufferSize))
         return std::nullopt;
 
-    return buffer;
-}
+    if (!bufferSize)
+        return SharedBuffer::create();
 
-void ArgumentCoder<Ref<WebCore::SharedBuffer>>::encode(Encoder& encoder, const Ref<WebCore::SharedBuffer>& buffer)
-{
-    encodeSharedBuffer(encoder, buffer.ptr());
-}
-
-std::optional<Ref<SharedBuffer>> ArgumentCoder<Ref<WebCore::SharedBuffer>>::decode(Decoder& decoder)
-{
-    RefPtr<SharedBuffer> buffer;
-    if (!decodeSharedBuffer(decoder, buffer) || !buffer)
+#if USE(UNIX_DOMAIN_SOCKETS)
+    if (!decoder.bufferIsLargeEnoughToContain<uint8_t>(bufferSize))
         return std::nullopt;
 
-    return buffer.releaseNonNull();
+    Vector<uint8_t> data;
+    data.grow(bufferSize);
+    if (!decoder.decodeFixedLengthData(data.data(), data.size(), 1))
+        return std::nullopt;
+
+    return SharedBuffer::create(WTFMove(data));
+#else
+    SharedMemory::Handle handle;
+    if (!decoder.decode(handle))
+        return std::nullopt;
+
+    auto sharedMemoryBuffer = SharedMemory::map(handle, SharedMemory::Protection::ReadOnly);
+    if (!sharedMemoryBuffer)
+        return std::nullopt;
+
+    if (sharedMemoryBuffer->size() < bufferSize)
+        return std::nullopt;
+
+    return SharedBuffer::create(static_cast<unsigned char*>(sharedMemoryBuffer->data()), bufferSize);
+#endif
+}
+
+void ArgumentCoder<WebCore::SharedBuffer>::encode(Encoder& encoder, const WebCore::SharedBuffer& buffer)
+{
+    encoder << static_cast<const WebCore::FragmentedSharedBuffer&>(buffer);
+}
+
+std::optional<Ref<WebCore::SharedBuffer>> ArgumentCoder<WebCore::SharedBuffer>::decode(Decoder& decoder)
+{
+    if (auto buffer = decoder.decode<Ref<FragmentedSharedBuffer>>())
+        return (*buffer)->makeContiguous();
+    return std::nullopt;
 }
 
 #if ENABLE(SHAREABLE_RESOURCE) && PLATFORM(COCOA)
@@ -3118,7 +3008,7 @@ void ArgumentCoder<WebCore::ScriptBuffer>::encode(Encoder& encoder, const WebCor
         return;
     }
 #endif
-    encodeSharedBuffer(encoder, script.buffer());
+    encoder << RefPtr { script.buffer() };
 }
 
 std::optional<WebCore::ScriptBuffer> ArgumentCoder<WebCore::ScriptBuffer>::decode(Decoder& decoder)
@@ -3132,20 +3022,90 @@ std::optional<WebCore::ScriptBuffer> ArgumentCoder<WebCore::ScriptBuffer>::decod
         return decodeScriptBufferAsShareableResourceHandle(decoder);
 #endif
 
-    RefPtr<SharedBuffer> buffer;
-    if (!decodeSharedBuffer(decoder, buffer))
+    if (auto buffer = decoder.decode<RefPtr<FragmentedSharedBuffer>>())
+        return WebCore::ScriptBuffer { WTFMove(*buffer) };
+    return std::nullopt;
+}
+
+template<typename Encoder>
+void ArgumentCoder<SystemImage>::encode(Encoder& encoder, const SystemImage& systemImage)
+{
+    encoder << systemImage.systemImageType();
+
+    switch (systemImage.systemImageType()) {
+#if ENABLE(APPLE_PAY)
+    case SystemImageType::ApplePayButton:
+        downcast<ApplePayButtonSystemImage>(systemImage).encode(encoder);
+        return;
+
+    case SystemImageType::ApplePayLogo:
+        downcast<ApplePayLogoSystemImage>(systemImage).encode(encoder);
+        return;
+#endif
+#if USE(SYSTEM_PREVIEW)
+    case SystemImageType::ARKitBadge:
+        downcast<ARKitBadgeSystemImage>(systemImage).encode(encoder);
+        return;
+#endif
+    }
+
+    ASSERT_NOT_REACHED();
+}
+
+template
+void ArgumentCoder<SystemImage>::encode<Encoder>(Encoder&, const SystemImage&);
+template
+void ArgumentCoder<SystemImage>::encode<StreamConnectionEncoder>(StreamConnectionEncoder&, const SystemImage&);
+
+std::optional<Ref<SystemImage>> ArgumentCoder<SystemImage>::decode(Decoder& decoder)
+{
+    std::optional<SystemImageType> systemImageType;
+    decoder >> systemImageType;
+    if (!systemImageType)
         return std::nullopt;
 
-    return WebCore::ScriptBuffer { WTFMove(buffer) };
+    switch (*systemImageType) {
+#if ENABLE(APPLE_PAY)
+    case SystemImageType::ApplePayButton:
+        return ApplePayButtonSystemImage::decode(decoder);
+
+    case SystemImageType::ApplePayLogo:
+        return ApplePayLogoSystemImage::decode(decoder);
+#endif
+#if USE(SYSTEM_PREVIEW)
+    case SystemImageType::ARKitBadge:
+        return ARKitBadgeSystemImage::decode(decoder);
+#endif
+    }
+
+    ASSERT_NOT_REACHED();
+    return std::nullopt;
+}
+
+void ArgumentCoder<WebCore::NotificationResources>::encode(Encoder& encoder, const WebCore::NotificationResources& resources)
+{
+    encodeOptionalImage(encoder, resources.icon().get());
+}
+
+std::optional<RefPtr<WebCore::NotificationResources>> ArgumentCoder<WebCore::NotificationResources>::decode(Decoder& decoder)
+{
+    RefPtr<Image> icon;
+    if (!decodeOptionalImage(decoder, icon))
+        return std::nullopt;
+
+    if (!icon)
+        return nullptr;
+
+    auto resources = WebCore::NotificationResources::create();
+    resources->setIcon(WTFMove(icon));
+    return resources;
 }
 
 #if ENABLE(ENCRYPTED_MEDIA)
 void ArgumentCoder<WebCore::CDMInstanceSession::Message>::encode(Encoder& encoder, const WebCore::CDMInstanceSession::Message& message)
 {
     encoder << message.first;
-
-    RefPtr<SharedBuffer> messageData = message.second.copyRef();
-    encoder << messageData;
+    encoder << message.second;
 }
 
 std::optional<WebCore::CDMInstanceSession::Message>  ArgumentCoder<WebCore::CDMInstanceSession::Message>::decode(Decoder& decoder)
@@ -3154,70 +3114,15 @@ std::optional<WebCore::CDMInstanceSession::Message>  ArgumentCoder<WebCore::CDMI
     if (!decoder.decode(type))
         return std::nullopt;
 
-    RefPtr<SharedBuffer> buffer;
-    if (!decoder.decode(buffer) || !buffer)
+    auto buffer = decoder.decode<Ref<SharedBuffer>>();
+    if (UNLIKELY(!buffer))
         return std::nullopt;
 
-    return std::make_optional<WebCore::CDMInstanceSession::Message>({ type, buffer.releaseNonNull() });
+    return std::make_optional<WebCore::CDMInstanceSession::Message>({ type, WTFMove(*buffer) });
 }
 #endif // ENABLE(ENCRYPTED_MEDIA)
 
 #if ENABLE(GPU_PROCESS) && ENABLE(WEBGL)
-void ArgumentCoder<WebCore::GraphicsContextGLAttributes>::encode(Encoder& encoder, const WebCore::GraphicsContextGLAttributes& attributes)
-{
-    encoder << attributes.alpha;
-    encoder << attributes.depth;
-    encoder << attributes.stencil;
-    encoder << attributes.antialias;
-    encoder << attributes.premultipliedAlpha;
-    encoder << attributes.preserveDrawingBuffer;
-    encoder << attributes.failIfMajorPerformanceCaveat;
-    encoder << attributes.powerPreference;
-    encoder << attributes.shareResources;
-    encoder << attributes.webGLVersion;
-    encoder << attributes.noExtensions;
-    encoder << attributes.devicePixelRatio;
-    encoder << attributes.initialPowerPreference;
-#if ENABLE(WEBXR)
-    encoder << attributes.xrCompatible;
-#endif
-}
-
-std::optional<WebCore::GraphicsContextGLAttributes> ArgumentCoder<WebCore::GraphicsContextGLAttributes>::decode(Decoder& decoder)
-{
-    GraphicsContextGLAttributes attributes;
-    if (!decoder.decode(attributes.alpha))
-        return std::nullopt;
-    if (!decoder.decode(attributes.depth))
-        return std::nullopt;
-    if (!decoder.decode(attributes.stencil))
-        return std::nullopt;
-    if (!decoder.decode(attributes.antialias))
-        return std::nullopt;
-    if (!decoder.decode(attributes.premultipliedAlpha))
-        return std::nullopt;
-    if (!decoder.decode(attributes.preserveDrawingBuffer))
-        return std::nullopt;
-    if (!decoder.decode(attributes.failIfMajorPerformanceCaveat))
-        return std::nullopt;
-    if (!decoder.decode(attributes.powerPreference))
-        return std::nullopt;
-    if (!decoder.decode(attributes.shareResources))
-        return std::nullopt;
-    if (!decoder.decode(attributes.webGLVersion))
-        return std::nullopt;
-    if (!decoder.decode(attributes.noExtensions))
-        return std::nullopt;
-    if (!decoder.decode(attributes.devicePixelRatio))
-        return std::nullopt;
-    if (!decoder.decode(attributes.initialPowerPreference))
-        return std::nullopt;
-#if ENABLE(WEBXR)
-    if (!decoder.decode(attributes.xrCompatible))
-        return std::nullopt;
-#endif
-    return attributes;
-}
 
 template<typename Encoder>
 void ArgumentCoder<WebCore::GraphicsContextGL::ActiveInfo>::encode(Encoder& encoder, const WebCore::GraphicsContextGL::ActiveInfo& activeInfo)
@@ -3270,5 +3175,27 @@ std::optional<TextRecognitionDataDetector> ArgumentCoder<TextRecognitionDataDete
 }
 
 #endif // ENABLE(IMAGE_ANALYSIS) && ENABLE(DATA_DETECTION)
+
+#if USE(UNIX_DOMAIN_SOCKETS)
+
+void ArgumentCoder<UnixFileDescriptor>::encode(Encoder& encoder, const UnixFileDescriptor& fd)
+{
+    encoder.addAttachment(Attachment(fd.duplicate()));
+}
+
+void ArgumentCoder<UnixFileDescriptor>::encode(Encoder& encoder, UnixFileDescriptor&& fd)
+{
+    encoder.addAttachment(Attachment(WTFMove(fd)));
+}
+
+std::optional<UnixFileDescriptor> ArgumentCoder<UnixFileDescriptor>::decode(Decoder& decoder)
+{
+    auto attachment = decoder.takeLastAttachment();
+    if (!attachment)
+        return std::nullopt;
+    return std::optional<UnixFileDescriptor> { std::in_place, attachment->release() };
+}
+
+#endif
 
 } // namespace IPC

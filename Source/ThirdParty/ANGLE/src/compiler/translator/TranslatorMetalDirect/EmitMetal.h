@@ -18,12 +18,13 @@ namespace sh
 {
 
 // Walks the AST and emits Metal code.
-ANGLE_NO_DISCARD bool EmitMetal(TCompiler &compiler,
-                                TIntermBlock &root,
-                                IdGen &idGen,
-                                const PipelineStructs &pipelineStructs,
-                                SymbolEnv &symbolEnv,
-                                const ProgramPreludeConfig &ppc);
+[[nodiscard]] bool EmitMetal(TCompiler &compiler,
+                             TIntermBlock &root,
+                             IdGen &idGen,
+                             const PipelineStructs &pipelineStructs,
+                             SymbolEnv &symbolEnv,
+                             const ProgramPreludeConfig &ppc,
+                             TSymbolTable *symbolTable);
 
 }  // namespace sh
 

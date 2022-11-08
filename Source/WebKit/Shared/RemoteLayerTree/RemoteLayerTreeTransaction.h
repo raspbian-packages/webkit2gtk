@@ -26,7 +26,6 @@
 #pragma once
 
 #include "DrawingAreaInfo.h"
-#include "DynamicViewportSizeUpdate.h"
 #include "EditorState.h"
 #include "GenericCallback.h"
 #include "PlatformCAAnimationRemote.h"
@@ -44,6 +43,10 @@
 #include <wtf/HashSet.h>
 #include <wtf/text/StringHash.h>
 #include <wtf/text/WTFString.h>
+
+#if PLATFORM(IOS_FAMILY)
+#include "DynamicViewportSizeUpdate.h"
+#endif
 
 namespace IPC {
 class Decoder;
@@ -220,7 +223,7 @@ public:
     Vector<WebCore::GraphicsLayer::PlatformLayerID> destroyedLayers() const { return m_destroyedLayerIDs; }
     Vector<WebCore::GraphicsLayer::PlatformLayerID> layerIDsWithNewlyUnreachableBackingStore() const { return m_layerIDsWithNewlyUnreachableBackingStore; }
 
-    Vector<RefPtr<PlatformCALayerRemote>>& changedLayers() { return m_changedLayers; }
+    HashSet<RefPtr<PlatformCALayerRemote>>& changedLayers() { return m_changedLayers; }
 
     const LayerPropertiesMap& changedLayerProperties() const { return m_changedLayerProperties; }
     LayerPropertiesMap& changedLayerProperties() { return m_changedLayerProperties; }
@@ -305,12 +308,14 @@ public:
     const EditorState& editorState() const { return m_editorState.value(); }
     void setEditorState(const EditorState& editorState) { m_editorState = editorState; }
 
+#if PLATFORM(IOS_FAMILY)
     std::optional<DynamicViewportSizeUpdateID> dynamicViewportSizeUpdateID() const { return m_dynamicViewportSizeUpdateID; }
     void setDynamicViewportSizeUpdateID(DynamicViewportSizeUpdateID resizeID) { m_dynamicViewportSizeUpdateID = resizeID; }
-    
+#endif
+
 private:
     WebCore::GraphicsLayer::PlatformLayerID m_rootLayerID;
-    Vector<RefPtr<PlatformCALayerRemote>> m_changedLayers; // Only used in the Web process.
+    HashSet<RefPtr<PlatformCALayerRemote>> m_changedLayers; // Only used in the Web process.
     LayerPropertiesMap m_changedLayerProperties; // Only used in the UI process.
 
     Vector<LayerCreationProperties> m_createdLayers;
@@ -346,7 +351,9 @@ private:
     bool m_isInStableState { false };
 
     std::optional<EditorState> m_editorState;
+#if PLATFORM(IOS_FAMILY)
     std::optional<DynamicViewportSizeUpdateID> m_dynamicViewportSizeUpdateID;
+#endif
 };
 
 } // namespace WebKit

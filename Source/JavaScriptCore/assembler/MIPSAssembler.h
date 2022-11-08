@@ -833,11 +833,6 @@ public:
         cacheFlush(insn, flushSize);
     }
 
-    static void relinkJumpToNop(void* from)
-    {
-        relinkJump(from, from);
-    }
-
     static void relinkCall(void* from, void* to)
     {
         void* start;
@@ -848,6 +843,11 @@ public:
             start = reinterpret_cast<void*>(reinterpret_cast<intptr_t>(from) - 4 * sizeof(MIPSWord));
 
         cacheFlush(start, size);
+    }
+
+    static void relinkTailCall(void* from, void* to)
+    {
+        relinkJump(from, to);
     }
 
     static void repatchInt32(void* from, int32_t to)
@@ -872,11 +872,6 @@ public:
         return result;
     }
     
-    static void repatchCompact(void* where, int32_t value)
-    {
-        repatchInt32(where, value);
-    }
-
     static void repatchPointer(void* from, void* to)
     {
         repatchInt32(from, reinterpret_cast<int32_t>(to));

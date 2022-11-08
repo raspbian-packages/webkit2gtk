@@ -31,19 +31,10 @@ messages -> WebProcessProxy LegacyReceiver {
     EnableSuddenTermination()
     DisableSuddenTermination()
 
-    # Plugin messages.
-#if ENABLE(NETSCAPE_PLUGIN_API)
-    GetPlugins(bool refresh) -> (Vector<WebCore::PluginInfo> plugins, Vector<WebCore::PluginInfo> applicationPlugins, struct std::optional<Vector<WebCore::SupportedPluginIdentifier>> supportedPluginIdentifiers) Synchronous
-    GetPluginProcessConnection(uint64_t pluginProcessToken) -> (IPC::Attachment connectionHandle, bool supportsAsynchronousInitialization) Synchronous
-#endif
     GetNetworkProcessConnection() -> (struct WebKit::NetworkProcessConnectionInfo connectionInfo) Synchronous
 
 #if ENABLE(GPU_PROCESS)
-    GetGPUProcessConnection(struct WebKit::GPUProcessConnectionParameters parameters) -> (struct WebKit::GPUProcessConnectionInfo connectionInfo) Synchronous
-#endif
-
-#if ENABLE(WEB_AUTHN)
-    GetWebAuthnProcessConnection() -> (struct WebKit::WebAuthnProcessConnectionInfo connectionInfo) Synchronous
+    CreateGPUProcessConnection(IPC::Attachment connectionIdentifier, struct WebKit::GPUProcessConnectionParameters parameters)
 #endif
 
     SetIsHoldingLockedFiles(bool isHoldingLockedFiles)
@@ -77,7 +68,7 @@ messages -> WebProcessProxy LegacyReceiver {
 
 #if PLATFORM(GTK) || PLATFORM(WPE)
     SendMessageToWebContext(struct WebKit::UserMessage userMessage)
-    SendMessageToWebContextWithReply(struct WebKit::UserMessage userMessage) -> (struct WebKit::UserMessage replyMessage) Async
+    SendMessageToWebContextWithReply(struct WebKit::UserMessage userMessage) -> (struct WebKit::UserMessage replyMessage)
 #endif
 
     DidCreateSleepDisabler(WebCore::SleepDisablerIdentifier identifier, String reason, bool display)
@@ -96,4 +87,6 @@ messages -> WebProcessProxy LegacyReceiver {
     SetCaptionDisplayMode(WebCore::CaptionUserPreferences::CaptionDisplayMode mode)
     SetCaptionLanguage(String language)
 #endif
+
+    GetNotifications(URL registrationURL, String tag) -> (Vector<WebCore::NotificationData> result)
 }

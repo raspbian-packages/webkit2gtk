@@ -31,16 +31,16 @@ enum class ProcessTerminationReason {
     ExceededMemoryLimit,
     ExceededCPULimit,
     RequestedByClient,
+    IdleExit,
+    Unresponsive,
     Crash,
+    // Those below only relevant for the WebContent process.
+    ExceededProcessCountLimit,
     NavigationSwap,
     RequestedByNetworkProcess,
     RequestedByGPUProcess
 };
 
-enum class GPUProcessTerminationReason {
-    Crash,
-    IdleExit,
-    Unresponsive
-};
+const char* processTerminationReasonToString(ProcessTerminationReason);
 
 }

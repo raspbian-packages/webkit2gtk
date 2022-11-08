@@ -123,7 +123,7 @@ public:
     virtual void activityStateDidChange(OptionSet<WebCore::ActivityState::Flag>, ActivityStateChangeID, CompletionHandler<void()>&& completionHandler) { completionHandler(); };
     virtual void setLayerHostingMode(LayerHostingMode) { }
 
-    virtual bool markLayersVolatileImmediatelyIfPossible() { return true; }
+    virtual void tryMarkLayersVolatile(CompletionHandler<void(bool)>&&);
 
     virtual void attachViewOverlayGraphicsLayer(WebCore::GraphicsLayer*) { }
 
@@ -134,6 +134,10 @@ public:
 #if PLATFORM(COCOA)
     // Used by TiledCoreAnimationDrawingArea.
     virtual void updateGeometry(const WebCore::IntSize& viewSize, bool flushSynchronously, const WTF::MachSendRight& fencePort) { }
+#endif
+
+#if USE(GRAPHICS_LAYER_WC)
+    virtual void updateGeometry(uint64_t, WebCore::IntSize) { };
 #endif
 
 #if USE(COORDINATED_GRAPHICS) || USE(GRAPHICS_LAYER_TEXTURE_MAPPER)
@@ -153,12 +157,12 @@ public:
 protected:
     DrawingArea(DrawingAreaType, DrawingAreaIdentifier, WebPage&);
 
-    template<typename U> bool send(const U& message)
+    template<typename T> bool send(T&& message)
     {
-        return m_webPage.send(message, m_identifier.toUInt64(), { });
+        return m_webPage.send(WTFMove(message), m_identifier.toUInt64(), { });
     }
 
-    DrawingAreaType m_type;
+    const DrawingAreaType m_type;
     DrawingAreaIdentifier m_identifier;
     WebPage& m_webPage;
 
@@ -171,6 +175,7 @@ private:
 #if USE(COORDINATED_GRAPHICS) || USE(TEXTURE_MAPPER)
     virtual void updateBackingStoreState(uint64_t /*backingStoreStateID*/, bool /*respondImmediately*/, float /*deviceScaleFactor*/, const WebCore::IntSize& /*size*/,
                                          const WebCore::IntSize& /*scrollOffset*/) { }
+    virtual void targetRefreshRateDidChange(unsigned /*rate*/) { }
 #endif
     virtual void didUpdate() { }
 

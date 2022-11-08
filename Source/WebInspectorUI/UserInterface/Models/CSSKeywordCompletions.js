@@ -33,16 +33,16 @@ WI.CSSKeywordCompletions = {};
 
 WI.CSSKeywordCompletions.forPartialPropertyName = function(text, {caretPosition, allowEmptyPrefix} = {})
 {
-    caretPosition ??= text.length;
     allowEmptyPrefix ??= false;
 
     // FIXME: <webkit.org/b/227157> Styles: Support completions mid-token.
-    if (caretPosition !== caretPosition)
-        return {prefix: text, completions: []};
+    if (caretPosition !== text.length)
+        return {prefix: "", completions: []};
 
     if (!text.length && allowEmptyPrefix)
-        return {prefix: text, completions: WI.CSSCompletions.cssNameCompletions.values};
-    return {prefix: text, completions:WI.CSSCompletions.cssNameCompletions.startsWith(text)};
+        return {prefix: text, completions: WI.cssManager.propertyNameCompletions.values};
+
+    return {prefix: text, completions: WI.cssManager.propertyNameCompletions.executeQuery(text)};
 };
 
 WI.CSSKeywordCompletions.forPartialPropertyValue = function(text, propertyName, {caretPosition, additionalFunctionValueCompletionsProvider} = {})
@@ -86,9 +86,19 @@ WI.CSSKeywordCompletions.forPartialPropertyValue = function(text, propertyName, 
     if ((caretIsInMiddleOfToken && currentTokenValue.length) || (!caretIsInMiddleOfToken && tokenAfterCaret && /[a-zA-Z0-9-]/.test(tokenAfterCaret.value[0])))
         return {prefix: "", completions: []};
 
-    // If the current token value is a comma or opening parenthesis, treat it as if we are at the start of a new token.
+    // If the current token value is a comma or open parenthesis, treat it as if we are at the start of a new token.
     if (currentTokenValue === "(" || currentTokenValue === ",")
         currentTokenValue = "";
+
+    // It's not valid CSS to append completions immediately after a closing parenthesis.
+    let tokenBeforeCaret = tokens[indexOfTokenAtCaret - 1];
+    if (currentTokenValue === ")" || tokenBeforeCaret?.value === ")")
+        return {prefix: "", completions: []};
+
+    // The CodeMirror CSS-mode tokenizer splits a string like `-name` into two tokens: `-` and `name`.
+    if (currentTokenValue.length && tokenBeforeCaret?.value === "-") {
+        currentTokenValue = tokenBeforeCaret.value + currentTokenValue;
+    }
 
     let functionName = null;
     let preceedingFunctionDepth = 0;
@@ -108,19 +118,18 @@ WI.CSSKeywordCompletions.forPartialPropertyValue = function(text, propertyName, 
         }
     }
 
-    if (functionName) {
-        let completions = WI.CSSKeywordCompletions.forFunction(functionName);
-        let contextualValueCompletions = additionalFunctionValueCompletionsProvider?.(functionName) || [];
-        completions.addValues(contextualValueCompletions);
-        return {prefix: currentTokenValue, completions: completions.startsWith(currentTokenValue)};
-    }
+    let valueCompletions;
+    if (functionName)
+        valueCompletions = WI.CSSKeywordCompletions.forFunction(functionName, {additionalFunctionValueCompletionsProvider});
+    else
+        valueCompletions = WI.CSSKeywordCompletions.forProperty(propertyName);
 
-    return {prefix: currentTokenValue, completions: WI.CSSKeywordCompletions.forProperty(propertyName).startsWith(currentTokenValue)};
+    return {prefix: currentTokenValue, completions: valueCompletions.executeQuery(currentTokenValue)};
 };
 
 WI.CSSKeywordCompletions.forProperty = function(propertyName)
 {
-    let acceptedKeywords = ["initial", "unset", "revert", "var()", "env()"];
+    let acceptedKeywords = ["initial", "unset", "revert", "revert-layer", "var()", "env()"];
 
     function addKeywordsForName(name) {
         let isNotPrefixed = name.charAt(0) !== "-";
@@ -152,12 +161,12 @@ WI.CSSKeywordCompletions.forProperty = function(propertyName)
             addKeywordsForName(longhandName);
     }
 
-    if (acceptedKeywords.includes(WI.CSSKeywordCompletions.AllPropertyNamesPlaceholder) && WI.CSSCompletions.cssNameCompletions) {
+    if (acceptedKeywords.includes(WI.CSSKeywordCompletions.AllPropertyNamesPlaceholder) && WI.cssManager.propertyNameCompletions) {
         acceptedKeywords.remove(WI.CSSKeywordCompletions.AllPropertyNamesPlaceholder);
-        acceptedKeywords.pushAll(WI.CSSCompletions.cssNameCompletions.values);
+        acceptedKeywords.pushAll(WI.cssManager.propertyNameCompletions.values);
     }
 
-    return new WI.CSSCompletions(Array.from(new Set(acceptedKeywords)), true);
+    return new WI.CSSCompletions(Array.from(new Set(acceptedKeywords)), {acceptEmptyPrefix: true});
 };
 
 WI.CSSKeywordCompletions.isColorAwareProperty = function(name)
@@ -187,7 +196,7 @@ WI.CSSKeywordCompletions.isTimingFunctionAwareProperty = function(name)
     return false;
 };
 
-WI.CSSKeywordCompletions.forFunction = function(functionName)
+WI.CSSKeywordCompletions.forFunction = function(functionName, {additionalFunctionValueCompletionsProvider} = {})
 {
     let suggestions = ["var()"];
 
@@ -208,7 +217,10 @@ WI.CSSKeywordCompletions.forFunction = function(functionName)
         suggestions.pushAll(WI.CSSKeywordCompletions._colors);
     }
 
-    return new WI.CSSCompletions(suggestions, true);
+    if (additionalFunctionValueCompletionsProvider)
+        suggestions.pushAll(additionalFunctionValueCompletionsProvider(functionName));
+
+    return new WI.CSSCompletions(suggestions, {acceptEmptyPrefix: true});
 };
 
 WI.CSSKeywordCompletions.addCustomCompletions = function(properties)
@@ -225,8 +237,15 @@ WI.CSSKeywordCompletions.addCustomCompletions = function(properties)
         if (property.inherited)
             WI.CSSKeywordCompletions.InheritedProperties.add(property.name);
 
-        if (property.longhands)
+        if (property.longhands) {
             WI.CSSKeywordCompletions.LonghandNamesForShorthandProperty.set(property.name, property.longhands);
+
+            for (let longhand of property.longhands) {
+                let shorthands = WI.CSSKeywordCompletions.ShorthandNamesForLongHandProperty.getOrInitialize(longhand, []);
+                shorthands.push(property.name);
+            }
+        }
+
     }
 };
 
@@ -252,6 +271,7 @@ WI.CSSKeywordCompletions.AllPropertyNamesPlaceholder = "__all-properties__";
 // Populated by CSS.getSupportedCSSProperties.
 WI.CSSKeywordCompletions.PropertyNameForAlias = new Map;
 WI.CSSKeywordCompletions.LonghandNamesForShorthandProperty = new Map;
+WI.CSSKeywordCompletions.ShorthandNamesForLongHandProperty = new Map;
 
 WI.CSSKeywordCompletions.InheritedProperties = new Set([
     // Compatibility (iOS 12): `inherited` didn't exist on `CSSPropertyInfo`
@@ -277,10 +297,8 @@ WI.CSSKeywordCompletions.InheritedProperties = new Set([
     "-webkit-locale",
     "-webkit-nbsp-mode",
     "-webkit-overflow-scrolling",
-    "-webkit-print-color-adjust",
     "-webkit-rtl-ordering",
     "-webkit-ruby-position",
-    "-webkit-text-align-last",
     "-webkit-text-combine",
     "-webkit-text-decoration-skip",
     "-webkit-text-decorations-in-effect",
@@ -289,7 +307,6 @@ WI.CSSKeywordCompletions.InheritedProperties = new Set([
     "-webkit-text-emphasis-position",
     "-webkit-text-emphasis-style",
     "-webkit-text-fill-color",
-    "-webkit-text-justify",
     "-webkit-text-orientation",
     "-webkit-text-security",
     "-webkit-text-size-adjust",
@@ -353,6 +370,7 @@ WI.CSSKeywordCompletions.InheritedProperties = new Set([
     "marker-start",
     "orphans",
     "pointer-events",
+    "print-color-adjust",
     "quotes",
     "resize",
     "shape-rendering",
@@ -368,8 +386,10 @@ WI.CSSKeywordCompletions.InheritedProperties = new Set([
     "stroke-width",
     "tab-size",
     "text-align",
+    "text-align-last",
     "text-anchor",
     "text-indent",
+    "text-justify",
     "text-rendering",
     "text-shadow",
     "text-transform",
@@ -540,6 +560,9 @@ WI.CSSKeywordCompletions._propertyKeywordMap = {
     ],
     "enable-background": [
         "accumulate", "new"
+    ],
+    "font-palette": [
+        "none", "normal", "light", "dark"
     ],
     "hanging-punctuation": [
         "none", "first", "last", "allow-end", "force-end"
@@ -904,9 +927,6 @@ WI.CSSKeywordCompletions._propertyKeywordMap = {
     "scroll-snap-type": [
         "none", "mandatory", "proximity", "x", "y", "inline", "block", "both"
     ],
-    "-webkit-background-composite": [
-        "clear", "copy", "source-over", "source-in", "source-out", "source-atop", "destination-over", "destination-in", "destination-out", "destination-atop", "xor", "plus-darker", "plus-lighter"
-    ],
     "-webkit-mask-composite": [
         "clear", "copy", "source-over", "source-in", "source-out", "source-atop", "destination-over", "destination-in", "destination-out", "destination-atop", "xor", "plus-darker", "plus-lighter"
     ],
@@ -995,9 +1015,6 @@ WI.CSSKeywordCompletions._propertyKeywordMap = {
     "-webkit-border-end-width": [
         "medium", "thick", "thin", "calc()",
     ],
-    "-webkit-border-fit": [
-        "border", "lines",
-    ],
     "-webkit-border-start-width": [
         "medium", "thick", "thin", "calc()",
     ],
@@ -1070,18 +1087,6 @@ WI.CSSKeywordCompletions._propertyKeywordMap = {
     "-webkit-logical-width": [
         "auto", "intrinsic", "min-intrinsic", "min-content", "-webkit-min-content", "max-content", "-webkit-max-content", "-webkit-fill-available", "fit-content", "-webkit-fit-content", "calc()"
     ],
-    "-webkit-margin-after-collapse": [
-        "collapse", "separate", "discard",
-    ],
-    "-webkit-margin-before-collapse": [
-        "collapse", "separate", "discard",
-    ],
-    "-webkit-margin-bottom-collapse": [
-        "collapse", "separate", "discard",
-    ],
-    "-webkit-margin-top-collapse": [
-        "collapse", "separate", "discard",
-    ],
     "-webkit-max-logical-height": [
         "auto", "intrinsic", "min-intrinsic", "min-content", "-webkit-min-content", "max-content", "-webkit-max-content", "-webkit-fill-available", "fit-content", "-webkit-fit-content", "none", "calc()"
     ],
@@ -1100,7 +1105,7 @@ WI.CSSKeywordCompletions._propertyKeywordMap = {
     "-webkit-overflow-scrolling": [
         "auto", "touch",
     ],
-    "-webkit-print-color-adjust": [
+    "print-color-adjust": [
         "economy", "exact",
     ],
     "-webkit-rtl-ordering": [
@@ -1109,17 +1114,11 @@ WI.CSSKeywordCompletions._propertyKeywordMap = {
     "-webkit-ruby-position": [
         "after", "before", "inter-character",
     ],
-    "-webkit-text-align-last": [
-        "auto", "start", "end", "left", "right", "center", "justify",
-    ],
     "-webkit-text-combine": [
         "none", "horizontal",
     ],
     "-webkit-text-decoration-style": [
         "dotted", "dashed", "solid", "double", "wavy",
-    ],
-    "-webkit-text-justify": [
-        "auto", "none", "inter-word", "inter-ideograph", "inter-cluster", "distribute", "kashida",
     ],
     "-webkit-text-orientation": [
         "sideways", "sideways-right", "upright", "mixed",
@@ -1320,10 +1319,16 @@ WI.CSSKeywordCompletions._propertyKeywordMap = {
         "auto", "fixed",
     ],
     "text-align": [
-        "-webkit-auto", "left", "right", "center", "justify", "-webkit-left", "-webkit-right", "-webkit-center", "-webkit-match-parent", "start", "end",
+        "-webkit-auto", "left", "right", "center", "justify", "match-parent", "-webkit-left", "-webkit-right", "-webkit-center", "-webkit-match-parent", "start", "end",
+    ],
+    "text-align-last": [
+        "auto", "start", "end", "left", "right", "center", "justify", "match-parent",
     ],
     "text-anchor": [
         "middle", "start", "end",
+    ],
+    "text-justify": [
+        "auto", "none", "inter-word", "inter-character", "distribute",
     ],
     "text-line-through": [
         "none", "dotted", "dashed", "solid", "double", "dot-dash", "dot-dot-dash", "wave", "continuous", "skip-white-space",

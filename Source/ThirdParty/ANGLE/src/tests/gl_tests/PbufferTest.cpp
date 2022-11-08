@@ -10,7 +10,7 @@
 
 using namespace angle;
 
-class PbufferTest : public ANGLETest
+class PbufferTest : public ANGLETest<>
 {
   protected:
     PbufferTest()
@@ -227,6 +227,61 @@ TEST_P(PbufferTest, BindTexImage)
     glDeleteTextures(1, &texture);
 }
 
+// Verify that binding a pbuffer works after using a texture normally.
+TEST_P(PbufferTest, BindTexImageAfterTexImage)
+{
+    // Test skipped because Pbuffers are not supported or Pbuffer does not support binding to RGBA
+    // textures.
+    ANGLE_SKIP_TEST_IF(!mSupportsPbuffers || !mSupportsBindTexImage);
+
+    EGLWindow *window = getEGLWindow();
+
+    // Apply the Pbuffer and clear it to magenta
+    eglMakeCurrent(window->getDisplay(), mPbuffer, mPbuffer, window->getContext());
+    ASSERT_EGL_SUCCESS();
+
+    glViewport(0, 0, static_cast<GLsizei>(mPbufferSize), static_cast<GLsizei>(mPbufferSize));
+    glClearColor(1.0f, 0.0f, 1.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    ASSERT_GL_NO_ERROR();
+
+    EXPECT_PIXEL_COLOR_EQ(static_cast<GLint>(mPbufferSize) / 2,
+                          static_cast<GLint>(mPbufferSize) / 2, GLColor::magenta);
+
+    // Apply the window surface
+    window->makeCurrent();
+    glViewport(0, 0, getWindowWidth(), getWindowHeight());
+
+    // Create a simple blue texture.
+    GLTexture texture;
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, &GLColor::blue);
+    EXPECT_GL_NO_ERROR();
+
+    // Draw a quad and verify blue
+    glUseProgram(mTextureProgram);
+    glUniform1i(mTextureUniformLocation, 0);
+    drawQuad(mTextureProgram, "position", 0.5f);
+    EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::blue);
+
+    // Bind the Pbuffer to the texture
+    eglBindTexImage(window->getDisplay(), mPbuffer, EGL_BACK_BUFFER);
+    ASSERT_EGL_SUCCESS();
+
+    // Draw a quad and verify magenta
+    drawQuad(mTextureProgram, "position", 0.5f);
+    EXPECT_GL_NO_ERROR();
+    EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::magenta);
+
+    // Unbind the texture
+    eglReleaseTexImage(window->getDisplay(), mPbuffer, EGL_BACK_BUFFER);
+    ASSERT_EGL_SUCCESS();
+}
+
 // Test clearing a Pbuffer in sRGB colorspace and checking the color is correct.
 // Then bind the Pbuffer to a texture and verify it renders correctly
 TEST_P(PbufferTest, ClearAndBindTexImageSrgb)
@@ -294,6 +349,87 @@ TEST_P(PbufferTest, ClearAndBindTexImageSrgb)
     // Expect glReadPixels to be `kLinearColor` with a tolerance of 1
     EXPECT_PIXEL_NEAR(getWindowWidth() / 2, getWindowHeight() / 2, kLinearColor[0], kLinearColor[1],
                       kLinearColor[2], kLinearColor[3], 1);
+
+    glDeleteTextures(1, &texture);
+}
+
+// Test clearing a Pbuffer in sRGB colorspace and checking the color is correct.
+// Then bind the Pbuffer to a texture and verify it renders correctly.
+// Then change texture state to skip decode and verify it renders correctly.
+TEST_P(PbufferTest, ClearAndBindTexImageSrgbSkipDecode)
+{
+    EGLWindow *window = getEGLWindow();
+
+    // Test skipped because Pbuffers are not supported or Pbuffer does not support binding to RGBA
+    // textures.
+    ANGLE_SKIP_TEST_IF(!mSupportsPbuffers || !mSupportsBindTexImage);
+    ANGLE_SKIP_TEST_IF(
+        !IsEGLDisplayExtensionEnabled(window->getDisplay(), "EGL_KHR_gl_colorspace"));
+    ANGLE_SKIP_TEST_IF(!IsGLExtensionEnabled("GL_EXT_texture_sRGB_decode"));
+    // Possible GLES driver bug on Pixel devices: http://anglebug.com/5321
+    ANGLE_SKIP_TEST_IF((IsPixel2() || IsPixel4()) && IsOpenGLES());
+
+    GLubyte kLinearColor[] = {132, 55, 219, 255};
+    GLubyte kSrgbColor[]   = {190, 128, 238, 255};
+
+    // Switch to sRGB
+    recreatePbufferInSrgbColorspace();
+    EGLint colorspace = 0;
+    eglQuerySurface(window->getDisplay(), mPbuffer, EGL_GL_COLORSPACE, &colorspace);
+    EXPECT_EQ(colorspace, EGL_GL_COLORSPACE_SRGB_KHR);
+
+    // Clear the Pbuffer surface with `kLinearColor`
+    eglMakeCurrent(window->getDisplay(), mPbuffer, mPbuffer, window->getContext());
+    ASSERT_EGL_SUCCESS();
+
+    glViewport(0, 0, static_cast<GLsizei>(mPbufferSize), static_cast<GLsizei>(mPbufferSize));
+    glClearColor(kLinearColor[0] / 255.0f, kLinearColor[1] / 255.0f, kLinearColor[2] / 255.0f,
+                 kLinearColor[3] / 255.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    ASSERT_GL_NO_ERROR();
+
+    // Expect glReadPixels to be `kSrgbColor` with a tolerance of 1
+    EXPECT_PIXEL_NEAR(static_cast<GLint>(mPbufferSize) / 2, static_cast<GLint>(mPbufferSize) / 2,
+                      kSrgbColor[0], kSrgbColor[1], kSrgbColor[2], kSrgbColor[3], 1);
+
+    window->makeCurrent();
+
+    // Create a texture and bind the Pbuffer to it
+    GLuint texture = 0;
+    glGenTextures(1, &texture);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    EXPECT_GL_NO_ERROR();
+
+    eglBindTexImage(window->getDisplay(), mPbuffer, EGL_BACK_BUFFER);
+    glViewport(0, 0, getWindowWidth(), getWindowHeight());
+    ASSERT_EGL_SUCCESS();
+
+    // Sample from a texture with `kSrgbColor` data and render into a surface in linear colorspace.
+    glUseProgram(mTextureProgram);
+    glUniform1i(mTextureUniformLocation, 0);
+
+    drawQuad(mTextureProgram, "position", 0.5f);
+    EXPECT_GL_NO_ERROR();
+
+    // Expect glReadPixels to be `kLinearColor` with a tolerance of 1
+    EXPECT_PIXEL_NEAR(getWindowWidth() / 2, getWindowHeight() / 2, kLinearColor[0], kLinearColor[1],
+                      kLinearColor[2], kLinearColor[3], 1);
+
+    // Set skip decode for the texture
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SRGB_DECODE_EXT, GL_SKIP_DECODE_EXT);
+    drawQuad(mTextureProgram, "position", 0.5f);
+
+    // Texture is in skip decode mode, expect glReadPixels to be `kSrgbColor` with tolerance of 1
+    EXPECT_PIXEL_NEAR(getWindowWidth() / 2, getWindowHeight() / 2, kSrgbColor[0], kSrgbColor[1],
+                      kSrgbColor[2], kSrgbColor[3], 1);
+
+    // Unbind the texture
+    eglReleaseTexImage(window->getDisplay(), mPbuffer, EGL_BACK_BUFFER);
+    ASSERT_EGL_SUCCESS();
 
     glDeleteTextures(1, &texture);
 }
