@@ -347,7 +347,7 @@ protected:
     bool m_didDownloadFinish { false };
     bool m_didErrorOccur { false };
     mutable bool m_isEndReached { false };
-    mutable bool m_isLiveStream { false };
+    mutable std::optional<bool> m_isLiveStream;
     bool m_isPaused { true };
     float m_playbackRate { 1 };
     GstState m_currentState { GST_STATE_NULL };
@@ -447,6 +447,8 @@ private:
     GstElement* createAudioSink();
     GstElement* audioSink() const;
 
+    bool isMediaStreamPlayer() const;
+
     friend class MediaPlayerFactoryGStreamer;
     static void getSupportedTypes(HashSet<String, ASCIICaseInsensitiveHash>&);
     static MediaPlayer::SupportsType supportsType(const MediaEngineSupportParameters&);
@@ -457,7 +459,8 @@ private:
     MediaTime playbackPosition() const;
 
     virtual void updateStates();
-    virtual void asyncStateChangeDone();
+    void finishSeek();
+    virtual void asyncStateChangeDone() { }
 
     void createGSTPlayBin(const URL&);
 
@@ -486,6 +489,7 @@ private:
 
     void configureDepayloader(GstElement*);
     void configureVideoDecoder(GstElement*);
+    void configureElement(GstElement*);
 
     void setPlaybinURL(const URL& urlString);
 

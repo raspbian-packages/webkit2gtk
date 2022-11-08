@@ -1,12 +1,12 @@
-webkit2gtk (2.38.0-1~deb10u1+rpi1) buster-staging; urgency=medium
+webkit2gtk (2.38.2-1~deb10u1+rpi1) buster-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
- -- Raspbian forward porter <root@raspbian.org>  Thu, 29 Sep 2022 15:37:48 +0000
+ -- Raspbian forward porter <root@raspbian.org>  Tue, 08 Nov 2022 19:20:34 +0000
 
-webkit2gtk (2.38.0-1~deb10u1) buster-security; urgency=high
+webkit2gtk (2.38.2-1~deb10u1) buster-security; urgency=high
 
   * Rebuild for buster-security.
   * debian/patches/force-single-process.patch:
@@ -30,7 +30,45 @@ webkit2gtk (2.38.0-1~deb10u1) buster-security; urgency=high
     - Add debian/compat file.
     - Update build dependency on debhelper.
 
- -- Alberto Garcia <berto@igalia.com>  Wed, 28 Sep 2022 15:14:20 +0200
+ -- Alberto Garcia <berto@igalia.com>  Tue, 08 Nov 2022 14:45:34 +0100
+
+webkit2gtk (2.38.2-1) unstable; urgency=high
+
+  * New upstream release.
+  * The WebKitGTK security advisory WSA-2022-0010 lists the following
+    security fixes in the latest versions of WebKitGTK:
+    - CVE-2022-32888 and CVE-2022-32923 (fixed in 2.38.0).
+    - CVE-2022-42799, CVE-2022-42823 and CVE-2022-42824 (fixed in 2.38.2).
+  * debian/patches/fix-nonunified-build.patch:
+    - Drop this patch.
+
+ -- Alberto Garcia <berto@igalia.com>  Fri, 04 Nov 2022 17:37:25 +0100
+
+webkit2gtk (2.38.1-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Refresh all patches.
+
+ -- Alberto Garcia <berto@igalia.com>  Fri, 21 Oct 2022 15:32:54 +0200
+
+webkit2gtk (2.38.0-3) unstable; urgency=high
+
+  * debian/patches/fix-nonunified-build.patch:
+    - Fix non-unified GTK4 build.
+
+ -- Alberto Garcia <berto@igalia.com>  Wed, 28 Sep 2022 09:20:17 +0200
+
+webkit2gtk (2.38.0-2) unstable; urgency=high
+
+  * The WebKitGTK security advisory WSA-2022-0009 lists the following
+    security fixes in the latest versions of WebKitGTK:
+    - CVE-2022-32891 (fixed in 2.36.5).
+    - CVE-2022-32886 and CVE-2022-32912 (fixed in 2.36.8).
+  * debian/rules:
+    - Build with -DENABLE_UNIFIED_BUILDS=OFF on mips, mipsel and sh4, we
+      are having problems to build webkit due to lack of memory (#1020642).
+
+ -- Alberto Garcia <berto@igalia.com>  Mon, 26 Sep 2022 11:25:41 +0200
 
 webkit2gtk (2.38.0-1) unstable; urgency=high
 
