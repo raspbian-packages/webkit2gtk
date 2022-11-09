@@ -552,6 +552,8 @@ public:
     void findStringMatchesFromInjectedBundle(const String&, OptionSet<FindOptions>);
     void replaceStringMatchesFromInjectedBundle(const Vector<uint32_t>& matchIndices, const String& replacementText, bool selectionOnly);
 
+    void setTextIndicator(const WebCore::TextIndicatorData&);
+
     WebFrame& mainWebFrame() const { return m_mainFrame; }
 
     WebCore::Frame* mainFrame() const; // May return nullptr.
@@ -1022,7 +1024,7 @@ public:
 #endif
 
 #if ENABLE(DRAG_SUPPORT) && !PLATFORM(GTK)
-    void performDragControllerAction(DragControllerAction, const WebCore::DragData&, SandboxExtension::Handle&&, Vector<SandboxExtension::Handle>&&);
+    void performDragControllerAction(DragControllerAction, WebCore::DragData&&, SandboxExtension::Handle&&, Vector<SandboxExtension::Handle>&&);
 #endif
 
 #if ENABLE(DRAG_SUPPORT)
