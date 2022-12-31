@@ -214,10 +214,14 @@ bool shouldUseOverlayScrollbars()
         return false;
 #endif
 
+    GtkSettings* settings = gtk_settings_get_default();
+    const char* property = "gtk-overlay-scrolling";
+
+    if (!g_object_class_find_property(G_OBJECT_GET_CLASS(settings), property))
+        return false;
+
     gboolean overlayScrolling;
-    g_object_get(gtk_settings_get_default(),
-        "gtk-overlay-scrolling",
-        &overlayScrolling, nullptr);
+    g_object_get(settings, property, &overlayScrolling, nullptr);
     return !!overlayScrolling;
 }
 

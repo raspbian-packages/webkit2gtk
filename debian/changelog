@@ -1,18 +1,21 @@
-webkit2gtk (2.38.2-1~deb10u1+rpi1) buster-staging; urgency=medium
+webkit2gtk (2.38.3-1~deb10u1+rpi1) buster-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
- -- Raspbian forward porter <root@raspbian.org>  Tue, 08 Nov 2022 19:20:34 +0000
+ -- Raspbian forward porter <root@raspbian.org>  Sat, 31 Dec 2022 19:17:39 +0000
 
-webkit2gtk (2.38.2-1~deb10u1) buster-security; urgency=high
+webkit2gtk (2.38.3-1~deb10u1) buster-security; urgency=high
 
   * Rebuild for buster-security.
   * debian/patches/force-single-process.patch:
     - Force the single-process mode in Evolution and Geary
   * debian/patches/support-old-cmake.patch:
     - Fix build with cmake < 3.15
+  * debian/patches/no-gtk-overlay-scrolling.patch:
+    - Gtk in buster does not have 'gtk-overlay-scrolling' so remove the
+      constant warnings about its absence (Closes: #1024535).
   * debian/control.in:
     - Remove build dependencies on ccache, libwpebackend-fdo-1.0-dev,
       libmanette-0.2-dev and liblcms2-dev.
@@ -30,7 +33,13 @@ webkit2gtk (2.38.2-1~deb10u1) buster-security; urgency=high
     - Add debian/compat file.
     - Update build dependency on debhelper.
 
- -- Alberto Garcia <berto@igalia.com>  Tue, 08 Nov 2022 14:45:34 +0100
+ -- Alberto Garcia <berto@igalia.com>  Fri, 30 Dec 2022 15:08:37 +0100
+
+webkit2gtk (2.38.3-1) unstable; urgency=high
+
+  * New upstream release.
+
+ -- Alberto Garcia <berto@igalia.com>  Sat, 24 Dec 2022 16:24:20 +0100
 
 webkit2gtk (2.38.2-1) unstable; urgency=high
 
