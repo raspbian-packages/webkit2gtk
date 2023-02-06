@@ -344,7 +344,7 @@ function(GI_INTROSPECT namespace nsversion header)
         COMMAND ${CMAKE_COMMAND} -E env "CC=${CMAKE_C_COMPILER}" "CFLAGS=${CMAKE_C_FLAGS}"
             "${GI_SCANNER_EXE}" --quiet --warn-all --warn-error --no-libtool
             "--output=${gir_path}"
-            "--library=$<TARGET_FILE_BASE_NAME:${opt_TARGET}>"
+            "--library=$<IF:$<STREQUAL:${namespace},WebKit2>,webkit2gtk-${nsversion},$<IF:$<STREQUAL:${namespace},JavaScriptCore>,javascriptcoregtk-${nsversion},$<IF:$<STREQUAL:${namespace},WebKit2WebExtension>,webkit2gtk-${nsversion},ERROR>>>"
             "--library-path=$<TARGET_FILE_DIR:${opt_TARGET}>"
             "--namespace=${namespace}"
             "--nsversion=${nsversion}"
@@ -399,6 +399,6 @@ function(GI_INTROSPECT namespace nsversion header)
 
     # Record in targets to use later on e.g. with gi-docgen.
     set_property(TARGET "gir-${namespace}" PROPERTY GI_GIR_PATH "${gir_path}")
-    set_property(TARGET "gir-${namespace}" PROPERTY GI_GIR_LIBRARY "$<TARGET_FILE_BASE_NAME:${opt_TARGET}>")
+    set_property(TARGET "gir-${namespace}" PROPERTY GI_GIR_LIBRARY "$<IF:$<STREQUAL:${namespace},WebKit2>,webkit2gtk-${nsversion},$<IF:$<STREQUAL:${namespace},JavaScriptCore>,javascriptcoregtk-${nsversion},$<IF:$<STREQUAL:${namespace},WebKit2WebExtension>,webkit2gtk-${nsversion},ERROR>>>")
     set_property(TARGET "gir-${namespace}" PROPERTY GI_PACKAGE "${opt_PACKAGE}-${nsversion}")
 endfunction()
