@@ -262,6 +262,7 @@ function(GI_INTROSPECT namespace nsversion header)
     foreach (dep IN LISTS opt_DEPENDENCIES)
         if (TARGET "gir-${dep}")
             get_property(dep_gir_path TARGET "gir-${dep}" PROPERTY GI_GIR_PATH)
+            get_property(dep_gir_lib TARGET "gir-${dep}" PROPERTY GI_GIR_LIBRARY)
             if (dep_gir_path)
                 list(APPEND scanner_flags "--include-uninstalled=${dep_gir_path}")
                 list(APPEND gir_deps "${dep_gir_path}")
@@ -270,6 +271,9 @@ function(GI_INTROSPECT namespace nsversion header)
                     "Target '${dep}' listed as a dependency but it has not "
                     "been previously configured with GI_INTROSPECT()"
                 )
+            endif ()
+            if (dep_gir_lib)
+                list(APPEND scanner_flags "--library=${dep_gir_lib}")
             endif ()
         elseif (dep MATCHES "^([a-zA-Z0-9._-]+):([a-z0-9._\\+-]+)$")
             list(APPEND scanner_flags
@@ -337,7 +341,7 @@ function(GI_INTROSPECT namespace nsversion header)
         DEPENDS ${gir_deps} ${gir_srcs}
         VERBATIM
         COMMAND_EXPAND_LISTS
-        COMMAND ${CMAKE_COMMAND} -E env "CC=${CMAKE_C_COMPILER}"
+        COMMAND ${CMAKE_COMMAND} -E env "CC=${CMAKE_C_COMPILER}" "CFLAGS=${CMAKE_C_FLAGS}"
             "${GI_SCANNER_EXE}" --quiet --warn-all --warn-error --no-libtool
             "--output=${gir_path}"
             "--library=$<IF:$<STREQUAL:${namespace},WebKit2>,webkit2gtk-${nsversion},$<IF:$<STREQUAL:${namespace},JavaScriptCore>,javascriptcoregtk-${nsversion},$<IF:$<STREQUAL:${namespace},WebKit2WebExtension>,webkit2gtk-${nsversion},ERROR>>>"
@@ -395,5 +399,6 @@ function(GI_INTROSPECT namespace nsversion header)
 
     # Record in targets to use later on e.g. with gi-docgen.
     set_property(TARGET "gir-${namespace}" PROPERTY GI_GIR_PATH "${gir_path}")
+    set_property(TARGET "gir-${namespace}" PROPERTY GI_GIR_LIBRARY "$<IF:$<STREQUAL:${namespace},WebKit2>,webkit2gtk-${nsversion},$<IF:$<STREQUAL:${namespace},JavaScriptCore>,javascriptcoregtk-${nsversion},$<IF:$<STREQUAL:${namespace},WebKit2WebExtension>,webkit2gtk-${nsversion},ERROR>>>")
     set_property(TARGET "gir-${namespace}" PROPERTY GI_PACKAGE "${opt_PACKAGE}-${nsversion}")
 endfunction()

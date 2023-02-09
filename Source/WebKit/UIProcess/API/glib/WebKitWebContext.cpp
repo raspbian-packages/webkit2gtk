@@ -457,6 +457,7 @@ static void webkitWebContextConstructed(GObject* object)
     });
 
     priv->processModel = WEBKIT_PROCESS_MODEL_MULTIPLE_SECONDARY_PROCESSES;
+    priv->processPool->addSandboxPath(injectedBundleDirectory(), SandboxPermission::ReadOnly);
 
 #if ENABLE(MEMORY_SAMPLER)
     if (getenv("WEBKIT_SAMPLE_MEMORY"))

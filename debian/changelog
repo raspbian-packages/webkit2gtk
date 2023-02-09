@@ -1,12 +1,12 @@
-webkit2gtk (2.38.3-1~deb10u1+rpi1) buster-staging; urgency=medium
+webkit2gtk (2.38.4-2~deb10u1+rpi1) buster-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
- -- Raspbian forward porter <root@raspbian.org>  Sat, 31 Dec 2022 19:17:39 +0000
+ -- Raspbian forward porter <root@raspbian.org>  Thu, 09 Feb 2023 17:39:02 +0000
 
-webkit2gtk (2.38.3-1~deb10u1) buster-security; urgency=high
+webkit2gtk (2.38.4-2~deb10u1) buster-security; urgency=high
 
   * Rebuild for buster-security.
   * debian/patches/force-single-process.patch:
@@ -15,13 +15,16 @@ webkit2gtk (2.38.3-1~deb10u1) buster-security; urgency=high
     - Fix build with cmake < 3.15
   * debian/patches/no-gtk-overlay-scrolling.patch:
     - Gtk in buster does not have 'gtk-overlay-scrolling' so remove the
-      constant warnings about its absence (Closes: #1024535).
+      constant warnings about its absence (see #1024535).
+  * debian/patches/fix-gst-build.patch:
+    - Fix FTBFS with GStreamer < 1.18.0
   * debian/control.in:
     - Remove build dependencies on ccache, libwpebackend-fdo-1.0-dev,
       libmanette-0.2-dev and liblcms2-dev.
     - Switch build dependency from libenchant-2-dev to libenchant-dev.
-    - Switch build dependencies on libgl-dev and libgles-dev with
-      libgl1-mesa-dev and libgles2-mesa-dev.
+    - Switch build dependency from libfreetype-dev to libfreetype6-dev.
+    - Switch build dependencies on libegl-dev, libgl-dev and libgles-dev
+      with libegl1-mesa-dev, libgl1-mesa-dev and libgles2-mesa-dev.
   * Downgrade xdg-desktop-portal-gtk from a recommendation to a
     suggestion (See #989307)
   * debian/rules:
@@ -33,7 +36,31 @@ webkit2gtk (2.38.3-1~deb10u1) buster-security; urgency=high
     - Add debian/compat file.
     - Update build dependency on debhelper.
 
- -- Alberto Garcia <berto@igalia.com>  Fri, 30 Dec 2022 15:08:37 +0100
+ -- Alberto Garcia <berto@igalia.com>  Mon, 06 Feb 2023 12:14:55 +0100
+
+webkit2gtk (2.38.4-2) unstable; urgency=high
+
+  * The WebKitGTK security advisory WSA-2023-0001 lists the following
+    security fixes in the latest versions of WebKitGTK:
+    - CVE-2022-42826, CVE-2023-23517, CVE-2023-23518 (fixed in 2.38.4).
+  * debian/patches/fix-nonunified-build.patch:
+    - Fix non-unified build (FTBFS in mipsel).
+
+ -- Alberto Garcia <berto@igalia.com>  Fri, 03 Feb 2023 15:52:39 +0100
+
+webkit2gtk (2.38.4-1) unstable; urgency=high
+
+  * New upstream release.
+  * debian/control.in:
+    - Update Standards-Version to 4.6.2 (no changes).
+    - Rename obsolete packages in Build-Depends:
+      + libfontconfig1-dev -> libfontconfig-dev
+      + libfreetype6-dev   -> libfreetype-dev
+      + libegl1-mesa-dev   -> libegl-dev
+  * debian/copyright:
+    - Update copyright information of all files.
+
+ -- Alberto Garcia <berto@igalia.com>  Thu, 02 Feb 2023 10:50:05 +0100
 
 webkit2gtk (2.38.3-1) unstable; urgency=high
 
