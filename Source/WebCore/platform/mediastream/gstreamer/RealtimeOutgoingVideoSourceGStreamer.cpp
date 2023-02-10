@@ -23,13 +23,19 @@
 #if USE(GSTREAMER_WEBRTC)
 
 #include "GStreamerRegistryScanner.h"
-#include "GStreamerVideoCaptureSource.h"
 #include "GStreamerVideoEncoder.h"
+#include <wtf/glib/WTFGType.h>
 
 GST_DEBUG_CATEGORY_EXTERN(webkit_webrtc_endpoint_debug);
 #define GST_CAT_DEFAULT webkit_webrtc_endpoint_debug
 
 namespace WebCore {
+
+struct RealtimeOutgoingVideoSourceHolder {
+    RefPtr<RealtimeOutgoingVideoSourceGStreamer> source;
+};
+WEBKIT_DEFINE_ASYNC_DATA_STRUCT(RealtimeOutgoingVideoSourceHolder)
+
 
 RealtimeOutgoingVideoSourceGStreamer::RealtimeOutgoingVideoSourceGStreamer(const String& mediaStreamId, MediaStreamTrack& track)
     : RealtimeOutgoingMediaSourceGStreamer(mediaStreamId, track)
@@ -38,6 +44,17 @@ RealtimeOutgoingVideoSourceGStreamer::RealtimeOutgoingVideoSourceGStreamer(const
 
     static Atomic<uint64_t> sourceCounter = 0;
     gst_element_set_name(m_bin.get(), makeString("outgoing-video-source-", sourceCounter.exchangeAdd(1)).ascii().data());
+
+    m_stats.reset(gst_structure_new_empty("webrtc-outgoing-video-stats"));
+    auto holder = createRealtimeOutgoingVideoSourceHolder();
+    holder->source = this;
+    auto pad = adoptGRef(gst_element_get_static_pad(m_bin.get(), "src"));
+    gst_pad_add_probe(pad.get(), GST_PAD_PROBE_TYPE_BUFFER, [](GstPad*, GstPadProbeInfo* info, gpointer userData) -> GstPadProbeReturn {
+        auto* holder = static_cast<RealtimeOutgoingVideoSourceHolder*>(userData);
+        auto* buffer = GST_PAD_PROBE_INFO_BUFFER(info);
+        holder->source->updateStats(buffer);
+        return GST_PAD_PROBE_OK;
+    }, holder, reinterpret_cast<GDestroyNotify>(destroyRealtimeOutgoingVideoSourceHolder));
 
     m_videoConvert = makeGStreamerElement("videoconvert", nullptr);
 
@@ -52,6 +69,21 @@ RTCRtpCapabilities RealtimeOutgoingVideoSourceGStreamer::rtpCapabilities() const
 {
     auto& registryScanner = GStreamerRegistryScanner::singleton();
     return registryScanner.videoRtpCapabilities(GStreamerRegistryScanner::Configuration::Encoding);
+}
+
+void RealtimeOutgoingVideoSourceGStreamer::updateStats(GstBuffer*)
+{
+    uint64_t framesSent = 0;
+    gst_structure_get_uint64(m_stats.get(), "frames-sent", &framesSent);
+    framesSent++;
+
+    if (m_encoder) {
+        uint32_t bitrate;
+        g_object_get(m_encoder.get(), "bitrate", &bitrate, nullptr);
+        gst_structure_set(m_stats.get(), "bitrate", G_TYPE_DOUBLE, static_cast<double>(bitrate * 1024), nullptr);
+    }
+
+    gst_structure_set(m_stats.get(), "frames-sent", G_TYPE_UINT64, framesSent, "frames-encoded", G_TYPE_UINT64, framesSent, nullptr);
 }
 
 bool RealtimeOutgoingVideoSourceGStreamer::setPayloadType(const GRefPtr<GstCaps>& caps)
@@ -88,14 +120,16 @@ bool RealtimeOutgoingVideoSourceGStreamer::setPayloadType(const GRefPtr<GstCaps>
         if (!profile)
             profile = "baseline";
         gst_caps_set_simple(encoderCaps.get(), "profile", G_TYPE_STRING, profile, nullptr);
+    } else if (encoding == "h265"_s) {
+        encoderCaps = adoptGRef(gst_caps_new_empty_simple("video/x-h265"));
+        // FIXME: profile tier level?
     } else {
         GST_ERROR_OBJECT(m_bin.get(), "Unsupported outgoing video encoding: %s", encodingName);
         return false;
     }
 
-    // FIXME: Re-enable auto-header-extension. Currently triggers caps negotiation error.
     // Align MTU with libwebrtc implementation, also helping to reduce packet fragmentation.
-    g_object_set(m_payloader.get(), "auto-header-extension", FALSE, "mtu", 1200, nullptr);
+    g_object_set(m_payloader.get(), "mtu", 1200, nullptr);
 
     if (!webrtcVideoEncoderSetFormat(WEBKIT_WEBRTC_VIDEO_ENCODER(m_encoder.get()), WTFMove(encoderCaps))) {
         GST_ERROR_OBJECT(m_bin.get(), "Unable to set encoder format");

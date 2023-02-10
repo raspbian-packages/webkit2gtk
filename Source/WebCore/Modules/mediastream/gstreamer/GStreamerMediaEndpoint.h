@@ -62,7 +62,7 @@ public:
     void doCreateOffer(const RTCOfferOptions&);
     void doCreateAnswer();
 
-    void getStats(GstPad*, Ref<DeferredPromise>&&);
+    void getStats(GstPad*, const GstStructure*, Ref<DeferredPromise>&&);
 
     std::unique_ptr<RTCDataChannelHandler> createDataChannel(const String&, const RTCDataChannelInit&);
 
@@ -134,6 +134,8 @@ private:
     void prepareDataChannel(GstWebRTCDataChannel*, gboolean isLocal);
     void onDataChannel(GstWebRTCDataChannel*);
 
+    WARN_UNUSED_RETURN GstElement* requestAuxiliarySender();
+
     MediaStream& mediaStreamFromRTCStream(String mediaStreamId);
 
     void addRemoteStream(GstPad*);
@@ -144,7 +146,7 @@ private:
 
     void processSDPMessage(const GstSDPMessage*, Function<void(unsigned index, const char* mid, const GstSDPMedia*)>);
 
-    GRefPtr<GstPad> requestPad(unsigned mlineIndex, const GRefPtr<GstCaps>&);
+    GRefPtr<GstPad> requestPad(unsigned mlineIndex, const GRefPtr<GstCaps>&, const String& mediaStreamID);
 
 #if !RELEASE_LOG_DISABLED
     void gatherStatsForLogging();

@@ -147,6 +147,13 @@ void RealtimeMediaSource::forEachObserver(const Function<void(Observer&)>& apply
     m_observers.forEach(apply);
 }
 
+void RealtimeMediaSource::forEachVideoFrameObserver(const Function<void(VideoFrameObserver&)>& apply)
+{
+    Locker locker { m_videoFrameObserversLock };
+    for (auto* observer : m_videoFrameObservers)
+        apply(*observer);
+}
+
 void RealtimeMediaSource::notifyMutedObservers()
 {
     forEachObserver([](auto& observer) {
@@ -363,7 +370,7 @@ bool RealtimeMediaSource::supportsSizeAndFrameRate(std::optional<IntConstraint> 
     }
 
     // Each of the non-null values is supported individually, see if they all can be applied at the same time.
-    if (!supportsSizeAndFrameRate(WTFMove(width), WTFMove(height), WTFMove(frameRate))) {
+    if (!supportsSizeAndFrameRate(width, height, WTFMove(frameRate))) {
         // Let's try without frame rate constraint if not mandatory.
         if (frameRateConstraint && !frameRateConstraint->isMandatory() && supportsSizeAndFrameRate(WTFMove(width), WTFMove(height), { }))
             return true;

@@ -52,6 +52,7 @@
 #include <wtf/text/WTFString.h>
 
 #if USE(GSTREAMER)
+#include "GUniquePtrGStreamer.h"
 #include <wtf/glib/GRefPtr.h>
 
 typedef struct _GstEvent GstEvent;
@@ -114,6 +115,10 @@ public:
 
         // May be called on a background thread.
         virtual void videoFrameAvailable(VideoFrame&, VideoFrameTimeMetadata) = 0;
+
+#if USE(GSTREAMER_WEBRTC)
+        virtual GUniquePtr<GstStructure> queryAdditionalStats() { return nullptr; }
+#endif
     };
 
     virtual ~RealtimeMediaSource() = default;
@@ -264,6 +269,7 @@ protected:
     void audioSamplesAvailable(const MediaTime&, const PlatformAudioData&, const AudioStreamDescription&, size_t);
 
     void forEachObserver(const Function<void(Observer&)>&);
+    void forEachVideoFrameObserver(const Function<void(VideoFrameObserver&)>&);
 
     void end(Observer* = nullptr);
 
