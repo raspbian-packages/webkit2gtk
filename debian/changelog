@@ -1,12 +1,12 @@
-webkit2gtk (2.38.4-2~deb11u1+rpi1) bullseye-staging; urgency=medium
+webkit2gtk (2.38.5-1~deb11u1+rpi1) bullseye-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
- -- Raspbian forward porter <root@raspbian.org>  Fri, 10 Feb 2023 00:30:59 +0000
+ -- Raspbian forward porter <root@raspbian.org>  Fri, 17 Feb 2023 09:28:41 +0000
 
-webkit2gtk (2.38.4-2~deb11u1) bullseye-security; urgency=medium
+webkit2gtk (2.38.5-1~deb11u1) bullseye-security; urgency=medium
 
   * Rebuild for bullseye-security.
   * gcc 10 segfaults when building webkit in amd64 (see #1008098) so use
@@ -20,7 +20,17 @@ webkit2gtk (2.38.4-2~deb11u1) bullseye-security; urgency=medium
       USE_PREBUILT_DOCS=YES.
     - debian/control.in: Remove build dependency on ccache.
 
- -- Alberto Garcia <berto@igalia.com>  Mon, 06 Feb 2023 11:57:37 +0100
+ -- Alberto Garcia <berto@igalia.com>  Thu, 16 Feb 2023 13:33:03 +0100
+
+webkit2gtk (2.38.5-1) unstable; urgency=high
+
+  * New upstream release.
+  * The WebKitGTK security advisory WSA-2023-0002 lists the following
+    security fixes in the latest versions of WebKitGTK:
+    - CVE-2023-23529 (fixed in 2.38.5).
+  * Remove debian/patches/fix-nonunified-build.patch.
+
+ -- Alberto Garcia <berto@igalia.com>  Wed, 15 Feb 2023 18:10:55 +0100
 
 webkit2gtk (2.38.4-2) unstable; urgency=high
 
