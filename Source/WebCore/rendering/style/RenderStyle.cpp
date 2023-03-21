@@ -70,7 +70,9 @@ struct SameSizeAsBorderValue {
     int m_restBits;
 };
 
+#if !defined(__m68k__)
 static_assert(sizeof(BorderValue) == sizeof(SameSizeAsBorderValue), "BorderValue should not grow");
+#endif
 
 struct SameSizeAsRenderStyle {
     void* nonInheritedDataRefs[1];
@@ -89,7 +91,9 @@ struct SameSizeAsRenderStyle {
 #endif
 };
 
+#if !defined(__m68k__)
 static_assert(sizeof(RenderStyle) == sizeof(SameSizeAsRenderStyle), "RenderStyle should stay small");
+#endif
 
 DEFINE_ALLOCATOR_WITH_HEAP_IDENTIFIER(PseudoStyleCache);
 DEFINE_ALLOCATOR_WITH_HEAP_IDENTIFIER(RenderStyle);
