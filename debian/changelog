@@ -4,6 +4,9 @@ webkit2gtk (2.40.0-3+rpi1) bookworm-staging; urgency=medium
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
+  [changes introuced in 2.40.0-3+rpi1 by Peter Michael Green]
+  * Disable webgl on armhf.
+
  -- Peter Michael Green <plugwash@raspbian.org>  Thu, 30 Mar 2023 12:41:52 +0000
 
 webkit2gtk (2.40.0-3) unstable; urgency=medium
