@@ -354,7 +354,7 @@ void MediaPlayerPrivateGStreamerMSE::sourceSetup(GstElement* sourceElement)
 void MediaPlayerPrivateGStreamerMSE::updateStates()
 {
     bool shouldBePlaying = !m_isPaused && readyState() >= MediaPlayer::ReadyState::HaveFutureData;
-    GST_DEBUG_OBJECT(pipeline(), "shouldBePlaying = %d, m_isPipelinePlaying = %d", static_cast<int>(shouldBePlaying), static_cast<int>(m_isPipelinePlaying));
+    GST_DEBUG_OBJECT(pipeline(), "shouldBePlaying = %s, m_isPipelinePlaying = %s", boolForPrinting(shouldBePlaying), boolForPrinting(m_isPipelinePlaying));
     if (shouldBePlaying && !m_isPipelinePlaying) {
         if (!changePipelineState(GST_STATE_PLAYING))
             GST_ERROR_OBJECT(pipeline(), "Setting the pipeline to PLAYING failed");
@@ -439,20 +439,11 @@ void MediaPlayerPrivateGStreamerMSE::getSupportedTypes(HashSet<String, ASCIICase
 
 MediaPlayer::SupportsType MediaPlayerPrivateGStreamerMSE::supportsType(const MediaEngineSupportParameters& parameters)
 {
-    static std::optional<VideoDecodingLimits> videoDecodingLimits;
-#ifdef VIDEO_DECODING_LIMIT
-    static std::once_flag onceFlag;
-    std::call_once(onceFlag, [] {
-        videoDecodingLimits = videoDecoderLimitsDefaults();
-        if (!videoDecodingLimits) {
-            GST_WARNING("Parsing VIDEO_DECODING_LIMIT failed");
-            ASSERT_NOT_REACHED();
-        }
-    });
-#endif
-
     MediaPlayer::SupportsType result = MediaPlayer::SupportsType::IsNotSupported;
     if (!parameters.isMediaSource)
+        return result;
+
+    if (!ensureGStreamerInitialized())
         return result;
 
     auto containerType = parameters.type.containerType();
@@ -475,6 +466,16 @@ MediaPlayer::SupportsType MediaPlayerPrivateGStreamerMSE::supportsType(const Med
     float height = parameters.type.parameter("height"_s).toFloat(&ok);
     if (!ok)
         height = 0;
+
+    static std::optional<VideoDecodingLimits> videoDecodingLimits;
+#ifdef VIDEO_DECODING_LIMIT
+    static std::once_flag onceFlag;
+    std::call_once(onceFlag, [] {
+        videoDecodingLimits = videoDecoderLimitsDefaults();
+        if (!videoDecodingLimits)
+            GST_WARNING("Parsing VIDEO_DECODING_LIMIT failed");
+    });
+#endif
 
     if (videoDecodingLimits && (width > videoDecodingLimits->mediaMaxWidth || height > videoDecodingLimits->mediaMaxHeight))
         return result;

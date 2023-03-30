@@ -39,6 +39,7 @@ struct SameSizeAsNodeRareData {
     uint32_t m_tabIndex;
     uint32_t m_childIndexAndIsElementRareDataFlag;
     void* m_pointer[2];
+    WeakPtr<Node, WeakPtrImplWithEventTargetData> m_weakPointer;
 };
 
 #if !defined(__m68k__)

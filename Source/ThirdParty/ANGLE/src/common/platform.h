@@ -81,6 +81,12 @@
 #        endif
 #    endif
 
+// Include <windows.h> to ensure tests related files can be built when building
+// vulkan only backend ANGLE on windows.
+#    if defined(ANGLE_ENABLE_VULKAN)
+#        include <windows.h>
+#    endif
+
 // Macros 'near', 'far', 'NEAR' and 'FAR' are defined by 'shared/minwindef.h' in the Windows SDK.
 // Macros 'near' and 'far' are empty. They are not used by other Windows headers and are undefined
 // here to avoid identifier conflicts. Macros 'NEAR' and 'FAR' contain 'near' and 'far'. They are
@@ -96,7 +102,7 @@
 #if defined(_MSC_VER) && !defined(_M_ARM) && !defined(_M_ARM64)
 #    include <intrin.h>
 #    define ANGLE_USE_SSE
-#elif defined(__GNUC__) && (defined(__x86_64__) || defined(__i386__))
+#elif defined(__GNUC__) && defined(__x86_64__)
 #    include <x86intrin.h>
 #    define ANGLE_USE_SSE
 #endif
@@ -193,7 +199,7 @@
 #    define ANGLE_WITH_SANITIZER 1
 #endif  // defined(ANGLE_WITH_ASAN) || defined(ANGLE_WITH_TSAN) || defined(ANGLE_WITH_UBSAN)
 
-#include <cstdint>
+#include <stdint.h>
 #if INTPTR_MAX == INT64_MAX
 #    define ANGLE_IS_64_BIT_CPU 1
 #else

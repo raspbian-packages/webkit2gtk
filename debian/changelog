@@ -1,10 +1,80 @@
-webkit2gtk (2.38.5-1+rpi1) bookworm-staging; urgency=medium
+webkit2gtk (2.40.0-3+rpi1) bookworm-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
- -- Raspbian forward porter <root@raspbian.org>  Sat, 25 Feb 2023 02:41:35 +0000
+ -- Peter Michael Green <plugwash@raspbian.org>  Thu, 30 Mar 2023 12:41:52 +0000
+
+webkit2gtk (2.40.0-3) unstable; urgency=medium
+
+  * debian/{rules,control.in}:
+    - Add dependency on libgles2 on arm (Closes: #1033230).
+
+ -- Alberto Garcia <berto@igalia.com>  Tue, 21 Mar 2023 18:11:48 +0100
+
+webkit2gtk (2.40.0-2) unstable; urgency=medium
+
+  * debian/patches/fix-script-message-received-marshaller.patch:
+    - Cherry pick fix for a regression that affects Epiphany.
+  * debian/patches/fix-gst-crash.patch:
+    - Cherry pick fix for a GStreamer-related crash.
+
+ -- Alberto Garcia <berto@igalia.com>  Sat, 18 Mar 2023 11:41:32 +0100
+
+webkit2gtk (2.40.0-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Bring all changes from the 2.39 (experimental) branch.
+  * The GTK4 build's API number changes from 5.0 to 6.0.
+    - debian/{rules,not-installed,control.in,control-common.in}: Update
+      all these files to reflect the API and package name changes.
+  * debian/rules:
+    - Build with -DDEBUG_FISSION=OFF since it adds the -gsplit-dwarf flag
+      that is currently not supported by dh_dwz (see #1016936).
+    - Disable WebGL in armel, mipsel, m68k, powerpc and sh4 to work around
+      a FTBFS caused by upstream bug #252670.
+    - Stop passing -DUSE_LD_GOLD=OFF, this option no longer exists (and
+      update reduce-memory-overheads.patch accordingly).
+    - Use reduced optimizations on m68k in order to lower memory
+      requirements (John Paul Adrian Glaubitz) (Closes: #1032404).
+    - Disable AVIF and GStreamer transcoding on Ubuntu (Jeremy Bicha).
+    - Build the 4.1 API version of the WebKit WebDriver if possible.
+    - Rename WebKit2WebExtension to WebKitWebProcessExtension in the GTK4
+      build's install files.
+    - Remove /usr/include/*/JavaScriptCore from the GTK4 build's .install
+      files.
+  * Use the documentation from the 4.1 API build. This simplifies the
+    build process a bit (the package is still named 4.0-doc to make
+    backports easier).
+  * debian/control.in:
+    - Add build dependencies on unifdef, libavif-dev and
+      libgstreamer-plugins-bad1.0-dev (for webrtc).
+    - Require libgstreamer-plugins-bad1.0-dev >= 1.20.0, this is needed
+      for USE_GSTREAMER_TRANSCODER.
+    - Don't use ccache on m68k (thanks, John Paul Adrian Glaubitz)
+      (Closes: #1033042).
+  * debian/copyright:
+    - Update copyright information of all files.
+  * debian/gbp.conf:
+    - Update upstream branch name.
+  * debian/libwebkit2gtk-4.0-37.symbols:
+    - Update symbols.
+    - Mark with (gtk3-only) and (gtk4-only) the symbols that are specific
+      to each build.
+  * debian/libwebkit2gtk-4.0-37.install:
+    - WebKit2GTK-*.mo is now WebKitGTK-*.mo.
+  * debian/libwebkit2gtk-4.0-dev.install:
+    - Update include path.
+  * debian/source/lintian-overrides:
+    - Update source-is-missing overrides.
+  * debian/patches/dont-detect-sse2.patch:
+    - Don't build ANGLE with SSE support in i386.
+  * Drop debian/patches/fix-non-unified-build.patch and use unified builds
+    in all architecture.
+  * Refresh all other patches.
+
+ -- Alberto Garcia <berto@igalia.com>  Fri, 17 Mar 2023 14:52:02 +0100
 
 webkit2gtk (2.38.5-1) unstable; urgency=high
 
