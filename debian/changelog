@@ -1,10 +1,23 @@
-webkit2gtk (2.38.5-1~deb10u1+rpi1) buster-staging; urgency=medium
+webkit2gtk (2.38.6-0+deb10u1+rpi1) buster-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
- -- Raspbian forward porter <root@raspbian.org>  Thu, 16 Feb 2023 14:38:25 +0000
+ -- Raspbian forward porter <root@raspbian.org>  Thu, 11 May 2023 22:12:05 +0000
+
+webkit2gtk (2.38.6-0+deb10u1) buster-security; urgency=medium
+
+  * New upstream stable update.
+  * CVE-2022-0108: information disclosure via iframes.
+  * CVE-2022-32885: memory corruption leading to arbitrary code execution.
+  * CVE-2023-27932: Same Origin Policy bypass.
+  * CVE-2023-27954: information disclosure.
+  * CVE-2023-28205: arbitrary code execution.
+  * debian/patches/fix-jscast-undeclared-error.patch:
+    - Fix a build issue in JavaScriptCore.
+
+ -- Emilio Pozuelo Monfort <pochu@debian.org>  Thu, 11 May 2023 13:12:55 +0200
 
 webkit2gtk (2.38.5-1~deb10u1) buster-security; urgency=high
 
