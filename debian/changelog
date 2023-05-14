@@ -1,4 +1,4 @@
-webkit2gtk (2.40.0-3+rpi1) bookworm-staging; urgency=medium
+webkit2gtk (2.40.1-1+rpi1) bookworm-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
@@ -7,7 +7,19 @@ webkit2gtk (2.40.0-3+rpi1) bookworm-staging; urgency=medium
   [changes introuced in 2.40.0-3+rpi1 by Peter Michael Green]
   * Disable webgl on armhf.
 
- -- Peter Michael Green <plugwash@raspbian.org>  Thu, 30 Mar 2023 12:41:52 +0000
+ -- Raspbian forward porter <root@raspbian.org>  Sun, 14 May 2023 02:37:27 +0000
+
+webkit2gtk (2.40.1-1) unstable; urgency=high
+
+  * New upstream release.
+  * debian/rules:
+    - Build with -DUSE_GBM=OFF in the Hurd (Closes: #1033999).
+  * Drop fix-script-message-received-marshaller.patch and
+    fix-gst-crash.patch. Refresh all other patches.
+  * debian/copyright:
+    - Update copyright information of all files.
+
+ -- Alberto Garcia <berto@igalia.com>  Thu, 20 Apr 2023 14:29:23 +0200
 
 webkit2gtk (2.40.0-3) unstable; urgency=medium
 

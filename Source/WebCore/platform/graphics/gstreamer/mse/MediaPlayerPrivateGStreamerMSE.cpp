@@ -373,24 +373,6 @@ bool MediaPlayerPrivateGStreamerMSE::isTimeBuffered(const MediaTime &time) const
     return result;
 }
 
-void MediaPlayerPrivateGStreamerMSE::blockDurationChanges()
-{
-    ASSERT(isMainThread());
-    m_areDurationChangesBlocked = true;
-    m_shouldReportDurationWhenUnblocking = false;
-}
-
-void MediaPlayerPrivateGStreamerMSE::unblockDurationChanges()
-{
-    ASSERT(isMainThread());
-    if (m_shouldReportDurationWhenUnblocking) {
-        m_player->durationChanged();
-        m_shouldReportDurationWhenUnblocking = false;
-    }
-
-    m_areDurationChangesBlocked = false;
-}
-
 void MediaPlayerPrivateGStreamerMSE::durationChanged()
 {
     ASSERT(isMainThread());
@@ -402,12 +384,8 @@ void MediaPlayerPrivateGStreamerMSE::durationChanged()
 
     // Avoid emiting durationchanged in the case where the previous duration was 0 because that case is already handled
     // by the HTMLMediaElement.
-    if (m_mediaTimeDuration != previousDuration && m_mediaTimeDuration.isValid() && previousDuration.isValid()) {
-        if (!m_areDurationChangesBlocked)
-            m_player->durationChanged();
-        else
-            m_shouldReportDurationWhenUnblocking = true;
-    }
+    if (m_mediaTimeDuration != previousDuration && m_mediaTimeDuration.isValid() && previousDuration.isValid())
+        m_player->durationChanged();
 }
 
 void MediaPlayerPrivateGStreamerMSE::setInitialVideoSize(const FloatSize& videoSize)
@@ -484,6 +462,8 @@ MediaPlayer::SupportsType MediaPlayerPrivateGStreamerMSE::supportsType(const Med
     // Limit frameRate only in case of highest supported resolution.
     if (ok && videoDecodingLimits && width == videoDecodingLimits->mediaMaxWidth && height == videoDecodingLimits->mediaMaxHeight && frameRate > videoDecodingLimits->mediaMaxFrameRate)
         return result;
+
+    registerWebKitGStreamerElements();
 
     GST_DEBUG("Checking mime-type \"%s\"", parameters.type.raw().utf8().data());
     auto& gstRegistryScanner = GStreamerRegistryScannerMSE::singleton();
