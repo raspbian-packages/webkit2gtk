@@ -61,6 +61,11 @@
 #include <wtf/StdLibExtras.h>
 #include <wtf/text/WTFString.h>
 
+#if defined(__m68k__) || defined(__SH4__)
+#pragma GCC push_options
+#pragma GCC optimize ("-O0")
+#endif
+
 namespace JSC {
 
 template<typename CallOp, typename = std::true_type>
@@ -5499,3 +5504,6 @@ void printInternal(PrintStream& out, JSC::Variable::VariableKind kind)
 
 } // namespace WTF
 
+#if defined(__m68k__) || defined(__SH4__)
+#pragma GCC pop_options
+#endif
