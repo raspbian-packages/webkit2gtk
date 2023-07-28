@@ -332,7 +332,7 @@ override_dh_auto_clean: debian/control
 # If USE_PREBUILT_DOCS=YES then install them (they are from the 4.1 API build
 # but they're equally valid for the 4.0-doc package once we rename them).
 # Otherwise create a dummy doc directory in case the "nodoc" build option is set.
-override_dh_install:
+override_dh_install-indep:
 ifeq ($(USE_PREBUILT_DOCS),YES)
 	mkdir -p debian/tmp/usr/share/gtk-doc/html
 	cp -r Documentation/webkit2gtk-4.1 debian/tmp/usr/share/gtk-doc/html/
@@ -342,16 +342,16 @@ else
 	mkdir -p debian/tmp/usr/share/gtk-doc/html/webkit2gtk-4.1
 	touch debian/tmp/usr/share/gtk-doc/html/webkit2gtk-4.1/index.html
 endif
-	dh_install
+	dh_install -i
 	jdupes -rl debian/libwebkit2gtk-4.0-doc/usr
 
 override_dh_makeshlibs:
 	$(SOUP2_BUILD) dh_makeshlibs -plibwebkit2gtk-4.0-37 -Xinjected-bundle
-	$(SOUP2_BUILD) dh_makeshlibs -plibjavascriptcoregtk-4.0-18
+	$(SOUP2_BUILD) dh_makeshlibs -plibjavascriptcoregtk-4.0-18 -VNone
 	$(SOUP3_BUILD) dh_makeshlibs -plibwebkit2gtk-4.1-0 -Xinjected-bundle
-	$(SOUP3_BUILD) dh_makeshlibs -plibjavascriptcoregtk-4.1-0
+	$(SOUP3_BUILD) dh_makeshlibs -plibjavascriptcoregtk-4.1-0 -VNone
 	$(GTK4_BUILD)  dh_makeshlibs -plibwebkitgtk-6.0-4 -Xinjected-bundle
-	$(GTK4_BUILD)  dh_makeshlibs -plibjavascriptcoregtk-6.0-1
+	$(GTK4_BUILD)  dh_makeshlibs -plibjavascriptcoregtk-6.0-1 -VNone
 
 override_dh_missing:
 	dh_missing --fail-missing

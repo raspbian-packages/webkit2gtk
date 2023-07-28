@@ -1,4 +1,4 @@
-webkit2gtk (2.40.1-1+rpi1) bookworm-staging; urgency=medium
+webkit2gtk (2.40.3-2~deb12u2+rpi1) bookworm-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
@@ -7,7 +7,52 @@ webkit2gtk (2.40.1-1+rpi1) bookworm-staging; urgency=medium
   [changes introuced in 2.40.0-3+rpi1 by Peter Michael Green]
   * Disable webgl on armhf.
 
- -- Raspbian forward porter <root@raspbian.org>  Sun, 14 May 2023 02:37:27 +0000
+ -- Raspbian forward porter <root@raspbian.org>  Fri, 28 Jul 2023 21:05:13 +0000
+
+webkit2gtk (2.40.3-2~deb12u2) bookworm-security; urgency=medium
+
+  * debian/patches/fix-CVE-2023-37450.patch:
+    - Cherry pick fix for CVE-2023-37450.
+
+ -- Alberto Garcia <berto@igalia.com>  Fri, 21 Jul 2023 11:24:47 +0200
+
+webkit2gtk (2.40.3-2~deb12u1) bookworm-security; urgency=medium
+
+  * Rebuild for bookworm-security.
+    - Fixes CVE-2023-32439.
+
+ -- Alberto Garcia <berto@igalia.com>  Thu, 06 Jul 2023 15:22:42 +0200
+
+webkit2gtk (2.40.3-2) unstable; urgency=high
+
+  * debian/rules:
+    - Use override_dh_install-indep when setting up the documentation
+      (Closes: #1039877).
+  * debian/control.in:
+    - Move jdupes to Build-Depends-Indep.
+
+ -- Alberto Garcia <berto@igalia.com>  Thu, 29 Jun 2023 15:14:08 +0200
+
+webkit2gtk (2.40.3-1) unstable; urgency=high
+
+  * New upstream release (Closes: #1036946).
+  * debian/control.in:
+    - Enable the bubblewrap sandbox in riscv64.
+  * debian/copyright:
+    - Update copyright information of all files.
+  * debian/patches/fix-jsc-timestamp.patch:
+    - Ensure reproducibility of __TIMESTAMP__ in JSCBytecodeCacheVersion.cpp.
+
+ -- Alberto Garcia <berto@igalia.com>  Wed, 28 Jun 2023 16:55:42 +0200
+
+webkit2gtk (2.40.2-1) unstable; urgency=high
+
+  * New upstream release.
+  * debian/rules:
+    - Pass -VNone to dh_makeshlibs for javascriptcore to keep the behavior
+      of the debhelper compat level 11 and earlier.
+
+ -- Alberto Garcia <berto@igalia.com>  Tue, 30 May 2023 10:19:01 +0200
 
 webkit2gtk (2.40.1-1) unstable; urgency=high
 
