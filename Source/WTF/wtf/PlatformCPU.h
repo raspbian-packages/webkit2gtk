@@ -95,6 +95,11 @@
 #define WTF_CPU_KNOWN 1
 #endif
 
+/* CPU(SPARC64) - sparc64 */
+#if defined(__sparc__) && defined(__sparc_v9__)
+#define WTF_CPU_BIG_ENDIAN 1
+#endif
+
 /* CPU(X86) - i386 / x86 32-bit */
 #if   defined(__i386__) \
     || defined(i386)     \
