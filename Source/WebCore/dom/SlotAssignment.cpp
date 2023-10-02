@@ -30,7 +30,7 @@
 #include "HTMLSlotElement.h"
 #include "RenderTreeUpdater.h"
 #include "ShadowRoot.h"
-#include "TypedElementDescendantIterator.h"
+#include "TypedElementDescendantIteratorInlines.h"
 
 namespace WebCore {
 
@@ -45,7 +45,9 @@ struct SameSizeAsNamedSlotAssignment {
 #endif
 };
 
+#if !defined(__m68k__)
 static_assert(sizeof(NamedSlotAssignment) == sizeof(SameSizeAsNamedSlotAssignment), "NamedSlotAssignment should remain small");
+#endif
 
 static const AtomString& slotNameFromAttributeValue(const AtomString& value)
 {
