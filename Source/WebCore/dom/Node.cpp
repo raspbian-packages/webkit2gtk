@@ -122,7 +122,9 @@ struct SameSizeAsNode : public EventTarget {
     uint8_t rareDataWithBitfields[8];
 };
 
+#if !defined(__m68k__)
 static_assert(sizeof(Node) == sizeof(SameSizeAsNode), "Node should stay small");
+#endif
 
 #if DUMP_NODE_STATISTICS
 static WeakHashSet<Node, WeakPtrImplWithEventTargetData>& liveNodeSet()
