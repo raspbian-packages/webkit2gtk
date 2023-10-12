@@ -41,7 +41,9 @@ struct SameSizeAsNodeRareData {
     bool m_isElementRareData;
 };
 
+#if !defined(__m68k__)
 static_assert(sizeof(NodeRareData) == sizeof(SameSizeAsNodeRareData), "NodeRareData should stay small");
+#endif
 
 // Ensure the 10 bits reserved for the m_connectedFrameCount cannot overflow
 static_assert(Page::maxNumberOfFrames < 1024, "Frame limit should fit in rare data count");
