@@ -32,6 +32,7 @@
 #include "WebsiteMetaViewportPolicy.h"
 #include "WebsitePopUpPolicy.h"
 #include "WebsiteSimulatedMouseEventsDispatchPolicy.h"
+#include <WebCore/AdvancedPrivacyProtections.h>
 #include <WebCore/CustomHeaderFields.h>
 #include <WebCore/DeviceOrientationOrMotionPermissionState.h>
 #include <WebCore/DocumentLoader.h>
@@ -52,7 +53,7 @@ namespace WebKit {
 struct WebsitePoliciesData {
     static void applyToDocumentLoader(WebsitePoliciesData&&, WebCore::DocumentLoader&);
 
-    bool contentBlockersEnabled { true };
+    WebCore::ContentExtensionEnablement contentExtensionEnablement;
     HashMap<WTF::String, Vector<WTF::String>> activeContentRuleListActionPatterns;
     OptionSet<WebsiteAutoplayQuirk> allowedAutoplayQuirks;
     WebsiteAutoplayPolicy autoplayPolicy { WebsiteAutoplayPolicy::Default };
@@ -73,10 +74,9 @@ struct WebsitePoliciesData {
     WebCore::MouseEventPolicy mouseEventPolicy { WebCore::MouseEventPolicy::Default };
     WebCore::ModalContainerObservationPolicy modalContainerObservationPolicy { WebCore::ModalContainerObservationPolicy::Disabled };
     WebCore::ColorSchemePreference colorSchemePreference { WebCore::ColorSchemePreference::NoPreference };
+    OptionSet<WebCore::AdvancedPrivacyProtections> advancedPrivacyProtections;
     bool idempotentModeAutosizingOnlyHonorsPercentages { false };
-
-    void encode(IPC::Encoder&) const;
-    static std::optional<WebsitePoliciesData> decode(IPC::Decoder&);
+    bool allowPrivacyProxy { true };
 };
 
 } // namespace WebKit

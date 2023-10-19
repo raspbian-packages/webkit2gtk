@@ -27,6 +27,8 @@
 #include "config.h"
 #include "GraphicsLayerWC.h"
 
+#if USE(GRAPHICS_LAYER_WC)
+
 #include "WCPlatformLayerGCGL.h"
 #include "WCTileGrid.h"
 #include <WebCore/TransformState.h>
@@ -40,7 +42,7 @@ public:
     WCTiledBacking(GraphicsLayerWC& owner)
         : m_owner(owner) { }
 
-    bool paintAndFlush(WCLayerUpateInfo& update)
+    bool paintAndFlush(WCLayerUpdateInfo& update)
     {
         bool repainted = false;
         for (auto& entry : m_tileGrid.tiles()) {
@@ -97,7 +99,7 @@ public:
     void setTopContentInset(float) final { }
     void setVelocity(const VelocityData&) final { }
     void setTileSizeUpdateDelayDisabledForTesting(bool) final { };
-    void setScrollability(Scrollability) final { }
+    void setScrollability(OptionSet<Scrollability>) final { }
     void prepopulateRect(const FloatRect&) final { }
     void setIsInWindow(bool) final { }
     bool isInWindow() const final { return m_isInWindow; }
@@ -153,14 +155,7 @@ GraphicsLayerWC::~GraphicsLayerWC()
         m_observer->graphicsLayerRemoved(*this);
 }
 
-GraphicsLayer::PlatformLayerID GraphicsLayerWC::generateLayerID()
-{
-    // 0 and max can't be used for hash keys
-    static GraphicsLayer::PlatformLayerID id = 1;
-    return id++;
-}
-
-GraphicsLayer::PlatformLayerID GraphicsLayerWC::primaryLayerID() const
+PlatformLayerIdentifier GraphicsLayerWC::primaryLayerID() const
 {
     return m_layerID;
 }
@@ -407,6 +402,14 @@ void GraphicsLayerWC::setContentsToPlatformLayer(PlatformLayer* platformLayer, C
     updateDebugIndicators();
 }
 
+void GraphicsLayerWC::setContentsToPlatformLayerHost(WebCore::LayerHostingContextIdentifier identifier)
+{
+    if (m_hostIdentifier && *m_hostIdentifier == identifier)
+        return;
+    m_hostIdentifier = identifier;
+    noteLayerPropertyChanged(WCLayerChange::RemoteFrame);
+}
+
 void GraphicsLayerWC::setContentsDisplayDelegate(RefPtr<WebCore::GraphicsLayerContentsDisplayDelegate>&& displayDelegate, ContentsLayerPurpose purpose)
 {
     auto platformLayer = displayDelegate ? displayDelegate->platformLayer() : nullptr;
@@ -447,7 +450,7 @@ static bool filtersCanBeComposited(const FilterOperations& filters)
     if (!filters.size())
         return false;
     for (const auto& filterOperation : filters.operations()) {
-        if (filterOperation->type() == FilterOperation::REFERENCE)
+        if (filterOperation->type() == FilterOperation::Type::Reference)
             return false;
     }
     return true;
@@ -506,7 +509,7 @@ void GraphicsLayerWC::flushCompositingState(const FloatRect& passedVisibleRect)
     // passedVisibleRect doesn't contain the scrollbar area. Inflate it.
     FloatRect visibleRect = passedVisibleRect;
     visibleRect.inflate(20.f);
-    TransformState state(TransformState::UnapplyInverseTransformDirection, FloatQuad(visibleRect));
+    TransformState state(client().useCSS3DTransformInteroperability(), TransformState::UnapplyInverseTransformDirection, FloatQuad(visibleRect));
     state.setSecondaryQuad(FloatQuad { visibleRect });
     recursiveCommitChanges(state);
 }
@@ -515,7 +518,7 @@ void GraphicsLayerWC::flushCompositingStateForThisLayerOnly()
 {
     if (!m_uncommittedChanges)
         return;
-    WCLayerUpateInfo update;
+    WCLayerUpdateInfo update;
     update.id = primaryLayerID();
     update.changes = std::exchange(m_uncommittedChanges, { });
     if (update.changes & WCLayerChange::Children) {
@@ -591,10 +594,14 @@ void GraphicsLayerWC::flushCompositingStateForThisLayerOnly()
     }
     if (update.changes & WCLayerChange::PlatformLayer) {
         update.hasPlatformLayer = m_platformLayer;
+#if ENABLE(WEBGL)
         if (m_platformLayer)
             update.contentBufferIdentifiers = static_cast<WCPlatformLayerGCGL*>(m_platformLayer)->takeContentBufferIdentifiers();
+#endif
     }
-    m_observer->commitLayerUpateInfo(WTFMove(update));
+    if (update.changes & WCLayerChange::RemoteFrame)
+        update.hostIdentifier = m_hostIdentifier;
+    m_observer->commitLayerUpdateInfo(WTFMove(update));
 }
 
 TiledBacking* GraphicsLayerWC::tiledBacking() const
@@ -718,3 +725,5 @@ void GraphicsLayerWC::recursiveCommitChanges(const TransformState& state)
 }
 
 } // namespace WebKit
+
+#endif // USE(GRAPHICS_LAYER_WC)

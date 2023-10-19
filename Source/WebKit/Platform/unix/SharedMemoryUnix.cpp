@@ -26,12 +26,10 @@
  */
 
 #include "config.h"
-#if USE(UNIX_DOMAIN_SOCKETS)
 #include "SharedMemory.h"
 
-#include "ArgumentCoders.h"
-#include "Decoder.h"
-#include "Encoder.h"
+#if USE(UNIX_DOMAIN_SOCKETS)
+
 #include <errno.h>
 #include <fcntl.h>
 #include <stdlib.h>
@@ -40,7 +38,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <wtf/Assertions.h>
-#include <wtf/RandomNumber.h>
+#include <wtf/CryptographicallyRandomNumber.h>
 #include <wtf/SafeStrerror.h>
 #include <wtf/UniStdExtras.h>
 #include <wtf/text/CString.h>
@@ -52,59 +50,11 @@
 #include <sys/syscall.h>
 #endif
 
-#if PLATFORM(PLAYSTATION)
-#include "ArgumentCoders.h"
-#endif
-
 namespace WebKit {
 
-SharedMemory::Handle::Handle()
+UnixFileDescriptor SharedMemoryHandle::releaseHandle()
 {
-}
-
-SharedMemory::Handle::~Handle()
-{
-}
-
-SharedMemory::Handle::Handle(Handle&&) = default;
-SharedMemory::Handle& SharedMemory::Handle::operator=(Handle&& other) = default;
-
-void SharedMemory::Handle::clear()
-{
-    m_attachment = IPC::Attachment();
-}
-
-bool SharedMemory::Handle::isNull() const
-{
-    return m_attachment.isNull();
-}
-
-void SharedMemory::Handle::encode(IPC::Encoder& encoder) const
-{
-    encoder << releaseAttachment();
-}
-
-bool SharedMemory::Handle::decode(IPC::Decoder& decoder, SharedMemory::Handle& handle)
-{
-    ASSERT_ARG(handle, handle.isNull());
-    IPC::Attachment attachment;
-    if (!decoder.decode(attachment))
-        return false;
-    handle.m_size = attachment.size();
-    handle.adoptAttachment(WTFMove(attachment));
-    return true;
-}
-
-IPC::Attachment SharedMemory::Handle::releaseAttachment() const
-{
-    return WTFMove(m_attachment);
-}
-
-void SharedMemory::Handle::adoptAttachment(IPC::Attachment&& attachment)
-{
-    ASSERT(isNull());
-
-    m_attachment = WTFMove(attachment);
+    return WTFMove(m_handle);
 }
 
 static inline int accessModeMMap(SharedMemory::Protection protection)
@@ -120,7 +70,7 @@ static inline int accessModeMMap(SharedMemory::Protection protection)
     return PROT_READ | PROT_WRITE;
 }
 
-static int createSharedMemory()
+static UnixFileDescriptor createSharedMemory()
 {
     int fileDescriptor = -1;
 
@@ -132,10 +82,10 @@ static int createSharedMemory()
         } while (fileDescriptor == -1 && errno == EINTR);
 
         if (fileDescriptor != -1)
-            return fileDescriptor;
+            return UnixFileDescriptor { fileDescriptor, UnixFileDescriptor::Adopt };
 
         if (errno != ENOSYS)
-            return fileDescriptor;
+            return { };
 
         isMemFdAvailable = false;
     }
@@ -148,7 +98,7 @@ static int createSharedMemory()
 #else
     CString tempName;
     for (int tries = 0; fileDescriptor == -1 && tries < 10; ++tries) {
-        auto name = makeString("/WK2SharedMemory.", static_cast<unsigned>(WTF::randomNumber() * (std::numeric_limits<unsigned>::max() + 1.0)));
+        auto name = makeString("/WK2SharedMemory.", cryptographicallyRandomNumber<unsigned>());
         tempName = name.utf8();
 
         do {
@@ -160,50 +110,43 @@ static int createSharedMemory()
         shm_unlink(tempName.data());
 #endif
 
-    return fileDescriptor;
+    return UnixFileDescriptor { fileDescriptor, UnixFileDescriptor::Adopt };
 }
 
 RefPtr<SharedMemory> SharedMemory::allocate(size_t size)
 {
-    int fileDescriptor = createSharedMemory();
-    if (fileDescriptor == -1) {
+    auto fileDescriptor = createSharedMemory();
+    if (!fileDescriptor) {
         WTFLogAlways("Failed to create shared memory: %s", safeStrerror(errno).data());
         return nullptr;
     }
 
-    while (ftruncate(fileDescriptor, size) == -1) {
-        if (errno != EINTR) {
-            closeWithRetry(fileDescriptor);
+    while (ftruncate(fileDescriptor.value(), size) == -1) {
+        if (errno != EINTR)
             return nullptr;
-        }
     }
 
-    void* data = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, fileDescriptor, 0);
-    if (data == MAP_FAILED) {
-        closeWithRetry(fileDescriptor);
+    void* data = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, fileDescriptor.value(), 0);
+    if (data == MAP_FAILED)
         return nullptr;
-    }
 
     RefPtr<SharedMemory> instance = adoptRef(new SharedMemory());
     instance->m_data = data;
-    instance->m_fileDescriptor = fileDescriptor;
+    instance->m_fileDescriptor = WTFMove(fileDescriptor);
     instance->m_size = size;
     return instance;
 }
 
-RefPtr<SharedMemory> SharedMemory::map(const Handle& handle, Protection protection)
+RefPtr<SharedMemory> SharedMemory::map(Handle&& handle, Protection protection)
 {
     ASSERT(!handle.isNull());
-
-    UnixFileDescriptor fd = handle.m_attachment.release();
-    void* data = mmap(0, handle.m_attachment.size(), accessModeMMap(protection), MAP_SHARED, fd.value(), 0);
-    fd = { };
+    void* data = mmap(0, handle.size(), accessModeMMap(protection), MAP_SHARED, handle.m_handle.value(), 0);
     if (data == MAP_FAILED)
         return nullptr;
 
-    RefPtr<SharedMemory> instance = wrapMap(data, handle.m_attachment.size(), -1);
-    instance->m_fileDescriptor = std::nullopt;
-    instance->m_isWrappingMap = false;
+    RefPtr<SharedMemory> instance = adoptRef(new SharedMemory());
+    instance->m_data = data;
+    instance->m_size = handle.size();
     return instance;
 }
 
@@ -212,23 +155,25 @@ RefPtr<SharedMemory> SharedMemory::wrapMap(void* data, size_t size, int fileDesc
     RefPtr<SharedMemory> instance = adoptRef(new SharedMemory());
     instance->m_data = data;
     instance->m_size = size;
-    instance->m_fileDescriptor = fileDescriptor;
+    instance->m_fileDescriptor = UnixFileDescriptor { fileDescriptor, UnixFileDescriptor::Adopt };
     instance->m_isWrappingMap = true;
     return instance;
 }
 
 SharedMemory::~SharedMemory()
 {
-    if (m_isWrappingMap)
+    if (m_isWrappingMap) {
+        auto wrapped = m_fileDescriptor.release();
+        UNUSED_VARIABLE(wrapped);
         return;
+    }
 
     munmap(m_data, m_size);
-    if (m_fileDescriptor)
-        closeWithRetry(m_fileDescriptor.value());
 }
 
-bool SharedMemory::createHandle(Handle& handle, Protection)
+auto SharedMemory::createHandle(Protection) -> std::optional<Handle>
 {
+    Handle handle;
     ASSERT_ARG(handle, handle.isNull());
     ASSERT(m_fileDescriptor);
 
@@ -238,13 +183,13 @@ bool SharedMemory::createHandle(Handle& handle, Protection)
     UnixFileDescriptor duplicate { m_fileDescriptor.value(), UnixFileDescriptor::Duplicate };
     if (!duplicate) {
         ASSERT_NOT_REACHED();
-        return false;
+        return std::nullopt;
     }
-    handle.m_attachment = IPC::Attachment(WTFMove(duplicate), m_size);
-    return true;
+    handle.m_handle = WTFMove(duplicate);
+    handle.m_size = m_size;
+    return { WTFMove(handle) };
 }
 
 } // namespace WebKit
 
 #endif
-

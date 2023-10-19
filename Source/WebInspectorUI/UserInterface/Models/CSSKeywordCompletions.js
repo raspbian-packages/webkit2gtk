@@ -276,7 +276,6 @@ WI.CSSKeywordCompletions.ShorthandNamesForLongHandProperty = new Map;
 WI.CSSKeywordCompletions.InheritedProperties = new Set([
     // Compatibility (iOS 12): `inherited` didn't exist on `CSSPropertyInfo`
     "-apple-color-filter",
-    "-webkit-animation-trigger",
     "-webkit-aspect-ratio",
     "-webkit-border-horizontal-spacing",
     "-webkit-border-vertical-spacing",
@@ -341,6 +340,9 @@ WI.CSSKeywordCompletions.InheritedProperties = new Set([
     "font-stretch",
     "font-style",
     "font-synthesis",
+    "font-synthesis-weight",
+    "font-synthesis-style",
+    "font-synthesis-small-caps",
     "font-variant",
     "font-variant-alternates",
     "font-variant-caps",
@@ -601,7 +603,16 @@ WI.CSSKeywordCompletions._propertyKeywordMap = {
         "normal", "bold", "bolder", "lighter", "100", "200", "300", "400", "500", "600", "700", "800", "900"
     ],
     "font-synthesis": [
-        "none", "weight", "style"
+        "none", "weight", "style", "small-caps"
+    ],
+    "font-synthesis-weight": [
+        "none", "auto"
+    ],
+    "font-synthesis-style": [
+        "none", "auto"
+    ],
+    "font-synthesis-small-caps": [
+        "none", "auto"
     ],
     "font-style": [
         "italic", "oblique", "normal"
@@ -613,7 +624,7 @@ WI.CSSKeywordCompletions._propertyKeywordMap = {
         "caption", "icon", "menu", "message-box", "small-caption", "-webkit-mini-control", "-webkit-small-control",
         "-webkit-control", "status-bar", "italic", "oblique", "small-caps", "normal", "bold", "bolder", "lighter",
         "100", "200", "300", "400", "500", "600", "700", "800", "900", "xx-small", "x-small", "small", "medium",
-        "large", "x-large", "xx-large", "-webkit-xxx-large", "smaller", "larger", "serif", "sans-serif", "cursive",
+        "large", "x-large", "xx-large", "xxx-large", "smaller", "larger", "serif", "sans-serif", "cursive",
         "fantasy", "monospace", "-webkit-body", "-webkit-pictograph", "-apple-system",
         "-apple-system-headline", "-apple-system-body", "-apple-system-subheadline", "-apple-system-footnote",
         "-apple-system-caption1", "-apple-system-caption2", "-apple-system-short-headline", "-apple-system-short-body",
@@ -731,7 +742,7 @@ WI.CSSKeywordCompletions._propertyKeywordMap = {
         "none", "hidden", "inset", "groove", "ridge", "outset", "dotted", "dashed", "solid", "double"
     ],
     "font-size": [
-        "xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large", "-webkit-xxx-large", "smaller", "larger"
+        "xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large", "xxx-large", "smaller", "larger"
     ],
     "font-variant": [
         "small-caps", "normal"
@@ -806,10 +817,10 @@ WI.CSSKeywordCompletions._propertyKeywordMap = {
         "auto", "alphabetic", "under"
     ],
     "transition": [
-        "none", "ease", "linear", "ease-in", "ease-out", "ease-in-out", "step-start", "step-end", "steps()", "cubic-bezier()", "spring()", "all", WI.CSSKeywordCompletions.AllPropertyNamesPlaceholder
+        "none", "ease", "linear", "ease-in", "ease-out", "ease-in-out", "step-start", "step-end", "steps()", "cubic-bezier()", "linear()", "spring()", "all", WI.CSSKeywordCompletions.AllPropertyNamesPlaceholder
     ],
     "transition-timing-function": [
-        "ease", "linear", "ease-in", "ease-out", "ease-in-out", "step-start", "step-end", "steps()", "cubic-bezier()", "spring()"
+        "ease", "linear", "ease-in", "ease-out", "ease-in-out", "step-start", "step-end", "steps()", "cubic-bezier()", "linear()", "spring()"
     ],
     "transition-property": [
         "all", "none", WI.CSSKeywordCompletions.AllPropertyNamesPlaceholder
@@ -827,7 +838,7 @@ WI.CSSKeywordCompletions._propertyKeywordMap = {
         "paused", "running"
     ],
     "animation-timing-function": [
-        "ease", "linear", "ease-in", "ease-out", "ease-in-out", "step-start", "step-end", "steps()", "cubic-bezier()", "spring()"
+        "ease", "linear", "ease-in", "ease-out", "ease-in-out", "step-start", "step-end", "steps()", "cubic-bezier()", "linear()", "spring()"
     ],
     "align-content": [
         "auto",
@@ -966,9 +977,6 @@ WI.CSSKeywordCompletions._propertyKeywordMap = {
     "font-feature-settings": [
         "normal"
     ],
-    "-webkit-animation-trigger": [
-        "auto", "container-scroll()"
-    ],
 
     // iOS Properties
     "-webkit-text-size-adjust": [
@@ -998,7 +1006,7 @@ WI.CSSKeywordCompletions._propertyKeywordMap = {
         "paused", "running",
     ],
     "-webkit-animation-timing-function": [
-        "ease", "linear", "ease-in", "ease-out", "ease-in-out", "step-start", "step-end", "steps()", "cubic-bezier()", "spring()",
+        "ease", "linear", "ease-in", "ease-out", "ease-in-out", "step-start", "step-end", "steps()", "cubic-bezier()", "linear()", "spring()",
     ],
     "-webkit-appearance": [
         "none", "checkbox", "radio", "push-button", "square-button", "button", "button-bevel", "default-button", "inner-spin-button", "listbox", "listitem", "media-controls-background", "media-controls-dark-bar-background", "media-controls-fullscreen-background", "media-controls-light-bar-background", "media-current-time-display", "media-enter-fullscreen-button", "media-exit-fullscreen-button", "media-fullscreen-volume-slider", "media-fullscreen-volume-slider-thumb", "media-mute-button", "media-overlay-play-button", "media-play-button", "media-return-to-realtime-button", "media-rewind-button", "media-seek-back-button", "media-seek-forward-button", "media-slider", "media-sliderthumb", "media-time-remaining-display", "media-toggle-closed-captions-button", "media-volume-slider", "media-volume-slider-container", "media-volume-slider-mute-button", "media-volume-sliderthumb", "menulist", "menulist-button", "menulist-text", "menulist-textfield", "meter", "progress-bar", "progress-bar-value", "slider-horizontal", "slider-vertical", "sliderthumb-horizontal", "sliderthumb-vertical", "caret", "searchfield", "searchfield-decoration", "searchfield-results-decoration", "searchfield-results-button", "searchfield-cancel-button", "snapshotted-plugin-overlay", "textfield", "relevancy-level-indicator", "continuous-capacity-level-indicator", "discrete-capacity-level-indicator", "rating-level-indicator", "-apple-pay-button", "textarea", "attachment", "borderless-attachment", "caps-lock-indicator",

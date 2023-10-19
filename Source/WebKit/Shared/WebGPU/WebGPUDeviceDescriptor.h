@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 Apple Inc. All rights reserved.
+ * Copyright (C) 2021-2023 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -28,9 +28,9 @@
 #if ENABLE(GPU_PROCESS)
 
 #include "WebGPUObjectDescriptorBase.h"
+#include <WebCore/WebGPUFeatureName.h>
 #include <cstdint>
 #include <optional>
-#include <pal/graphics/WebGPU/WebGPUFeatureName.h>
 #include <wtf/HashMap.h>
 #include <wtf/KeyValuePair.h>
 #include <wtf/Vector.h>
@@ -38,35 +38,8 @@
 namespace WebKit::WebGPU {
 
 struct DeviceDescriptor : public ObjectDescriptorBase {
-    Vector<PAL::WebGPU::FeatureName> requiredFeatures;
+    Vector<WebCore::WebGPU::FeatureName> requiredFeatures;
     Vector<KeyValuePair<String, uint64_t>> requiredLimits;
-
-    template<class Encoder> void encode(Encoder& encoder) const
-    {
-        encoder << static_cast<const ObjectDescriptorBase&>(*this);
-        encoder << requiredFeatures;
-        encoder << requiredLimits;
-    }
-
-    template<class Decoder> static std::optional<DeviceDescriptor> decode(Decoder& decoder)
-    {
-        std::optional<ObjectDescriptorBase> objectDescriptorBase;
-        decoder >> objectDescriptorBase;
-        if (!objectDescriptorBase)
-            return std::nullopt;
-
-        std::optional<Vector<PAL::WebGPU::FeatureName>> requiredFeatures;
-        decoder >> requiredFeatures;
-        if (!requiredFeatures)
-            return std::nullopt;
-
-        std::optional<Vector<KeyValuePair<String, uint64_t>>> requiredLimits;
-        decoder >> requiredLimits;
-        if (!requiredLimits)
-            return std::nullopt;
-
-        return { { WTFMove(*objectDescriptorBase), WTFMove(*requiredFeatures), WTFMove(*requiredLimits) } };
-    }
 };
 
 } // namespace WebKit::WebGPU

@@ -50,7 +50,7 @@ void InjectedBundlePageUIClient::willAddMessageToConsole(WebPage* page, MessageS
         m_client.willAddMessageToConsole(toAPI(page), toAPI(message.impl()), lineNumber, m_client.base.clientInfo);
 }
 
-void InjectedBundlePageUIClient::willAddMessageWithArgumentsToConsole(WebPage* page, MessageSource, MessageLevel, const String& message, Span<const String> messageArguments, unsigned lineNumber, unsigned columnNumber, const String& sourceID)
+void InjectedBundlePageUIClient::willAddMessageWithArgumentsToConsole(WebPage* page, MessageSource, MessageLevel, const String& message, std::span<const String> messageArguments, unsigned lineNumber, unsigned columnNumber, const String& sourceID)
 {
     if (m_client.willAddMessageWithDetailsToConsole)
         m_client.willAddMessageWithDetailsToConsole(toAPI(page), toAPI(message.impl()), toAPI(&API::Array::createStringArray(messageArguments).leakRef()), lineNumber, columnNumber, toAPI(sourceID.impl()), m_client.base.clientInfo);
@@ -80,7 +80,7 @@ void InjectedBundlePageUIClient::willRunJavaScriptPrompt(WebPage* page, const St
         m_client.willRunJavaScriptPrompt(toAPI(page), toAPI(message.impl()), toAPI(defaultValue.impl()), toAPI(frame), m_client.base.clientInfo);
 }
 
-void InjectedBundlePageUIClient::mouseDidMoveOverElement(WebPage* page, const HitTestResult& coreHitTestResult, OptionSet<WebEvent::Modifier> modifiers, RefPtr<API::Object>& userData)
+void InjectedBundlePageUIClient::mouseDidMoveOverElement(WebPage* page, const HitTestResult& coreHitTestResult, OptionSet<WebEventModifier> modifiers, RefPtr<API::Object>& userData)
 {
     if (!m_client.mouseDidMoveOverElement)
         return;

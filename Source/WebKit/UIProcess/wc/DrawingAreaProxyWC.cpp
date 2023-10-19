@@ -29,7 +29,10 @@
 #include "config.h"
 #include "DrawingAreaProxyWC.h"
 
+#if USE(GRAPHICS_LAYER_WC)
+
 #include "DrawingAreaMessages.h"
+#include "MessageSenderInlines.h"
 #include "UpdateInfo.h"
 #include "WebCoreArgumentCoders.h"
 #include "WebPageProxy.h"
@@ -37,8 +40,8 @@
 
 namespace WebKit {
 
-DrawingAreaProxyWC::DrawingAreaProxyWC(WebPageProxy& webPageProxy, WebProcessProxy& process)
-    : DrawingAreaProxy(DrawingAreaType::WC, webPageProxy, process)
+DrawingAreaProxyWC::DrawingAreaProxyWC(WebPageProxy& webPageProxy)
+    : DrawingAreaProxy(DrawingAreaType::WC, webPageProxy)
 {
 }
 
@@ -56,19 +59,14 @@ void DrawingAreaProxyWC::sizeDidChange()
 {
     discardBackingStore();
     m_currentBackingStoreStateID++;
-    send(Messages::DrawingArea::UpdateGeometry(m_currentBackingStoreStateID, m_size));
+    m_webPageProxy.send(Messages::DrawingArea::UpdateGeometryWC(m_currentBackingStoreStateID, m_size), m_identifier);
 }
 
-void DrawingAreaProxyWC::dispatchAfterEnsuringDrawing(WTF::Function<void(CallbackBase::Error)>&& completionHandler)
-{
-    completionHandler(CallbackBase::Error::None);
-}
-
-void DrawingAreaProxyWC::update(uint64_t backingStoreStateID, const UpdateInfo& updateInfo)
+void DrawingAreaProxyWC::update(uint64_t backingStoreStateID, UpdateInfo&& updateInfo)
 {
     if (backingStoreStateID == m_currentBackingStoreStateID)
-        incorporateUpdate(updateInfo);
-    send(Messages::DrawingArea::DidUpdate());
+        incorporateUpdate(WTFMove(updateInfo));
+    m_webPageProxy.send(Messages::DrawingArea::DisplayDidRefresh(), m_identifier);
 }
 
 void DrawingAreaProxyWC::enterAcceleratedCompositingMode(uint64_t backingStoreStateID, const LayerTreeContext&)
@@ -76,7 +74,7 @@ void DrawingAreaProxyWC::enterAcceleratedCompositingMode(uint64_t backingStoreSt
     discardBackingStore();
 }
 
-void DrawingAreaProxyWC::incorporateUpdate(const UpdateInfo& updateInfo)
+void DrawingAreaProxyWC::incorporateUpdate(UpdateInfo&& updateInfo)
 {
     if (updateInfo.updateRectBounds.isEmpty())
         return;
@@ -84,14 +82,15 @@ void DrawingAreaProxyWC::incorporateUpdate(const UpdateInfo& updateInfo)
     if (!m_backingStore)
         m_backingStore.emplace(updateInfo.viewSize, updateInfo.deviceScaleFactor, m_webPageProxy);
 
-    m_backingStore->incorporateUpdate(updateInfo);
-
     WebCore::Region damageRegion;
     if (updateInfo.scrollRect.isEmpty()) {
         for (const auto& rect : updateInfo.updateRects)
             damageRegion.unite(rect);
     } else
         damageRegion = WebCore::IntRect({ }, m_webPageProxy.viewSize());
+
+    m_backingStore->incorporateUpdate(WTFMove(updateInfo));
+
     m_webPageProxy.setViewNeedsDisplay(damageRegion);
 }
 
@@ -101,3 +100,5 @@ void DrawingAreaProxyWC::discardBackingStore()
 }
 
 } // namespace WebKit
+
+#endif // USE(GRAPHICS_LAYER_WC)

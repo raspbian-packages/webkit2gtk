@@ -63,7 +63,7 @@ public:
     explicit LibWebRTCProvider(WebPage&);
 
 private:
-    std::unique_ptr<SuspendableSocketFactory> createSocketFactory(String&& /* userAgent */, bool /* isFirstParty */, WebCore::RegistrableDomain&&) final;
+    std::unique_ptr<SuspendableSocketFactory> createSocketFactory(String&& /* userAgent */, WebCore::ScriptExecutionContextIdentifier, bool /* isFirstParty */, WebCore::RegistrableDomain&&) final;
 
     rtc::scoped_refptr<webrtc::PeerConnectionInterface> createPeerConnection(WebCore::ScriptExecutionContextIdentifier, webrtc::PeerConnectionObserver&, rtc::PacketSocketFactory*, webrtc::PeerConnectionInterface::RTCConfiguration&&) final;
 
@@ -72,10 +72,9 @@ private:
     RefPtr<WebCore::RTCDataChannelRemoteHandlerConnection> createRTCDataChannelRemoteHandlerConnection() final;
     void setLoggingLevel(WTFLogLevel) final;
 
+    void willCreatePeerConnectionFactory() final;
+
     WebPage& m_webPage;
-#if ENABLE(GPU_PROCESS) && PLATFORM(COCOA) && !PLATFORM(MACCATALYST)
-    bool m_didInitializeCallback { false };
-#endif
 };
 
 inline LibWebRTCProvider::LibWebRTCProvider(WebPage& webPage)

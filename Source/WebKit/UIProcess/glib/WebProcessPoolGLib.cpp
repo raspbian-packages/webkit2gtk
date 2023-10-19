@@ -45,11 +45,7 @@
 #endif
 
 #if PLATFORM(WAYLAND)
-#if USE(WPE_RENDERER)
 #include "AcceleratedBackingStoreWayland.h"
-#else
-#include "WaylandCompositor.h"
-#endif
 #endif
 
 #if USE(WPE_RENDERER)
@@ -58,15 +54,16 @@
 
 #if PLATFORM(GTK)
 #include "GtkSettingsManager.h"
+#include "AcceleratedBackingStoreDMABuf.h"
 #endif
+
 
 namespace WebKit {
 
 void WebProcessPool::platformInitialize()
 {
-#if PLATFORM(GTK)
     m_alwaysUsesComplexTextCodePath = true;
-#endif
+
     if (const char* forceComplexText = getenv("WEBKIT_FORCE_COMPLEX_TEXT"))
         m_alwaysUsesComplexTextCodePath = !strcmp(forceComplexText, "1");
 
@@ -82,22 +79,26 @@ void WebProcessPool::platformInitializeWebProcess(const WebProcessProxy& process
     parameters.isServiceWorkerProcess = process.isRunningServiceWorkers();
 
     if (!parameters.isServiceWorkerProcess) {
-        parameters.hostClientFileDescriptor = IPC::Attachment(UnixFileDescriptor(wpe_renderer_host_create_client(), UnixFileDescriptor::Adopt));
+        parameters.hostClientFileDescriptor = UnixFileDescriptor { wpe_renderer_host_create_client(), UnixFileDescriptor::Adopt };
         parameters.implementationLibraryName = FileSystem::fileSystemRepresentation(String::fromLatin1(wpe_loader_get_loaded_implementation_library_name()));
     }
 #endif
 
+#if USE(GBM)
+    parameters.renderDeviceFile = WebCore::PlatformDisplay::sharedDisplay().drmRenderNodeFile();
+#endif
+
+#if PLATFORM(GTK)
+    parameters.dmaBufRendererBufferMode = AcceleratedBackingStoreDMABuf::rendererBufferMode();
+#endif
+
 #if PLATFORM(WAYLAND)
-    if (WebCore::PlatformDisplay::sharedDisplay().type() == WebCore::PlatformDisplay::Type::Wayland) {
-#if USE(WPE_RENDERER)
+    if (WebCore::PlatformDisplay::sharedDisplay().type() == WebCore::PlatformDisplay::Type::Wayland && parameters.dmaBufRendererBufferMode.isEmpty()) {
         wpe_loader_init("libWPEBackend-fdo-1.0.so.1");
         if (AcceleratedBackingStoreWayland::checkRequirements()) {
-            parameters.hostClientFileDescriptor = IPC::Attachment(UnixFileDescriptor(wpe_renderer_host_create_client(), UnixFileDescriptor::Adopt));
+            parameters.hostClientFileDescriptor = UnixFileDescriptor { wpe_renderer_host_create_client(), UnixFileDescriptor::Adopt };
             parameters.implementationLibraryName = FileSystem::fileSystemRepresentation(String::fromLatin1(wpe_loader_get_loaded_implementation_library_name()));
         }
-#elif USE(EGL)
-        parameters.waylandCompositorDisplayName = WaylandCompositor::singleton().displayName();
-#endif
     }
 #endif
 
@@ -117,6 +118,8 @@ void WebProcessPool::platformInitializeWebProcess(const WebProcessProxy& process
 #endif
 
     parameters.memoryPressureHandlerConfiguration = m_configuration->memoryPressureHandlerConfiguration();
+
+    parameters.disableFontHintingForTesting = m_configuration->disableFontHintingForTesting();
 
     GApplication* app = g_application_get_default();
     if (app)

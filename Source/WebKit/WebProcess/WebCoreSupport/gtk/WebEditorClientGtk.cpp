@@ -23,8 +23,8 @@
 #include <WebCore/Document.h>
 #include <WebCore/Editor.h>
 #include <WebCore/EventNames.h>
-#include <WebCore/Frame.h>
 #include <WebCore/KeyboardEvent.h>
+#include <WebCore/LocalFrame.h>
 #include <WebCore/PagePasteboardContext.h>
 #include <WebCore/Pasteboard.h>
 #include <WebCore/PlatformKeyboardEvent.h>
@@ -37,7 +37,7 @@
 namespace WebKit {
 using namespace WebCore;
 
-bool WebEditorClient::handleGtkEditorCommand(Frame& frame, const String& command, bool allowTextInsertion)
+bool WebEditorClient::handleGtkEditorCommand(LocalFrame& frame, const String& command, bool allowTextInsertion)
 {
     if (command == "GtkInsertEmoji"_s) {
         if (!allowTextInsertion)
@@ -49,7 +49,7 @@ bool WebEditorClient::handleGtkEditorCommand(Frame& frame, const String& command
     return false;
 }
 
-bool WebEditorClient::executePendingEditorCommands(Frame& frame, const Vector<WTF::String>& pendingEditorCommands, bool allowTextInsertion)
+bool WebEditorClient::executePendingEditorCommands(LocalFrame& frame, const Vector<WTF::String>& pendingEditorCommands, bool allowTextInsertion)
 {
     Vector<std::variant<Editor::Command, String>> commands;
     for (auto& commandString : pendingEditorCommands) {
@@ -98,7 +98,7 @@ void WebEditorClient::handleKeyboardEvent(KeyboardEvent& event)
         // During RawKeyDown events if an editor command will insert text, defer
         // the insertion until the keypress event. We want keydown to bubble up
         // through the DOM first.
-        if (platformEvent->type() == PlatformEvent::RawKeyDown) {
+        if (platformEvent->type() == PlatformEvent::Type::RawKeyDown) {
             if (executePendingEditorCommands(*frame, pendingEditorCommands, false))
                 event.setDefaultHandled();
 
@@ -134,7 +134,7 @@ void WebEditorClient::handleKeyboardEvent(KeyboardEvent& event)
         event.setDefaultHandled();
 }
 
-void WebEditorClient::updateGlobalSelection(Frame* frame)
+void WebEditorClient::updateGlobalSelection(LocalFrame* frame)
 {
     if (!frame->selection().isRange())
         return;

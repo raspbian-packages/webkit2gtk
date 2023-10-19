@@ -23,6 +23,8 @@ GLuint CompileProgramInternal(const char *vsSource,
                               const char *fsSource,
                               const std::function<void(GLuint)> &preLinkCallback)
 {
+    GLuint program = glCreateProgram();
+
     GLuint vs = CompileShader(GL_VERTEX_SHADER, vsSource);
     GLuint fs = CompileShader(GL_FRAGMENT_SHADER, fsSource);
 
@@ -30,10 +32,9 @@ GLuint CompileProgramInternal(const char *vsSource,
     {
         glDeleteShader(fs);
         glDeleteShader(vs);
+        glDeleteProgram(program);
         return 0;
     }
-
-    GLuint program = glCreateProgram();
 
     glAttachShader(program, vs);
     glDeleteShader(vs);
@@ -519,6 +520,19 @@ void main()
 })";
 }
 
+// A shader that sets gl_Position to attribute a_position, and sets gl_PointSize to 1.
+const char *SimpleForPoints()
+{
+    return R"(precision highp float;
+attribute vec4 a_position;
+
+void main()
+{
+    gl_Position = a_position;
+    gl_PointSize = 1.0;
+})";
+}
+
 // A shader that simply passes through attribute a_position, setting it to gl_Position and varying
 // v_position.
 const char *Passthrough()
@@ -546,6 +560,18 @@ void main()
 {
     gl_Position = a_position;
     v_texCoord = a_position.xy * 0.5 + vec2(0.5);
+})";
+}
+
+const char *Texture2DArray()
+{
+    return R"(#version 300 es
+out vec2 v_texCoord;
+in vec4 a_position;
+void main()
+{
+    gl_Position = vec4(a_position.xy, 0.0, 1.0);
+    v_texCoord = (a_position.xy * 0.5) + 0.5;
 })";
 }
 
@@ -646,6 +672,20 @@ void main()
 })";
 }
 
+const char *Texture2DArray()
+{
+    return R"(#version 300 es
+precision highp float;
+uniform highp sampler2DArray tex2DArray;
+uniform int slice;
+in vec2 v_texCoord;
+out vec4 fragColor;
+void main()
+{
+    fragColor = texture(tex2DArray, vec3(v_texCoord, float(slice)));
+})";
+}
+
 }  // namespace fs
 }  // namespace essl1_shaders
 
@@ -686,6 +726,18 @@ in vec4 a_position;
 void main()
 {
     gl_Position = a_position;
+})";
+}
+
+// A shader that sets gl_Position to attribute a_position, and sets gl_PointSize to 1.
+const char *SimpleForPoints()
+{
+    return R"(#version 300 es
+in vec4 a_position;
+void main()
+{
+    gl_Position = a_position;
+    gl_PointSize = 1.0;
 })";
 }
 

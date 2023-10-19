@@ -38,7 +38,9 @@ namespace WebKit {
 #if PLATFORM(IOS_FAMILY)
 bool defaultPassiveTouchListenersAsDefaultOnDocument();
 bool defaultCSSOMViewScrollingAPIEnabled();
+bool defaultShouldPrintBackgrounds();
 bool defaultAlternateFormControlDesignEnabled();
+bool defaultVideoFullscreenRequiresElementFullscreen();
 #if ENABLE(TEXT_AUTOSIZING)
 bool defaultTextAutosizingUsesIdempotentMode();
 #endif
@@ -67,10 +69,18 @@ bool defaultOfflineWebApplicationCacheEnabled();
 #if ENABLE(MEDIA_STREAM)
 bool defaultCaptureAudioInGPUProcessEnabled();
 bool defaultCaptureAudioInUIProcessEnabled();
+bool defaultManageCaptureStatusBarInGPUProcessEnabled();
 #endif
 
 #if ENABLE(MEDIA_SOURCE) && PLATFORM(IOS_FAMILY)
 bool defaultMediaSourceEnabled();
+#endif
+
+#if ENABLE(MANAGED_MEDIA_SOURCE) && ENABLE(MEDIA_SOURCE)
+bool defaultManagedMediaSourceEnabled();
+#if ENABLE(WIRELESS_PLAYBACK_TARGET)
+bool defaultManagedMediaSourceNeedsAirPlay();
+#endif
 #endif
 
 #if ENABLE(MEDIA_SESSION_COORDINATOR)
@@ -83,6 +93,26 @@ bool defaultVisualTranslationEnabled();
 bool defaultRemoveBackgroundEnabled();
 #endif
 
+#if ENABLE(GAMEPAD)
+bool defaultGamepadVibrationActuatorEnabled();
+#endif
+
+bool defaultRunningBoardThrottlingEnabled();
+bool defaultShouldDropNearSuspendedAssertionAfterDelay();
 bool defaultShowModalDialogEnabled();
+bool defaultLiveRangeSelectionEnabled();
+
+bool defaultShouldEnableScreenOrientationAPI();
+bool defaultPopoverAttributeEnabled();
+bool defaultUseGPUProcessForDOMRenderingEnabled();
+bool defaultSearchInputIncrementalAttributeAndSearchEventEnabled();
+
+#if HAVE(SC_CONTENT_SHARING_PICKER)
+bool defaultUseSCContentSharingPicker();
+#endif
+
+#if USE(LIBWEBRTC)
+bool defaultPeerConnectionEnabledAvailable();
+#endif
 
 } // namespace WebKit

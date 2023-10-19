@@ -22,15 +22,17 @@
 #if ENABLE(WEB_RTC) && USE(GSTREAMER_WEBRTC)
 #include "GStreamerWebRTCUtils.h"
 
+#include "OpenSSLCryptoUniquePtr.h"
 #include "RTCIceCandidate.h"
 #include "RTCIceProtocol.h"
-
+#include <cstdint>
+#include <limits>
 #include <openssl/bn.h>
 #include <openssl/rsa.h>
 #include <openssl/ssl.h>
 #include <wtf/CryptographicallyRandomNumber.h>
-#include <wtf/Scope.h>
 #include <wtf/WallTime.h>
+#include <wtf/WeakRandomNumber.h>
 #include <wtf/text/Base64.h>
 #include <wtf/text/StringToIntegerConversion.h>
 
@@ -110,7 +112,7 @@ GUniquePtr<GstStructure> fromRTCEncodingParameters(const RTCRtpEncodingParameter
         "rid", G_TYPE_STRING, parameters.rid.utf8().data(), "bitrate-priority", G_TYPE_DOUBLE, toWebRTCBitRatePriority(parameters.priority), nullptr));
 
     if (parameters.ssrc)
-        gst_structure_set(rtcParameters.get(), "ssrc", G_TYPE_ULONG, parameters.ssrc, nullptr);
+        gst_structure_set(rtcParameters.get(), "ssrc", G_TYPE_UINT, parameters.ssrc, nullptr);
 
     if (parameters.maxBitrate)
         gst_structure_set(rtcParameters.get(), "max-bitrate", G_TYPE_ULONG, parameters.maxBitrate, nullptr);
@@ -179,17 +181,36 @@ RTCRtpSendParameters toRTCRtpSendParameters(const GstStructure* rtcParameters)
         return { };
 
     RTCRtpSendParameters parameters;
+    parameters.transactionId = makeString(gst_structure_get_string(rtcParameters, "transaction-id"));
+
     auto* encodings = gst_structure_get_value(rtcParameters, "encodings");
     unsigned size = gst_value_list_get_size(encodings);
     for (unsigned i = 0; i < size; i++) {
         const auto* value = gst_value_list_get_value(encodings, i);
-        parameters.encodings.append(toRTCEncodingParameters(GST_STRUCTURE_CAST(value)));
+        RELEASE_ASSERT(GST_VALUE_HOLDS_STRUCTURE(value));
+        parameters.encodings.append(toRTCEncodingParameters(gst_value_get_structure(value)));
     }
 
     // FIXME: Handle rtcParameters.degradation_preference.
     return parameters;
 }
 
+GUniquePtr<GstStructure> fromRTCSendParameters(const RTCRtpSendParameters& parameters)
+{
+    GUniquePtr<GstStructure> gstParameters(gst_structure_new("send-parameters", "transaction-id", G_TYPE_STRING, parameters.transactionId.ascii().data(), nullptr));
+    GValue encodingsValue = G_VALUE_INIT;
+    g_value_init(&encodingsValue, GST_TYPE_LIST);
+    for (auto& encoding : parameters.encodings) {
+        auto encodingData = fromRTCEncodingParameters(encoding);
+        GValue value = G_VALUE_INIT;
+        g_value_init(&value, GST_TYPE_STRUCTURE);
+        gst_value_set_structure(&value, encodingData.get());
+        gst_value_list_append_value(&encodingsValue, &value);
+        g_value_unset(&value);
+    }
+    gst_structure_take_value(gstParameters.get(), "encodings", &encodingsValue);
+    return gstParameters;
+}
 
 static void ensureDebugCategoryInitialized()
 {
@@ -202,9 +223,11 @@ static void ensureDebugCategoryInitialized()
 std::optional<RTCIceCandidate::Fields> parseIceCandidateSDP(const String& sdp)
 {
     ensureDebugCategoryInitialized();
-    GST_DEBUG("Parsing ICE Candidate: %s", sdp.utf8().data());
-    if (!sdp.startsWith("candidate:"_s))
+    GST_TRACE("Parsing ICE Candidate: %s", sdp.utf8().data());
+    if (!sdp.startsWith("candidate:"_s)) {
+        GST_WARNING("Invalid SDP ICE candidate format, must start with candidate: prefix");
         return { };
+    }
 
     String foundation;
     unsigned componentId = 0;
@@ -229,8 +252,10 @@ std::optional<RTCIceCandidate::Fields> parseIceCandidateSDP(const String& sdp)
         case 1:
             if (auto value = parseInteger<unsigned>(token))
                 componentId = *value;
-            else
+            else {
+                GST_WARNING("Invalid SDP candidate component ID: %s", token.ascii().data());
                 return { };
+            }
             break;
         case 2:
             transport = token;
@@ -238,8 +263,10 @@ std::optional<RTCIceCandidate::Fields> parseIceCandidateSDP(const String& sdp)
         case 3:
             if (auto value = parseInteger<unsigned>(token))
                 priority = *value;
-            else
+            else {
+                GST_WARNING("Invalid SDP candidate priority: %s", token.ascii().data());
                 return { };
+            }
             break;
         case 4:
             address = token;
@@ -247,12 +274,16 @@ std::optional<RTCIceCandidate::Fields> parseIceCandidateSDP(const String& sdp)
         case 5:
             if (auto value = parseInteger<unsigned>(token))
                 port = *value;
-            else
+            else {
+                GST_WARNING("Invalid SDP candidate port: %s", token.ascii().data());
                 return { };
+            }
             break;
         default:
-            if (it + 1 == tokens.end())
+            if (it + 1 == tokens.end()) {
+                GST_WARNING("Incomplete SDP candidate");
                 return { };
+            }
 
             it++;
             if (token == "typ"_s)
@@ -269,8 +300,10 @@ std::optional<RTCIceCandidate::Fields> parseIceCandidateSDP(const String& sdp)
         }
     }
 
-    if (type.isEmpty())
+    if (type.isEmpty()) {
+        GST_WARNING("Unable to parse candidate type");
         return { };
+    }
 
     RTCIceCandidate::Fields fields;
     fields.foundation = foundation;
@@ -293,20 +326,16 @@ std::optional<RTCIceCandidate::Fields> parseIceCandidateSDP(const String& sdp)
 
 static String x509Serialize(X509* x509)
 {
-    BIO* bio = BIO_new(BIO_s_mem());
+    auto bio = BIOPtr(BIO_new(BIO_s_mem()));
     if (!bio)
         return { };
 
-    auto scopeExit = WTF::makeScopeExit([&] {
-        BIO_free(bio);
-    });
-
-    if (!PEM_write_bio_X509(bio, x509))
+    if (!PEM_write_bio_X509(bio.get(), x509))
         return { };
 
     Vector<char> buffer;
     buffer.reserveCapacity(4096);
-    int length = BIO_read(bio, buffer.data(), 4096);
+    int length = BIO_read(bio.get(), buffer.data(), 4096);
     if (!length)
         return { };
 
@@ -315,20 +344,16 @@ static String x509Serialize(X509* x509)
 
 static String privateKeySerialize(EVP_PKEY* privateKey)
 {
-    BIO* bio = BIO_new(BIO_s_mem());
+    auto bio = BIOPtr(BIO_new(BIO_s_mem()));
     if (!bio)
         return { };
 
-    auto scopeExit = WTF::makeScopeExit([&] {
-        BIO_free(bio);
-    });
-
-    if (!PEM_write_bio_PrivateKey(bio, privateKey, nullptr, nullptr, 0, nullptr, nullptr))
+    if (!PEM_write_bio_PrivateKey(bio.get(), privateKey, nullptr, nullptr, 0, nullptr, nullptr))
         return { };
 
     Vector<char> buffer;
     buffer.reserveCapacity(4096);
-    int length = BIO_read(bio, buffer.data(), 4096);
+    int length = BIO_read(bio.get(), buffer.data(), 4096);
     if (!length)
         return { };
 
@@ -338,66 +363,74 @@ static String privateKeySerialize(EVP_PKEY* privateKey)
 std::optional<Ref<RTCCertificate>> generateCertificate(Ref<SecurityOrigin>&& origin, const PeerConnectionBackend::CertificateInformation& info)
 {
     ensureDebugCategoryInitialized();
-    EVP_PKEY* privateKey = EVP_PKEY_new();
-    if (!privateKey) {
-        GST_WARNING("Failed to create private key");
-        return { };
-    }
-
-    auto scopeExit = WTF::makeScopeExit([&] {
-        EVP_PKEY_free(privateKey);
-    });
+    EvpPKeyPtr privateKey;
 
     switch (info.type) {
     case PeerConnectionBackend::CertificateInformation::Type::ECDSAP256: {
-        EC_KEY* ecKey = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1);
-        // Ensure curve name is included when EC key is serialized.
-        // Without this call, OpenSSL versions before 1.1.0 will create
-        // certificates that don't work for TLS.
-        // This is a no-op for BoringSSL and OpenSSL 1.1.0+
-        EC_KEY_set_asn1_flag(ecKey, OPENSSL_EC_NAMED_CURVE);
-        if (!privateKey || !ecKey || !EC_KEY_generate_key(ecKey) || !EVP_PKEY_assign_EC_KEY(privateKey, ecKey)) {
-            EC_KEY_free(ecKey);
+        privateKey.reset(EVP_EC_gen("prime256v1"));
+        if (!privateKey)
             return { };
-        }
         break;
     }
     case PeerConnectionBackend::CertificateInformation::Type::RSASSAPKCS1v15: {
-        RSA* rsa = RSA_new();
-        if (!rsa)
-            return { };
-
-        BIGNUM* exponent = BN_new();
         int publicExponent = info.rsaParameters ? info.rsaParameters->publicExponent : 65537;
         auto modulusLength = info.rsaParameters ? info.rsaParameters->modulusLength : 2048;
-        if (!BN_set_word(exponent, publicExponent) || !RSA_generate_key_ex(rsa, modulusLength, exponent, nullptr)
-            || !EVP_PKEY_assign_RSA(privateKey, rsa)) {
-            RSA_free(rsa);
+
+        auto ctx = EvpPKeyCtxPtr(EVP_PKEY_CTX_new_from_name(nullptr, "RSA", nullptr));
+        if (!ctx)
             return { };
-        }
-        BN_free(exponent);
+
+        EVP_PKEY_keygen_init(ctx.get());
+
+        auto paramsBuilder = OsslParamBldPtr(OSSL_PARAM_BLD_new());
+        if (!paramsBuilder)
+            return { };
+
+        auto exponent = BIGNUMPtr(BN_new());
+        if (!BN_set_word(exponent.get(), publicExponent))
+            return { };
+
+        auto modulus = BIGNUMPtr(BN_new());
+        if (!BN_set_word(modulus.get(), modulusLength))
+            return { };
+
+        if (!OSSL_PARAM_BLD_push_BN(paramsBuilder.get(), "n", modulus.get()))
+            return { };
+
+        if (!OSSL_PARAM_BLD_push_BN(paramsBuilder.get(), "e", exponent.get()))
+            return { };
+
+        if (!OSSL_PARAM_BLD_push_BN(paramsBuilder.get(), "d", nullptr))
+            return { };
+
+        auto params = OsslParamPtr(OSSL_PARAM_BLD_to_param(paramsBuilder.get()));
+        if (!params)
+            return { };
+
+        EVP_PKEY_CTX_set_params(ctx.get(), params.get());
+
+        EVP_PKEY* pkey = nullptr;
+        EVP_PKEY_generate(ctx.get(), &pkey);
+        if (!pkey)
+            return { };
+        privateKey.reset(pkey);
         break;
     }
     }
 
-    X509* x509 = X509_new();
+    auto x509 = X509Ptr(X509_new());
     if (!x509) {
         GST_WARNING("Failed to create certificate");
         return { };
     }
 
-    auto certScopeExit = WTF::makeScopeExit([&] {
-        X509_free(x509);
-    });
-
-    X509_set_version(x509, 2);
+    X509_set_version(x509.get(), 2);
 
     // Set a random 64 bit integer as serial number.
-    BIGNUM* serialNumber = BN_new();
-    BN_pseudo_rand(serialNumber, 64, 0, 0);
-    ASN1_INTEGER* asn1SerialNumber = X509_get_serialNumber(x509);
-    BN_to_ASN1_INTEGER(serialNumber, asn1SerialNumber);
-    BN_free(serialNumber);
+    auto serialNumber = BIGNUMPtr(BN_new());
+    BN_rand(serialNumber.get(), 64, 0, 0);
+    ASN1_INTEGER* asn1SerialNumber = X509_get_serialNumber(x509.get());
+    BN_to_ASN1_INTEGER(serialNumber.get(), asn1SerialNumber);
 
     // Set a random 8 byte base64 string as issuer/subject.
     X509_NAME* name = X509_NAME_new();
@@ -405,25 +438,25 @@ std::optional<Ref<RTCCertificate>> generateCertificate(Ref<SecurityOrigin>&& ori
     WTF::cryptographicallyRandomValues(buffer.data(), buffer.size());
     auto commonName = base64EncodeToString(buffer);
     X509_NAME_add_entry_by_NID(name, NID_commonName, MBSTRING_ASC, (const guchar*)commonName.ascii().data(), -1, -1, 0);
-    X509_set_subject_name(x509, name);
-    X509_set_issuer_name(x509, name);
+    X509_set_subject_name(x509.get(), name);
+    X509_set_issuer_name(x509.get(), name);
     X509_NAME_free(name);
 
     // Fallback to 30 days, max out at one year.
     uint64_t expires = info.expires.value_or(2592000);
     expires = std::min<uint64_t>(expires, 31536000000);
-    X509_gmtime_adj(X509_getm_notBefore(x509), 0);
-    X509_gmtime_adj(X509_getm_notAfter(x509), expires);
-    X509_set_pubkey(x509, privateKey);
+    X509_gmtime_adj(X509_getm_notBefore(x509.get()), 0);
+    X509_gmtime_adj(X509_getm_notAfter(x509.get()), expires);
+    X509_set_pubkey(x509.get(), privateKey.get());
 
-    if (!X509_sign(x509, privateKey, EVP_sha256())) {
+    if (!X509_sign(x509.get(), privateKey.get(), EVP_sha256())) {
         GST_WARNING("Failed to sign certificate");
         return { };
     }
 
-    auto pem = x509Serialize(x509);
+    auto pem = x509Serialize(x509.get());
     GST_DEBUG("Generated certificate PEM: %s", pem.ascii().data());
-    auto serializedPrivateKey = privateKeySerialize(privateKey);
+    auto serializedPrivateKey = privateKeySerialize(privateKey.get());
     Vector<RTCCertificate::DtlsFingerprint> fingerprints;
     // FIXME: Fill fingerprints.
     auto expirationTime = WTF::WallTime::now().secondsSinceEpoch() + WTF::Seconds(expires);
@@ -442,13 +475,46 @@ bool sdpMediaHasAttributeKey(const GstSDPMedia* media, const char* key)
     return false;
 }
 
-GRefPtr<GstCaps> capsFromRtpCapabilities(const RTCRtpCapabilities& capabilities, Function<void(GstStructure*)> supplementCapsCallback)
+uint32_t UniqueSSRCGenerator::generateSSRC()
+{
+    Locker locker { m_lock };
+    unsigned remainingAttempts = 255;
+    while (remainingAttempts) {
+        auto candidate = weakRandomNumber<uint32_t>();
+        if (!m_knownIds.contains(candidate)) {
+            m_knownIds.append(candidate);
+            return candidate;
+        }
+        remainingAttempts--;
+    }
+    return std::numeric_limits<uint32_t>::max();
+}
+
+std::optional<int> payloadTypeForEncodingName(const char* encodingName)
+{
+    static HashMap<String, int> staticPayloadTypes = {
+        { "PCMU"_s, 0 },
+        { "PCMA"_s, 8 },
+        { "G722"_s, 9 },
+    };
+
+    auto key = String::fromLatin1(encodingName);
+    if (staticPayloadTypes.contains(key))
+        return staticPayloadTypes.get(key);
+    return { };
+}
+
+GRefPtr<GstCaps> capsFromRtpCapabilities(RefPtr<UniqueSSRCGenerator> ssrcGenerator, const RTCRtpCapabilities& capabilities, Function<void(GstStructure*)> supplementCapsCallback)
 {
     auto caps = adoptGRef(gst_caps_new_empty());
     for (unsigned index = 0; auto& codec : capabilities.codecs) {
         auto components = codec.mimeType.split('/');
         auto* codecStructure = gst_structure_new("application/x-rtp", "media", G_TYPE_STRING, components[0].ascii().data(),
             "encoding-name", G_TYPE_STRING, components[1].ascii().data(), "clock-rate", G_TYPE_INT, codec.clockRate, nullptr);
+
+        auto ssrc = ssrcGenerator->generateSSRC();
+        if (ssrc != std::numeric_limits<uint32_t>::max())
+            gst_structure_set(codecStructure, "ssrc", G_TYPE_UINT, ssrc, nullptr);
 
         if (!codec.sdpFmtpLine.isEmpty()) {
             for (auto& fmtp : codec.sdpFmtpLine.split(';')) {
@@ -460,10 +526,14 @@ GRefPtr<GstCaps> capsFromRtpCapabilities(const RTCRtpCapabilities& capabilities,
         if (codec.channels && *codec.channels > 1)
             gst_structure_set(codecStructure, "encoding-params", G_TYPE_STRING, makeString(*codec.channels).ascii().data(), nullptr);
 
+        const char* encodingName = gst_structure_get_string(codecStructure, "encoding-name");
+        if (auto payloadType = payloadTypeForEncodingName(encodingName))
+            gst_structure_set(codecStructure, "payload", G_TYPE_INT, *payloadType, nullptr);
+
         supplementCapsCallback(codecStructure);
 
         if (!index) {
-            for (unsigned i = 0; auto& extension : capabilities.headerExtensions)
+            for (unsigned i = 1; auto& extension : capabilities.headerExtensions)
                 gst_structure_set(codecStructure, makeString("extmap-", i++).ascii().data(), G_TYPE_STRING, extension.uri.ascii().data(), nullptr);
         }
         gst_caps_append_structure(caps.get(), codecStructure);
@@ -505,7 +575,7 @@ GRefPtr<GstCaps> capsFromSDPMedia(const GstSDPMedia* media)
         auto rtpMap = StringView::fromLatin1(rtpMapValue);
         auto components = rtpMap.split(' ');
         auto payloadType = parseInteger<int>(*components.begin());
-        if (!payloadType || !*payloadType) {
+        if (!payloadType) {
             GST_WARNING("Invalid payload type in rtpmap %s", rtpMap.utf8().data());
             continue;
         }
@@ -522,12 +592,24 @@ GRefPtr<GstCaps> capsFromSDPMedia(const GstSDPMedia* media)
         for (unsigned j = 0; j < gst_caps_get_size(formatCaps); j++) {
             auto* structure = gst_caps_get_structure(formatCaps, j);
             gst_structure_set_name(structure, "application/x-rtp");
+
+            // Remove attributes unrelated with codec preferences, potentially leading to internal
+            // webrtcbin confusions such as duplicated RTP direction attributes for instance.
+            gst_structure_remove_fields(structure, "a-setup", "a-ice-ufrag", "a-ice-pwd", "a-sendrecv", "a-inactive",
+                "a-sendonly", "a-recvonly", "a-end-of-candidates", nullptr);
+
+            // Remove ssrc- attributes that end up being accumulated in fmtp SDP media parameters.
+            gst_structure_filter_and_map_in_place(structure, reinterpret_cast<GstStructureFilterMapFunc>(+[](GQuark quark, GValue*, gpointer) -> gboolean {
+                return !g_str_has_prefix(g_quark_to_string(quark), "ssrc-");
+            }), nullptr);
         }
 
         gst_caps_append(caps.get(), formatCaps);
     }
     return caps;
 }
+
+#undef GST_CAT_DEFAULT
 
 } // namespace WebCore
 

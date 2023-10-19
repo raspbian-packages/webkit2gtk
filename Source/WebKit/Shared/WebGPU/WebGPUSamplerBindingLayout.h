@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 Apple Inc. All rights reserved.
+ * Copyright (C) 2021-2023 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -27,28 +27,13 @@
 
 #if ENABLE(GPU_PROCESS)
 
+#include <WebCore/WebGPUSamplerBindingType.h>
 #include <optional>
-#include <pal/graphics/WebGPU/WebGPUSamplerBindingType.h>
 
 namespace WebKit::WebGPU {
 
 struct SamplerBindingLayout {
-    PAL::WebGPU::SamplerBindingType type { PAL::WebGPU::SamplerBindingType::Filtering };
-
-    template<class Encoder> void encode(Encoder& encoder) const
-    {
-        encoder << type;
-    }
-
-    template<class Decoder> static std::optional<SamplerBindingLayout> decode(Decoder& decoder)
-    {
-        std::optional<PAL::WebGPU::SamplerBindingType> type;
-        decoder >> type;
-        if (!type)
-            return std::nullopt;
-
-        return { { WTFMove(*type) } };
-    }
+    WebCore::WebGPU::SamplerBindingType type { WebCore::WebGPU::SamplerBindingType::Filtering };
 };
 
 } // namespace WebKit::WebGPU

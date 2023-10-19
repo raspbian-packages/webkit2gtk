@@ -34,6 +34,7 @@
 #include "WebKitTestServer.h"
 #include "WebViewTest.h"
 #include <WebCore/SoupVersioning.h>
+#include <wtf/HashSet.h>
 #include <wtf/glib/GRefPtr.h>
 
 static WebKitTestServer* gServer;
@@ -52,10 +53,15 @@ static void testWebKitSettings(Test*, gconstpointer)
     webkit_settings_set_auto_load_images(settings, FALSE);
     g_assert_false(webkit_settings_get_auto_load_images(settings));
 
-    // load-icons-ignoring-image-load-setting is false by default.
+    ALLOW_DEPRECATED_DECLARATIONS_BEGIN
+    // load-icons-ignoring-image-load-setting is deprecated and always false.
+    // Make warnings non-fatal for this test to make it pass.
+    Test::removeLogFatalFlag(G_LOG_LEVEL_WARNING);
     g_assert_false(webkit_settings_get_load_icons_ignoring_image_load_setting(settings));
     webkit_settings_set_load_icons_ignoring_image_load_setting(settings, TRUE);
-    g_assert_true(webkit_settings_get_load_icons_ignoring_image_load_setting(settings));
+    g_assert_false(webkit_settings_get_load_icons_ignoring_image_load_setting(settings));
+    Test::addLogFatalFlag(G_LOG_LEVEL_WARNING);
+    ALLOW_DEPRECATED_DECLARATIONS_END
     
     // Offline application cache is true by default.
     g_assert_true(webkit_settings_get_enable_offline_web_application_cache(settings));
@@ -71,13 +77,6 @@ static void testWebKitSettings(Test*, gconstpointer)
     g_assert_true(webkit_settings_get_enable_html5_database(settings));
     webkit_settings_set_enable_html5_database(settings, FALSE);
     g_assert_false(webkit_settings_get_enable_html5_database(settings));
-
-ALLOW_DEPRECATED_DECLARATIONS_BEGIN
-    // Frame flattening is disabled by default.
-    g_assert_false(webkit_settings_get_enable_frame_flattening(settings));
-    webkit_settings_set_enable_frame_flattening(settings, TRUE);
-    g_assert_true(webkit_settings_get_enable_frame_flattening(settings));
-ALLOW_DEPRECATED_DECLARATIONS_END
 
     // By default, JavaScript can open windows automatically is disabled.
     g_assert_false(webkit_settings_get_javascript_can_open_windows_automatically(settings));
@@ -336,16 +335,16 @@ ALLOW_DEPRECATED_DECLARATIONS_END
     g_assert_cmpstr(nullptr, ==, webkit_settings_get_media_content_types_requiring_hardware_support(settings));
 
 #if PLATFORM(GTK)
-#if !USE(GTK4)
     // Always is the default hardware acceleration policy.
     g_assert_cmpuint(webkit_settings_get_hardware_acceleration_policy(settings), ==, WEBKIT_HARDWARE_ACCELERATION_POLICY_ALWAYS);
     webkit_settings_set_hardware_acceleration_policy(settings, WEBKIT_HARDWARE_ACCELERATION_POLICY_NEVER);
     g_assert_cmpuint(webkit_settings_get_hardware_acceleration_policy(settings), ==, WEBKIT_HARDWARE_ACCELERATION_POLICY_NEVER);
+#if !USE(GTK4)
     webkit_settings_set_hardware_acceleration_policy(settings, WEBKIT_HARDWARE_ACCELERATION_POLICY_ON_DEMAND);
     g_assert_cmpuint(webkit_settings_get_hardware_acceleration_policy(settings), ==, WEBKIT_HARDWARE_ACCELERATION_POLICY_ON_DEMAND);
+#endif
     webkit_settings_set_hardware_acceleration_policy(settings, WEBKIT_HARDWARE_ACCELERATION_POLICY_ALWAYS);
     g_assert_cmpuint(webkit_settings_get_hardware_acceleration_policy(settings), ==, WEBKIT_HARDWARE_ACCELERATION_POLICY_ALWAYS);
-#endif
 
     // Back-forward navigation gesture is disabled by default
     g_assert_false(webkit_settings_get_enable_back_forward_navigation_gestures(settings));
@@ -358,6 +357,7 @@ ALLOW_DEPRECATED_DECLARATIONS_END
     webkit_settings_set_enable_javascript_markup(settings, FALSE);
     g_assert_false(webkit_settings_get_enable_javascript_markup(settings));
 
+#if !ENABLE(2022_GLIB_API)
 ALLOW_DEPRECATED_DECLARATIONS_BEGIN
     // Accelerated 2D canvas is deprecated and always disabled.
     g_assert_false(webkit_settings_get_enable_accelerated_2d_canvas(settings));
@@ -369,6 +369,11 @@ ALLOW_DEPRECATED_DECLARATIONS_BEGIN
     webkit_settings_set_enable_xss_auditor(settings, TRUE);
     g_assert_false(webkit_settings_get_enable_xss_auditor(settings));
 
+    // Frame flattening is deprecated and always disabled.
+    g_assert_false(webkit_settings_get_enable_frame_flattening(settings));
+    webkit_settings_set_enable_frame_flattening(settings, TRUE);
+    g_assert_false(webkit_settings_get_enable_frame_flattening(settings));
+
     // Java is not supported, and always disabled.
     // Make warnings non-fatal for this test to make it pass.
     Test::removeLogFatalFlag(G_LOG_LEVEL_WARNING);
@@ -377,6 +382,12 @@ ALLOW_DEPRECATED_DECLARATIONS_BEGIN
     g_assert_false(webkit_settings_get_enable_java(settings));
     Test::addLogFatalFlag(G_LOG_LEVEL_WARNING);
 ALLOW_DEPRECATED_DECLARATIONS_END
+#endif
+
+    // WebSecurity is enabled by default.
+    g_assert_false(webkit_settings_get_disable_web_security(settings));
+    webkit_settings_set_disable_web_security(settings, TRUE);
+    g_assert_true(webkit_settings_get_disable_web_security(settings));
 
     g_object_unref(G_OBJECT(settings));
 }
@@ -386,12 +397,60 @@ void testWebKitSettingsNewWithSettings(Test* test, gconstpointer)
     GRefPtr<WebKitSettings> settings = adoptGRef(webkit_settings_new_with_settings(
         "enable-javascript", FALSE,
         "auto-load-images", FALSE,
-        "load-icons-ignoring-image-load-setting", TRUE,
         nullptr));
     test->assertObjectIsDeletedWhenTestFinishes(G_OBJECT(settings.get()));
     g_assert_false(webkit_settings_get_enable_javascript(settings.get()));
     g_assert_false(webkit_settings_get_auto_load_images(settings.get()));
-    g_assert_true(webkit_settings_get_load_icons_ignoring_image_load_setting(settings.get()));
+}
+
+void testWebKitFeatures(Test* test, gconstpointer)
+{
+    g_autoptr(WebKitFeatureList) allFeatures = webkit_settings_get_all_features();
+    g_assert_nonnull(allFeatures);
+
+    auto allFeaturesCount = webkit_feature_list_get_length(allFeatures);
+
+    {
+        // Keep a set of identifiers to validate their uniqueness.
+        HashSet<String> featureIdentifiers;
+        featureIdentifiers.reserveInitialCapacity(allFeaturesCount);
+        for (gsize i = 0; i < allFeaturesCount; i++) {
+            auto* feature = webkit_feature_list_get(allFeatures, i);
+            g_assert_nonnull(webkit_feature_get_identifier(feature));
+            g_assert_nonnull(webkit_feature_get_category(feature));
+
+            auto identifier = String::fromUTF8(webkit_feature_get_identifier(feature));
+            g_assert_false(featureIdentifiers.contains(identifier));
+            featureIdentifiers.add(WTFMove(identifier));
+        }
+
+        g_assert_cmpuint(featureIdentifiers.size(), ==, allFeaturesCount);
+    }
+
+    // These are subsets of the list of all features.
+    g_autoptr(WebKitFeatureList) experimentalFeatures = webkit_settings_get_experimental_features();
+    g_assert_nonnull(experimentalFeatures);
+    g_assert_cmpuint(allFeaturesCount, >=, webkit_feature_list_get_length(experimentalFeatures));
+
+    g_autoptr(WebKitFeatureList) developmentFeatures = webkit_settings_get_development_features();
+    g_assert_nonnull(developmentFeatures);
+    g_assert_cmpuint(allFeaturesCount, >=, webkit_feature_list_get_length(developmentFeatures));
+
+    // Try toggling a feature.
+    GRefPtr<WebKitSettings> settings = adoptGRef(webkit_settings_new());
+    auto* feature = webkit_feature_list_get(experimentalFeatures, 0);
+    auto wasEnabled = webkit_settings_get_feature_enabled(settings.get(), feature);
+    webkit_settings_set_feature_enabled(settings.get(), feature, !wasEnabled);
+    g_assert(wasEnabled != webkit_settings_get_feature_enabled(settings.get(), feature));
+
+    // Check that enabled status is the same as the declared default.
+    // FIXME(255779): Some defaults are overriden in code and out of sync with UnifiedWebPreferences.yaml
+#if 0
+    for (gsize i = 0; i < allFeaturesCount; i++) {
+        auto* feature = webkit_feature_list_get(allFeatures, i);
+        g_assert(webkit_settings_get_feature_enabled(settings.get(), feature) == webkit_feature_get_default_value(feature));
+    }
+#endif
 }
 
 #if PLATFORM(GTK)
@@ -501,6 +560,7 @@ void beforeAll()
 
     Test::add("WebKitSettings", "webkit-settings", testWebKitSettings);
     Test::add("WebKitSettings", "new-with-settings", testWebKitSettingsNewWithSettings);
+    Test::add("WebKitSettings", "features", testWebKitFeatures);
 #if PLATFORM(GTK)
     WebViewTest::add("WebKitSettings", "user-agent", testWebKitSettingsUserAgent);
 #endif

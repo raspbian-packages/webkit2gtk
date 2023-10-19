@@ -38,6 +38,7 @@ namespace WebCore {
 class ResourceError;
 class SecurityOrigin;
 class SharedBuffer;
+enum class AdvancedPrivacyProtections : uint16_t;
 }
 
 namespace WebKit {
@@ -57,6 +58,9 @@ public:
         PAL::SessionID sessionID;
         WebPageProxyIdentifier webPageProxyID;
         WebCore::StoredCredentialsPolicy storedCredentialsPolicy;
+        bool allowPrivacyProxy { true };
+        OptionSet<WebCore::AdvancedPrivacyProtections> advancedPrivacyProtections;
+        bool includeFetchMetadata { false };
     };
     using CompletionCallback = CompletionHandler<void(WebCore::ResourceError&&)>;
 

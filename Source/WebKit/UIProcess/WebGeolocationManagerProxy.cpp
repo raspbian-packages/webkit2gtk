@@ -27,6 +27,8 @@
 #include "WebGeolocationManagerProxy.h"
 
 #include "APIGeolocationProvider.h"
+#include "GeolocationPermissionRequestManagerProxy.h"
+#include "GeolocationPermissionRequestProxy.h"
 #include "Logging.h"
 #include "WebGeolocationManagerMessages.h"
 #include "WebGeolocationManagerProxyMessages.h"
@@ -40,7 +42,7 @@ namespace WebKit {
 
 static inline WebProcessProxy& connectionToWebProcessProxy(const IPC::Connection& connection)
 {
-    return static_cast<WebProcessProxy&>(connection.client());
+    return static_cast<WebProcessProxy&>(*connection.client());
 }
 
 const char* WebGeolocationManagerProxy::supplementName()
@@ -134,8 +136,8 @@ void WebGeolocationManagerProxy::startUpdating(IPC::Connection& connection, cons
 
 void WebGeolocationManagerProxy::startUpdatingWithProxy(WebProcessProxy& proxy, const WebCore::RegistrableDomain& registrableDomain, WebPageProxyIdentifier pageProxyID, const String& authorizationToken, bool enableHighAccuracy)
 {
-    auto* page = WebProcessProxy::webPage(pageProxyID);
-    MESSAGE_CHECK(proxy.connection(), page);
+    auto page = WebProcessProxy::webPage(pageProxyID);
+    MESSAGE_CHECK(proxy.connection(), !!page);
 
     auto isValidAuthorizationToken = page->geolocationPermissionRequestManager().isValidAuthorizationToken(authorizationToken);
     MESSAGE_CHECK(proxy.connection(), isValidAuthorizationToken);
@@ -188,7 +190,7 @@ void WebGeolocationManagerProxy::stopUpdatingWithProxy(WebProcessProxy& proxy, c
             providerSetEnabledHighAccuracy(perDomainData, highAccuracyShouldBeEnabled);
     }
 
-    if (perDomainData.watchers.computesEmpty() && perDomainData.watchersNeedingHighAccuracy.computesEmpty())
+    if (perDomainData.watchers.isEmptyIgnoringNullReferences() && perDomainData.watchersNeedingHighAccuracy.isEmptyIgnoringNullReferences())
         m_perDomainData.remove(it);
 }
 
@@ -220,13 +222,13 @@ bool WebGeolocationManagerProxy::isUpdating(const PerDomainData& perDomainData) 
 {
 #if PLATFORM(IOS_FAMILY)
     if (!m_clientProvider)
-        return !perDomainData.watchers.computesEmpty();
+        return !perDomainData.watchers.isEmptyIgnoringNullReferences();
 #else
     UNUSED_PARAM(perDomainData);
 #endif
 
     for (auto& perDomainData : m_perDomainData.values()) {
-        if (!perDomainData->watchers.computesEmpty())
+        if (!perDomainData->watchers.isEmptyIgnoringNullReferences())
             return true;
     }
     return false;
@@ -237,13 +239,13 @@ bool WebGeolocationManagerProxy::isHighAccuracyEnabled(const PerDomainData& perD
 {
 #if PLATFORM(IOS_FAMILY)
     if (!m_clientProvider)
-        return !perDomainData.watchersNeedingHighAccuracy.computesEmpty();
+        return !perDomainData.watchersNeedingHighAccuracy.isEmptyIgnoringNullReferences();
 #else
     UNUSED_PARAM(perDomainData);
 #endif
 
     for (auto& data : m_perDomainData.values()) {
-        if (!data->watchersNeedingHighAccuracy.computesEmpty())
+        if (!data->watchersNeedingHighAccuracy.isEmptyIgnoringNullReferences())
             return true;
     }
     return false;
@@ -255,7 +257,7 @@ void WebGeolocationManagerProxy::providerStartUpdating(PerDomainData& perDomainD
     if (!m_clientProvider) {
         ASSERT(!perDomainData.provider);
         perDomainData.provider = makeUnique<WebCore::CoreLocationGeolocationProvider>(registrableDomain, *this);
-        perDomainData.provider->setEnableHighAccuracy(!perDomainData.watchersNeedingHighAccuracy.computesEmpty());
+        perDomainData.provider->setEnableHighAccuracy(!perDomainData.watchersNeedingHighAccuracy.isEmptyIgnoringNullReferences());
         return;
     }
 #else

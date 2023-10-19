@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 Apple Inc. All rights reserved.
+ * Copyright (C) 2021-2023 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -29,9 +29,9 @@
 
 #include "WebGPUBufferBinding.h"
 #include "WebGPUIdentifier.h"
+#include <WebCore/WebGPUIntegralTypes.h>
 #include <cstdint>
 #include <optional>
-#include <pal/graphics/WebGPU/WebGPUIntegralTypes.h>
 
 namespace WebKit::WebGPU {
 
@@ -43,43 +43,10 @@ enum class BindingResourceType : uint8_t {
 };
 
 struct BindGroupEntry {
-    PAL::WebGPU::Index32 binding { 0 };
+    WebCore::WebGPU::Index32 binding { 0 };
     BufferBinding bufferBinding;
     WebGPUIdentifier identifier;
     BindingResourceType type { BindingResourceType::Sampler };
-
-    template<class Encoder> void encode(Encoder& encoder) const
-    {
-        encoder << binding;
-        encoder << bufferBinding;
-        encoder << identifier;
-        encoder << type;
-    }
-
-    template<class Decoder> static std::optional<BindGroupEntry> decode(Decoder& decoder)
-    {
-        std::optional<PAL::WebGPU::Index32> binding;
-        decoder >> binding;
-        if (!binding)
-            return std::nullopt;
-
-        std::optional<BufferBinding> bufferBinding;
-        decoder >> bufferBinding;
-        if (!bufferBinding)
-            return std::nullopt;
-
-        std::optional<WebGPUIdentifier> identifier;
-        decoder >> identifier;
-        if (!identifier)
-            return std::nullopt;
-
-        std::optional<BindingResourceType> type;
-        decoder >> type;
-        if (!type)
-            return std::nullopt;
-
-        return { { WTFMove(*binding), WTFMove(*bufferBinding), WTFMove(*identifier), WTFMove(*type) } };
-    }
 };
 
 } // namespace WebKit::WebGPU

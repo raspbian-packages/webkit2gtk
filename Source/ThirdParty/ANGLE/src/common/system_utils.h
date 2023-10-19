@@ -43,10 +43,28 @@ bool IsFullPath(std::string dirName);
 std::string GetRootDirectory();
 std::string ConcatenatePath(std::string first, std::string second);
 
+Optional<std::string> GetTempDirectory();
+Optional<std::string> CreateTemporaryFileInDirectory(const std::string &directory);
+Optional<std::string> CreateTemporaryFile();
+
+#if defined(ANGLE_PLATFORM_POSIX)
+// Same as CreateTemporaryFileInDirectory(), but allows for supplying an extension.
+Optional<std::string> CreateTemporaryFileInDirectoryWithExtension(const std::string &directory,
+                                                                  const std::string &extension);
+#endif
+
 // Get absolute time in seconds.  Use this function to get an absolute time with an unknown origin.
 double GetCurrentSystemTime();
 // Get CPU time for current process in seconds.
 double GetCurrentProcessCpuTime();
+
+// Unique thread id (std::this_thread::get_id() gets recycled!)
+uint64_t GetCurrentThreadUniqueId();
+// Fast function to get thread id when performance is critical (may be recycled).
+// On Android 7-8x faster than GetCurrentThreadUniqueId().
+ThreadId GetCurrentThreadId();
+// Returns id that does not represent a thread.
+ThreadId InvalidThreadId();
 
 // Run an application and get the output.  Gets a nullptr-terminated set of args to execute the
 // application with, and returns the stdout and stderr outputs as well as the exit code.
@@ -209,6 +227,31 @@ std::string Narrow(const std::wstring_view &utf16);
 
 // Convert an UTF-8 string to an UTF-16 wstring.
 std::wstring Widen(const std::string_view &utf8);
+#endif
+
+std::string StripFilenameFromPath(const std::string &path);
+
+#if defined(ANGLE_PLATFORM_LINUX) || defined(ANGLE_PLATFORM_WINDOWS)
+// Use C++ thread_local which is about 2x faster than std::this_thread::get_id()
+ANGLE_INLINE ThreadId GetCurrentThreadId()
+{
+    thread_local int tls;
+    return static_cast<ThreadId>(reinterpret_cast<uintptr_t>(&tls));
+}
+ANGLE_INLINE ThreadId InvalidThreadId()
+{
+    return -1;
+}
+#else
+// Default. Fastest on Android (about the same as `pthread_self` and a bit faster then `gettid`).
+ANGLE_INLINE ThreadId GetCurrentThreadId()
+{
+    return std::this_thread::get_id();
+}
+ANGLE_INLINE ThreadId InvalidThreadId()
+{
+    return ThreadId();
+}
 #endif
 }  // namespace angle
 

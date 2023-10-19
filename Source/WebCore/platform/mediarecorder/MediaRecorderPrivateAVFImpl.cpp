@@ -75,6 +75,7 @@ MediaRecorderPrivateAVFImpl::MediaRecorderPrivateAVFImpl(Ref<MediaRecorderPrivat
 
 MediaRecorderPrivateAVFImpl::~MediaRecorderPrivateAVFImpl()
 {
+    m_writer->close();
 }
 
 void MediaRecorderPrivateAVFImpl::startRecording(StartRecordingCallback&& callback)
@@ -106,7 +107,7 @@ void MediaRecorderPrivateAVFImpl::audioSamplesAvailable(const MediaTime& mediaTi
     if (shouldMuteAudio()) {
         if (!m_audioBuffer || m_description != toCAAudioStreamDescription(description)) {
             m_description = toCAAudioStreamDescription(description);
-            m_audioBuffer = makeUnique<WebAudioBufferList>(m_description, sampleCount);
+            m_audioBuffer = makeUnique<WebAudioBufferList>(*m_description, sampleCount);
         } else
             m_audioBuffer->setSampleCount(sampleCount);
         m_audioBuffer->zeroFlatBuffer();

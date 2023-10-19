@@ -30,6 +30,7 @@
 #include <wtf/HashMap.h>
 #include <wtf/ProcessID.h>
 #include <wtf/RefPtr.h>
+#include <wtf/ThreadSafeWeakPtr.h>
 #include <wtf/Threading.h>
 #include <wtf/WeakPtr.h>
 #include <wtf/text/StringHash.h>
@@ -52,7 +53,7 @@ enum class SandboxPermission {
 };
 #endif
 
-class ProcessLauncher : public ThreadSafeRefCounted<ProcessLauncher>, public CanMakeWeakPtr<ProcessLauncher> {
+class ProcessLauncher : public ThreadSafeRefCountedAndCanMakeThreadSafeWeakPtr<ProcessLauncher> {
 public:
     class Client {
     public:
@@ -62,7 +63,7 @@ public:
         virtual bool shouldConfigureJSCForTesting() const { return false; }
         virtual bool isJITEnabled() const { return true; }
         virtual bool shouldEnableSharedArrayBuffer() const { return false; }
-        virtual bool shouldEnableCaptivePortalMode() const { return false; }
+        virtual bool shouldEnableLockdownMode() const { return false; }
 #if PLATFORM(COCOA)
         virtual RefPtr<XPCEventHandler> xpcEventHandler() const { return nullptr; }
 #endif
@@ -85,7 +86,6 @@ public:
         HashMap<String, String> extraInitializationData;
         bool nonValidInjectedCodeAllowed { false };
         bool shouldMakeProcessLaunchFailForTesting { false };
-        CString customWebContentServiceBundleIdentifier;
 
 #if PLATFORM(GTK) || PLATFORM(WPE)
         HashMap<CString, SandboxPermission> extraSandboxPaths;
@@ -106,7 +106,7 @@ public:
     }
 
     bool isLaunching() const { return m_isLaunching; }
-    ProcessID processIdentifier() const { return m_processIdentifier; }
+    ProcessID processID() const { return m_processID; }
 
     void terminateProcess();
     void invalidate();
@@ -135,7 +135,7 @@ private:
 
     const LaunchOptions m_launchOptions;
     bool m_isLaunching { true };
-    ProcessID m_processIdentifier { 0 };
+    ProcessID m_processID { 0 };
 };
 
 } // namespace WebKit

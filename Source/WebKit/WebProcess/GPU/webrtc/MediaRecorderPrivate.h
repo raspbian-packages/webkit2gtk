@@ -27,10 +27,11 @@
 
 #if PLATFORM(COCOA) && ENABLE(GPU_PROCESS) && ENABLE(MEDIA_STREAM)
 
+#include "GPUProcessConnection.h"
 #include "MediaRecorderIdentifier.h"
-#include "SharedRingBufferStorage.h"
+#include "SharedCARingBuffer.h"
 #include "SharedVideoFrame.h"
-
+#include <WebCore/CAAudioStreamDescription.h>
 #include <WebCore/MediaRecorderPrivate.h>
 #include <wtf/MediaTime.h>
 #include <wtf/WeakPtr.h>
@@ -48,11 +49,16 @@ namespace WebKit {
 
 class MediaRecorderPrivate final
     : public WebCore::MediaRecorderPrivate
-    , public GPUProcessConnection::Client {
+    , public GPUProcessConnection::Client
+    , public ThreadSafeRefCountedAndCanMakeThreadSafeWeakPtr<MediaRecorderPrivate> {
     WTF_MAKE_FAST_ALLOCATED;
 public:
     MediaRecorderPrivate(WebCore::MediaStreamPrivate&, const WebCore::MediaRecorderPrivateOptions&);
     ~MediaRecorderPrivate();
+
+    void ref() const final { return ThreadSafeRefCountedAndCanMakeThreadSafeWeakPtr<MediaRecorderPrivate>::ref(); }
+    void deref() const final { return ThreadSafeRefCountedAndCanMakeThreadSafeWeakPtr<MediaRecorderPrivate>::deref(); }
+    ThreadSafeWeakPtrControlBlock& controlBlock() const final { return ThreadSafeRefCountedAndCanMakeThreadSafeWeakPtr<MediaRecorderPrivate>::controlBlock(); }
 
 private:
     // WebCore::MediaRecorderPrivate
@@ -68,16 +74,14 @@ private:
     // GPUProcessConnection::Client
     void gpuProcessConnectionDidClose(GPUProcessConnection&) final;
 
-    void storageChanged(SharedMemory*, const WebCore::CAAudioStreamDescription& format, size_t frameCount);
-
     MediaRecorderIdentifier m_identifier;
     Ref<WebCore::MediaStreamPrivate> m_stream;
     Ref<IPC::Connection> m_connection;
 
-    std::unique_ptr<WebCore::CARingBuffer> m_ringBuffer;
-    WebCore::CAAudioStreamDescription m_description { };
+    std::unique_ptr<ProducerSharedCARingBuffer> m_ringBuffer;
+    std::optional<WebCore::CAAudioStreamDescription> m_description;
     std::unique_ptr<WebCore::WebAudioBufferList> m_silenceAudioBuffer;
-    int64_t m_numberOfFrames { 0 };
+    uint64_t m_numberOfFrames { 0 };
     WebCore::MediaRecorderPrivateOptions m_options;
     bool m_hasVideo { false };
     bool m_isStopped { false };

@@ -25,21 +25,29 @@
 
 #pragma once
 
-#include "AuxiliaryProcessCreationParameters.h"
 #include "Connection.h"
 #include "MessageReceiverMap.h"
 #include "ProcessLauncher.h"
+#include "ProcessThrottler.h"
 #include "ResponsivenessTimer.h"
-#include "SandboxExtension.h"
 #include <WebCore/ProcessIdentifier.h>
+#include <memory>
 #include <wtf/ProcessID.h>
 #include <wtf/SystemTracing.h>
 #include <wtf/ThreadSafeRefCounted.h>
 #include <wtf/UniqueRef.h>
 
+namespace WebCore {
+class SharedBuffer;
+}
+
 namespace WebKit {
 
 class ProcessThrottler;
+class ProcessAssertion;
+class SandboxExtensionHandle;
+
+struct AuxiliaryProcessCreationParameters;
 
 class AuxiliaryProcessProxy : public ThreadSafeRefCounted<AuxiliaryProcessProxy, WTF::DestructionThread::MainRunLoop>, public ResponsivenessTimer::Client, private ProcessLauncher::Client, public IPC::Connection::Client {
     WTF_MAKE_NONCOPYABLE(AuxiliaryProcessProxy);
@@ -58,22 +66,30 @@ public:
     virtual ProcessThrottler& throttler() = 0;
 
     template<typename T> bool send(T&& message, uint64_t destinationID, OptionSet<IPC::SendOption> sendOptions = { });
-    using SendSyncResult = IPC::Connection::SendSyncResult;
-    template<typename T> SendSyncResult sendSync(T&& message, typename T::Reply&&, uint64_t destinationID, IPC::Timeout = 1_s, OptionSet<IPC::SendSyncOption> sendSyncOptions = { });
+
+    template<typename T> using SendSyncResult = IPC::Connection::SendSyncResult<T>;
+    template<typename T> SendSyncResult<T> sendSync(T&& message, uint64_t destinationID, IPC::Timeout = 1_s, OptionSet<IPC::SendSyncOption> sendSyncOptions = { });
 
     enum class ShouldStartProcessThrottlerActivity : bool { No, Yes };
-    template<typename T, typename C> uint64_t sendWithAsyncReply(T&&, C&&, uint64_t destinationID = 0, OptionSet<IPC::SendOption> = { }, ShouldStartProcessThrottlerActivity = ShouldStartProcessThrottlerActivity::Yes);
-    
-    template<typename T, typename U>
-    bool send(T&& message, ObjectIdentifier<U> destinationID, OptionSet<IPC::SendOption> sendOptions = { })
+    using AsyncReplyID = IPC::Connection::AsyncReplyID;
+    template<typename T, typename C> AsyncReplyID sendWithAsyncReply(T&&, C&&, uint64_t destinationID = 0, OptionSet<IPC::SendOption> = { }, ShouldStartProcessThrottlerActivity = ShouldStartProcessThrottlerActivity::Yes);
+
+    template<typename T, typename C>
+    AsyncReplyID sendWithAsyncReply(T&& message, C&& completionHandler, const ObjectIdentifierGenericBase& destinationID, OptionSet<IPC::SendOption> sendOptions = { }, ShouldStartProcessThrottlerActivity shouldStartProcessThrottlerActivity = ShouldStartProcessThrottlerActivity::Yes)
+    {
+        return sendWithAsyncReply(std::forward<T>(message), std::forward<C>(completionHandler), destinationID.toUInt64(), sendOptions, shouldStartProcessThrottlerActivity);
+    }
+
+    template<typename T>
+    bool send(T&& message, const ObjectIdentifierGenericBase& destinationID, OptionSet<IPC::SendOption> sendOptions = { })
     {
         return send<T>(WTFMove(message), destinationID.toUInt64(), sendOptions);
     }
     
-    template<typename T, typename U>
-    SendSyncResult sendSync(T&& message, typename T::Reply&& reply, ObjectIdentifier<U> destinationID, IPC::Timeout timeout = 1_s, OptionSet<IPC::SendSyncOption> sendSyncOptions = { })
+    template<typename T>
+    SendSyncResult<T> sendSync(T&& message, const ObjectIdentifierGenericBase& destinationID, IPC::Timeout timeout = 1_s, OptionSet<IPC::SendSyncOption> sendSyncOptions = { })
     {
-        return sendSync<T>(WTFMove(message), WTFMove(reply), destinationID.toUInt64(), timeout, sendSyncOptions);
+        return sendSync<T>(WTFMove(message), destinationID.toUInt64(), timeout, sendSyncOptions);
     }
 
     IPC::Connection* connection() const
@@ -97,14 +113,12 @@ public:
     void removeMessageReceiver(IPC::ReceiverName, uint64_t destinationID);
     void removeMessageReceiver(IPC::ReceiverName);
     
-    template <typename T>
-    void addMessageReceiver(IPC::ReceiverName messageReceiverName, ObjectIdentifier<T> destinationID, IPC::MessageReceiver& receiver)
+    void addMessageReceiver(IPC::ReceiverName messageReceiverName, const ObjectIdentifierGenericBase& destinationID, IPC::MessageReceiver& receiver)
     {
         addMessageReceiver(messageReceiverName, destinationID.toUInt64(), receiver);
     }
     
-    template <typename T>
-    void removeMessageReceiver(IPC::ReceiverName messageReceiverName, ObjectIdentifier<T> destinationID)
+    void removeMessageReceiver(IPC::ReceiverName messageReceiverName, const ObjectIdentifierGenericBase& destinationID)
     {
         removeMessageReceiver(messageReceiverName, destinationID.toUInt64());
     }
@@ -119,10 +133,10 @@ public:
     bool isLaunching() const { return state() == State::Launching; }
     bool wasTerminated() const;
 
-    ProcessID processIdentifier() const { return m_processLauncher ? m_processLauncher->processIdentifier() : 0; }
+    ProcessID processID() const { return m_processLauncher ? m_processLauncher->processID() : 0; }
 
     bool canSendMessage() const { return state() != State::Terminated;}
-    bool sendMessage(UniqueRef<IPC::Encoder>&&, OptionSet<IPC::SendOption>, std::optional<std::pair<CompletionHandler<void(IPC::Decoder*)>, uint64_t>>&& asyncReplyInfo = std::nullopt, ShouldStartProcessThrottlerActivity = ShouldStartProcessThrottlerActivity::Yes);
+    bool sendMessage(UniqueRef<IPC::Encoder>&&, OptionSet<IPC::SendOption>, std::optional<IPC::Connection::AsyncReplyHandler> = std::nullopt, ShouldStartProcessThrottlerActivity = ShouldStartProcessThrottlerActivity::Yes);
 
     void replyToPendingMessages();
 
@@ -132,6 +146,11 @@ public:
 
     void setProcessSuppressionEnabled(bool);
     bool platformIsBeingDebugged() const;
+
+#if PLATFORM(MAC) && USE(RUNNINGBOARD)
+    bool runningBoardThrottlingEnabled();
+    void setRunningBoardThrottlingEnabled();
+#endif
 
     enum class UseLazyStop : bool { No, Yes };
     void startResponsivenessTimer(UseLazyStop = UseLazyStop::No);
@@ -145,7 +164,13 @@ public:
     void ref() final { ThreadSafeRefCounted::ref(); }
     void deref() final { ThreadSafeRefCounted::deref(); }
 
-    std::optional<SandboxExtension::Handle> createMobileGestaltSandboxExtensionIfNeeded() const;
+    bool operator==(const AuxiliaryProcessProxy& other) const { return (this == &other); }
+
+    std::optional<SandboxExtensionHandle> createMobileGestaltSandboxExtensionIfNeeded() const;
+
+#if USE(RUNNINGBOARD)
+    void wakeUpTemporarilyForIPC();
+#endif
 
 protected:
     // ProcessLauncher::Client
@@ -163,7 +188,7 @@ protected:
     struct PendingMessage {
         UniqueRef<IPC::Encoder> encoder;
         OptionSet<IPC::SendOption> sendOptions;
-        std::optional<std::pair<CompletionHandler<void(IPC::Decoder*)>, uint64_t>> asyncReplyInfo;
+        std::optional<IPC::Connection::AsyncReplyHandler> asyncReplyHandler;
     };
 
     virtual bool shouldSendPendingMessage(const PendingMessage&) { return true; }
@@ -184,9 +209,11 @@ protected:
 private:
     virtual void connectionWillOpen(IPC::Connection&);
     virtual void processWillShutDown(IPC::Connection&) = 0;
+    void outgoingMessageQueueIsGrowingLarge();
 
     void populateOverrideLanguagesLaunchOptions(ProcessLauncher::LaunchOptions&) const;
     Vector<String> platformOverrideLanguages() const;
+    void platformStartConnectionTerminationWatchdog();
 
     ResponsivenessTimer m_responsivenessTimer;
     Vector<PendingMessage> m_pendingMessages;
@@ -198,6 +225,13 @@ private:
     WebCore::ProcessIdentifier m_processIdentifier { WebCore::ProcessIdentifier::generate() };
     std::optional<UseLazyStop> m_delayedResponsivenessCheck;
     MonotonicTime m_processStart;
+#if USE(RUNNINGBOARD)
+    ProcessThrottler::TimedActivity m_timedActivityForIPC;
+#if PLATFORM(MAC)
+    std::unique_ptr<ProcessThrottler::ForegroundActivity> m_lifetimeActivity;
+    RefPtr<ProcessAssertion> m_boostedJetsamAssertion;
+#endif
+#endif
 };
 
 template<typename T>
@@ -211,35 +245,31 @@ bool AuxiliaryProcessProxy::send(T&& message, uint64_t destinationID, OptionSet<
     return sendMessage(WTFMove(encoder), sendOptions);
 }
 
-template<typename U> 
-AuxiliaryProcessProxy::SendSyncResult AuxiliaryProcessProxy::sendSync(U&& message, typename U::Reply&& reply, uint64_t destinationID, IPC::Timeout timeout, OptionSet<IPC::SendSyncOption> sendSyncOptions)
+template<typename T>
+AuxiliaryProcessProxy::SendSyncResult<T> AuxiliaryProcessProxy::sendSync(T&& message, uint64_t destinationID, IPC::Timeout timeout, OptionSet<IPC::SendSyncOption> sendSyncOptions)
 {
-    static_assert(U::isSync, "Sync message expected");
+    static_assert(T::isSync, "Sync message expected");
 
     if (!m_connection)
-        return { };
+        return { IPC::Error::InvalidConnection };
 
     TraceScope scope(SyncMessageStart, SyncMessageEnd);
 
-    return connection()->sendSync(std::forward<U>(message), WTFMove(reply), destinationID, timeout, sendSyncOptions);
+    return connection()->sendSync(std::forward<T>(message), destinationID, timeout, sendSyncOptions);
 }
 
 template<typename T, typename C>
-uint64_t AuxiliaryProcessProxy::sendWithAsyncReply(T&& message, C&& completionHandler, uint64_t destinationID, OptionSet<IPC::SendOption> sendOptions, ShouldStartProcessThrottlerActivity shouldStartProcessThrottlerActivity)
+AuxiliaryProcessProxy::AsyncReplyID AuxiliaryProcessProxy::sendWithAsyncReply(T&& message, C&& completionHandler, uint64_t destinationID, OptionSet<IPC::SendOption> sendOptions, ShouldStartProcessThrottlerActivity shouldStartProcessThrottlerActivity)
 {
     static_assert(!T::isSync, "Async message expected");
 
     auto encoder = makeUniqueRef<IPC::Encoder>(T::name(), destinationID);
-    uint64_t listenerID = IPC::nextAsyncReplyHandlerID();
-    encoder.get() << listenerID;
     encoder.get() << message.arguments();
-    sendMessage(WTFMove(encoder), sendOptions, {{ [completionHandler = WTFMove(completionHandler)] (IPC::Decoder* decoder) mutable {
-        if (decoder && decoder->isValid())
-            T::callReply(*decoder, WTFMove(completionHandler));
-        else
-            T::cancelReply(WTFMove(completionHandler));
-    }, listenerID }}, shouldStartProcessThrottlerActivity);
-    return listenerID;
+    auto handler = IPC::Connection::makeAsyncReplyHandler<T>(WTFMove(completionHandler));
+    auto replyID = handler.replyID;
+    if (sendMessage(WTFMove(encoder), sendOptions, WTFMove(handler), shouldStartProcessThrottlerActivity))
+        return replyID;
+    return { };
 }
     
 } // namespace WebKit

@@ -25,7 +25,7 @@
 
 #pragma once
 
-#if ENABLE(INTELLIGENT_TRACKING_PREVENTION)
+#if ENABLE(TRACKING_PREVENTION)
 
 #include "ArgumentCoders.h"
 #include "Decoder.h"
@@ -158,6 +158,8 @@ public:
     void removeDataForDomain(const RegistrableDomain, CompletionHandler<void()>&&);
     void deleteAndRestrictWebsiteDataForRegistrableDomains(OptionSet<WebsiteDataType>, RegistrableDomainsToDeleteOrRestrictWebsiteDataFor&&, bool shouldNotifyPage, CompletionHandler<void(HashSet<RegistrableDomain>&&)>&&);
     void registrableDomains(CompletionHandler<void(Vector<RegistrableDomain>&&)>&&);
+    void registrableDomainsWithLastAccessedTime(CompletionHandler<void(std::optional<HashMap<RegistrableDomain, WallTime>>)>&&);
+    void registrableDomainsExemptFromWebsiteDataDeletion(CompletionHandler<void(HashSet<RegistrableDomain>&&)>&&);
     void registrableDomainsWithWebsiteData(OptionSet<WebsiteDataType>, bool shouldNotifyPage, CompletionHandler<void(HashSet<RegistrableDomain>&&)>&&);
     StorageAccessWasGranted grantStorageAccessInStorageSession(const SubFrameDomain&, const TopFrameDomain&, std::optional<WebCore::FrameIdentifier>, WebCore::PageIdentifier, StorageAccessScope);
     void hasHadUserInteraction(RegistrableDomain&&, CompletionHandler<void(bool)>&&);
@@ -170,6 +172,7 @@ public:
     void setPrevalentResource(RegistrableDomain&&, CompletionHandler<void()>&&);
     void setVeryPrevalentResource(RegistrableDomain&&, CompletionHandler<void()>&&);
     void dumpResourceLoadStatistics(CompletionHandler<void(String&&)>&&);
+    void setMostRecentWebPushInteractionTime(RegistrableDomain&&, CompletionHandler<void()>&&);
     void isPrevalentResource(RegistrableDomain&&, CompletionHandler<void(bool)>&&);
     void isVeryPrevalentResource(RegistrableDomain&&, CompletionHandler<void(bool)>&&);
     void isRegisteredAsSubresourceUnder(SubResourceDomain&&, TopFrameDomain&&, CompletionHandler<void(bool)>&&);
@@ -222,6 +225,9 @@ public:
 #if ENABLE(APP_BOUND_DOMAINS)
     void setAppBoundDomains(HashSet<RegistrableDomain>&&, CompletionHandler<void()>&&);
 #endif
+#if ENABLE(MANAGED_DOMAINS)
+    void setManagedDomains(HashSet<RegistrableDomain>&&, CompletionHandler<void()>&&);
+#endif
     void didCreateNetworkProcess();
 
     void notifyResourceLoadStatisticsProcessed();
@@ -265,7 +271,7 @@ private:
     Ref<SuspendableWorkQueue> m_statisticsQueue;
     std::unique_ptr<ResourceLoadStatisticsStore> m_statisticsStore;
 
-    RunLoop::Timer<WebResourceLoadStatisticsStore> m_dailyTasksTimer;
+    RunLoop::Timer m_dailyTasksTimer;
 
     WebCore::ResourceLoadStatistics::IsEphemeral m_isEphemeral { WebCore::ResourceLoadStatistics::IsEphemeral::No };
     HashSet<RegistrableDomain> m_domainsWithEphemeralUserInteraction;

@@ -26,6 +26,7 @@
 #include "config.h"
 #include "WebNotificationManager.h"
 
+#include "Logging.h"
 #include "WebCoreArgumentCoders.h"
 #include "WebPage.h"
 #include "WebProcess.h"
@@ -53,16 +54,53 @@
 namespace WebKit {
 using namespace WebCore;
 
+#if ENABLE(NOTIFICATIONS)
+static bool sendMessage(WebPage* page, const Function<bool(IPC::Connection&, uint64_t)>& sendMessage)
+{
+#if ENABLE(BUILT_IN_NOTIFICATIONS)
+    if (DeprecatedGlobalSettings::builtInNotificationsEnabled())
+        return sendMessage(WebProcess::singleton().ensureNetworkProcessConnection().connection(), WebProcess::singleton().sessionID().toUInt64());
+#endif
+
+    std::optional<WebCore::PageIdentifier> pageIdentifier;
+    if (page)
+        pageIdentifier = page->identifier();
+#if ENABLE(SERVICE_WORKER)
+    else if (auto* connection = SWContextManager::singleton().connection()) {
+        // Pageless notification messages are, by default, on behalf of a service worker.
+        // So use the service worker connection's page identifier.
+        pageIdentifier = connection->pageIdentifier();
+    }
+#endif
+
+    ASSERT(pageIdentifier);
+    return sendMessage(*WebProcess::singleton().parentProcessConnection(), pageIdentifier->toUInt64());
+}
+
+template<typename U> static bool sendNotificationMessage(U&& message, WebPage* page)
+{
+    return sendMessage(page, [&] (auto& connection, auto destinationIdentifier) {
+        return connection.send(WTFMove(message), destinationIdentifier) == IPC::Error::NoError;
+    });
+}
+
+template<typename U> static bool sendNotificationMessageWithAsyncReply(U&& message, WebPage* page, CompletionHandler<void()>&& callback)
+{
+    return sendMessage(page, [&] (auto& connection, auto destinationIdentifier) {
+        return !!connection.sendWithAsyncReply(WTFMove(message), WTFMove(callback), destinationIdentifier);
+    });
+}
+#endif // ENABLE(NOTIFICATIONS)
+
 const char* WebNotificationManager::supplementName()
 {
     return "WebNotificationManager";
 }
 
 WebNotificationManager::WebNotificationManager(WebProcess& process)
-    : m_process(process)
 {
 #if ENABLE(NOTIFICATIONS)
-    m_process.addMessageReceiver(Messages::WebNotificationManager::messageReceiverName(), *this);
+    process.addMessageReceiver(Messages::WebNotificationManager::messageReceiverName(), *this);
 #endif
 }
 
@@ -102,15 +140,18 @@ void WebNotificationManager::didRemoveNotificationDecisions(const Vector<String>
 #endif
 }
 
-NotificationClient::Permission WebNotificationManager::policyForOrigin(const String& originString) const
+NotificationClient::Permission WebNotificationManager::policyForOrigin(const String& originString, WebPage* page) const
 {
 #if ENABLE(NOTIFICATIONS)
     if (originString.isEmpty())
         return NotificationClient::Permission::Default;
 
     auto it = m_permissionsMap.find(originString);
-    if (it != m_permissionsMap.end())
+    if (it != m_permissionsMap.end()) {
+        if (it->value && page)
+            sendNotificationMessage(Messages::NotificationManagerMessageHandler::PageWasNotifiedOfNotificationPermission(), page);
         return it->value ? NotificationClient::Permission::Granted : NotificationClient::Permission::Denied;
+    }
 #else
     UNUSED_PARAM(originString);
 #endif
@@ -125,80 +166,43 @@ void WebNotificationManager::removeAllPermissionsForTesting()
 #endif
 }
 
-#if ENABLE(NOTIFICATIONS)
-static bool sendMessage(Notification& notification, WebPage* page, const Function<bool(IPC::Connection&, uint64_t)>& sendMessage)
-{
-    if (!page && !notification.scriptExecutionContext())
-        return false;
-
-#if ENABLE(BUILT_IN_NOTIFICATIONS)
-    if (DeprecatedGlobalSettings::builtInNotificationsEnabled())
-        return sendMessage(WebProcess::singleton().ensureNetworkProcessConnection().connection(), WebProcess::singleton().sessionID().toUInt64());
-#endif
-
-    std::optional<WebCore::PageIdentifier> pageIdentifier;
-    if (page)
-        pageIdentifier = page->identifier();
-#if ENABLE(SERVICE_WORKER)
-    else if (auto* connection = SWContextManager::singleton().connection()) {
-        // Pageless notification messages are, by default, on behalf of a service worker.
-        // So use the service worker connection's page identifier.
-        pageIdentifier = connection->pageIdentifier();
-    }
-#endif
-
-    ASSERT(pageIdentifier);
-    return sendMessage(*WebProcess::singleton().parentProcessConnection(), pageIdentifier->toUInt64());
-}
-
-template<typename U> bool WebNotificationManager::sendNotificationMessage(U&& message, Notification& notification, WebPage* page)
-{
-    return sendMessage(notification, page, [&] (auto& connection, auto destinationIdentifier) {
-        return connection.send(WTFMove(message), destinationIdentifier);
-    });
-}
-
-template<typename U> bool WebNotificationManager::sendNotificationMessageWithAsyncReply(U&& message, Notification& notification, WebPage* page, CompletionHandler<void()>&& callback)
-{
-    return sendMessage(notification, page, [&] (auto& connection, auto destinationIdentifier) {
-        return connection.sendWithAsyncReply(WTFMove(message), WTFMove(callback), destinationIdentifier);
-    });
-}
-#endif // ENABLE(NOTIFICATIONS)
-
-bool WebNotificationManager::show(Notification& notification, WebPage* page, CompletionHandler<void()>&& callback)
+bool WebNotificationManager::show(NotificationData&& notification, RefPtr<NotificationResources>&& resources, WebPage* page, CompletionHandler<void()>&& callback)
 {
 #if ENABLE(NOTIFICATIONS)
-    LOG(Notifications, "WebProcess %i going to show notification %s", getpid(), notification.identifier().toString().utf8().data());
+    auto notificationID = notification.notificationID;
+    LOG(Notifications, "WebProcess %i going to show notification %s", getpid(), notificationID.toString().utf8().data());
 
     ASSERT(isMainRunLoop());
-    if (page && !page->corePage()->settings().notificationsEnabled())
+    if (page && !page->corePage()->settings().notificationsEnabled()) {
+        callback();
         return false;
+    }
 
-    if (!sendNotificationMessageWithAsyncReply(Messages::NotificationManagerMessageHandler::ShowNotification(notification.data(), notification.resources()), notification, page, WTFMove(callback)))
+    if (!sendNotificationMessageWithAsyncReply(Messages::NotificationManagerMessageHandler::ShowNotification(notification, resources), page, WTFMove(callback)))
         return false;
 
     if (!notification.isPersistent()) {
-        ASSERT(!m_nonPersistentNotifications.contains(notification.identifier()));
-        m_nonPersistentNotifications.add(notification.identifier(), notification);
+        ASSERT(!m_nonPersistentNotificationsContexts.contains(notificationID));
+        m_nonPersistentNotificationsContexts.add(notificationID, notification.contextIdentifier);
     }
     return true;
 #else
     UNUSED_PARAM(notification);
+    UNUSED_PARAM(resources);
     UNUSED_PARAM(page);
     return false;
 #endif
 }
 
-void WebNotificationManager::cancel(Notification& notification, WebPage* page)
+void WebNotificationManager::cancel(NotificationData&& notification, WebPage* page)
 {
     ASSERT(isMainRunLoop());
 
 #if ENABLE(NOTIFICATIONS)
-    auto identifier = notification.identifier();
-    ASSERT(notification.isPersistent() || !m_nonPersistentNotifications.contains(identifier) || m_nonPersistentNotifications.get(identifier) == &notification);
+    auto identifier = notification.notificationID;
+    ASSERT(notification.isPersistent() || m_nonPersistentNotificationsContexts.contains(identifier));
 
-    if (!sendNotificationMessage(Messages::NotificationManagerMessageHandler::CancelNotification(identifier), notification, page))
+    if (!sendNotificationMessage(Messages::NotificationManagerMessageHandler::CancelNotification(identifier), page))
         return;
 #else
     UNUSED_PARAM(notification);
@@ -206,76 +210,85 @@ void WebNotificationManager::cancel(Notification& notification, WebPage* page)
 #endif
 }
 
-void WebNotificationManager::didDestroyNotification(Notification& notification, WebPage* page)
+void WebNotificationManager::didDestroyNotification(NotificationData&& notification, WebPage* page)
 {
     ASSERT(isMainRunLoop());
 
 #if ENABLE(NOTIFICATIONS)
-    Ref protectedNotification { notification };
+    auto identifier = notification.notificationID;
+    if (!notification.isPersistent())
+        m_nonPersistentNotificationsContexts.remove(identifier);
 
-    auto identifier = notification.identifier();
-    RefPtr takenNotification = !notification.isPersistent() ? m_nonPersistentNotifications.take(identifier) : nullptr;
-    ASSERT(!takenNotification  || takenNotification == &notification);
-
-    sendNotificationMessage(Messages::NotificationManagerMessageHandler::DidDestroyNotification(identifier), notification, page);
+    sendNotificationMessage(Messages::NotificationManagerMessageHandler::DidDestroyNotification(identifier), page);
 #else
     UNUSED_PARAM(notification);
     UNUSED_PARAM(page);
 #endif
 }
 
-void WebNotificationManager::didShowNotification(const UUID& notificationID)
+void WebNotificationManager::didShowNotification(const WTF::UUID& notificationID)
 {
     ASSERT(isMainRunLoop());
 
     LOG(Notifications, "WebProcess %i DID SHOW notification %s", getpid(), notificationID.toString().utf8().data());
 
 #if ENABLE(NOTIFICATIONS)
-    RefPtr<Notification> notification = m_nonPersistentNotifications.get(notificationID);
-    if (!notification)
+    auto contextIdentifier = m_nonPersistentNotificationsContexts.get(notificationID);
+    if (!contextIdentifier)
         return;
 
-    notification->dispatchShowEvent();
+    Notification::ensureOnNotificationThread(contextIdentifier, notificationID, [](auto* notification) {
+        if (notification)
+            notification->dispatchShowEvent();
+    });
 #else
     UNUSED_PARAM(notificationID);
 #endif
 }
 
-void WebNotificationManager::didClickNotification(const UUID& notificationID)
+void WebNotificationManager::didClickNotification(const WTF::UUID& notificationID)
 {
     ASSERT(isMainRunLoop());
 
     LOG(Notifications, "WebProcess %i DID CLICK notification %s", getpid(), notificationID.toString().utf8().data());
 
 #if ENABLE(NOTIFICATIONS)
-    RefPtr<Notification> notification = m_nonPersistentNotifications.get(notificationID);
-    if (!notification)
+    auto contextIdentifier = m_nonPersistentNotificationsContexts.get(notificationID);
+    if (!contextIdentifier)
         return;
 
     LOG(Notifications, "WebProcess %i handling click event for notification %s", getpid(), notificationID.toString().utf8().data());
 
-    // Indicate that this event is being dispatched in reaction to a user's interaction with a platform notification.
-    UserGestureIndicator indicator(ProcessingUserGesture);
-    notification->dispatchClickEvent();
+    Notification::ensureOnNotificationThread(contextIdentifier, notificationID, [](auto* notification) {
+        if (!notification)
+            return;
+
+        // Indicate that this event is being dispatched in reaction to a user's interaction with a platform notification.
+        if (isMainRunLoop()) {
+            UserGestureIndicator indicator(ProcessingUserGesture);
+            notification->dispatchClickEvent();
+        } else
+            notification->dispatchClickEvent();
+    });
 #else
     UNUSED_PARAM(notificationID);
 #endif
 }
 
-void WebNotificationManager::didCloseNotifications(const Vector<UUID>& notificationIDs)
+void WebNotificationManager::didCloseNotifications(const Vector<WTF::UUID>& notificationIDs)
 {
     ASSERT(isMainRunLoop());
 
 #if ENABLE(NOTIFICATIONS)
-    size_t count = notificationIDs.size();
-    for (size_t i = 0; i < count; ++i) {
-        auto notificationID = notificationIDs[i];
-
-        RefPtr<Notification> notification = m_nonPersistentNotifications.take(notificationID);
-        if (!notification)
+    for (auto& notificationID : notificationIDs) {
+        auto contextIdentifier = m_nonPersistentNotificationsContexts.get(notificationID);
+        if (!contextIdentifier)
             continue;
 
-        notification->dispatchCloseEvent();
+        Notification::ensureOnNotificationThread(contextIdentifier, notificationID, [](auto* notification) {
+            if (notification)
+                notification->dispatchCloseEvent();
+        });
     }
 #else
     UNUSED_PARAM(notificationIDs);

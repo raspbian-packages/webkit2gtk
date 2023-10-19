@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021-2022 Apple Inc. All rights reserved.
+ * Copyright (C) 2021-2023 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -29,13 +29,13 @@
 
 #include "RemoteCommandEncoderProxy.h"
 #include "WebGPUIdentifier.h"
-#include <pal/graphics/WebGPU/WebGPUComputePassEncoder.h>
+#include <WebCore/WebGPUComputePassEncoder.h>
 
 namespace WebKit::WebGPU {
 
 class ConvertToBackingContext;
 
-class RemoteComputePassEncoderProxy final : public PAL::WebGPU::ComputePassEncoder {
+class RemoteComputePassEncoderProxy final : public WebCore::WebGPU::ComputePassEncoder {
     WTF_MAKE_FAST_ALLOCATED;
 public:
     static Ref<RemoteComputePassEncoderProxy> create(RemoteCommandEncoderProxy& parent, ConvertToBackingContext& convertToBackingContext, WebGPUIdentifier identifier)
@@ -62,30 +62,30 @@ private:
     
     static inline constexpr Seconds defaultSendTimeout = 30_s;
     template<typename T>
-    WARN_UNUSED_RETURN bool send(T&& message)
+    WARN_UNUSED_RETURN IPC::Error send(T&& message)
     {
         return root().streamClientConnection().send(WTFMove(message), backing(), defaultSendTimeout);
     }
     template<typename T>
-    WARN_UNUSED_RETURN IPC::Connection::SendSyncResult sendSync(T&& message, typename T::Reply&& reply)
+    WARN_UNUSED_RETURN IPC::Connection::SendSyncResult<T> sendSync(T&& message)
     {
-        return root().streamClientConnection().sendSync(WTFMove(message), WTFMove(reply), backing(), defaultSendTimeout);
+        return root().streamClientConnection().sendSync(WTFMove(message), backing(), defaultSendTimeout);
     }
 
-    void setPipeline(const PAL::WebGPU::ComputePipeline&) final;
-    void dispatch(PAL::WebGPU::Size32 workgroupCountX, PAL::WebGPU::Size32 workgroupCountY = 1, PAL::WebGPU::Size32 workgroupCountZ = 1) final;
-    void dispatchIndirect(const PAL::WebGPU::Buffer& indirectBuffer, PAL::WebGPU::Size64 indirectOffset) final;
+    void setPipeline(const WebCore::WebGPU::ComputePipeline&) final;
+    void dispatch(WebCore::WebGPU::Size32 workgroupCountX, WebCore::WebGPU::Size32 workgroupCountY = 1, WebCore::WebGPU::Size32 workgroupCountZ = 1) final;
+    void dispatchIndirect(const WebCore::WebGPU::Buffer& indirectBuffer, WebCore::WebGPU::Size64 indirectOffset) final;
 
     void end() final;
 
-    void setBindGroup(PAL::WebGPU::Index32, const PAL::WebGPU::BindGroup&,
-        std::optional<Vector<PAL::WebGPU::BufferDynamicOffset>>&&) final;
+    void setBindGroup(WebCore::WebGPU::Index32, const WebCore::WebGPU::BindGroup&,
+        std::optional<Vector<WebCore::WebGPU::BufferDynamicOffset>>&&) final;
 
-    void setBindGroup(PAL::WebGPU::Index32, const PAL::WebGPU::BindGroup&,
+    void setBindGroup(WebCore::WebGPU::Index32, const WebCore::WebGPU::BindGroup&,
         const uint32_t* dynamicOffsetsArrayBuffer,
         size_t dynamicOffsetsArrayBufferLength,
-        PAL::WebGPU::Size64 dynamicOffsetsDataStart,
-        PAL::WebGPU::Size32 dynamicOffsetsDataLength) final;
+        WebCore::WebGPU::Size64 dynamicOffsetsDataStart,
+        WebCore::WebGPU::Size32 dynamicOffsetsDataLength) final;
 
     void pushDebugGroup(String&& groupLabel) final;
     void popDebugGroup() final;

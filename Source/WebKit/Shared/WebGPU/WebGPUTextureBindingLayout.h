@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 Apple Inc. All rights reserved.
+ * Copyright (C) 2021-2023 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -27,43 +27,16 @@
 
 #if ENABLE(GPU_PROCESS)
 
+#include <WebCore/WebGPUTextureSampleType.h>
+#include <WebCore/WebGPUTextureViewDimension.h>
 #include <optional>
-#include <pal/graphics/WebGPU/WebGPUTextureSampleType.h>
-#include <pal/graphics/WebGPU/WebGPUTextureViewDimension.h>
 
 namespace WebKit::WebGPU {
 
 struct TextureBindingLayout {
-    PAL::WebGPU::TextureSampleType sampleType { PAL::WebGPU::TextureSampleType::Float };
-    PAL::WebGPU::TextureViewDimension viewDimension { PAL::WebGPU::TextureViewDimension::_2d };
+    WebCore::WebGPU::TextureSampleType sampleType { WebCore::WebGPU::TextureSampleType::Float };
+    WebCore::WebGPU::TextureViewDimension viewDimension { WebCore::WebGPU::TextureViewDimension::_2d };
     bool multisampled { false };
-
-    template<class Encoder> void encode(Encoder& encoder) const
-    {
-        encoder << sampleType;
-        encoder << viewDimension;
-        encoder << multisampled;
-    }
-
-    template<class Decoder> static std::optional<TextureBindingLayout> decode(Decoder& decoder)
-    {
-        std::optional<PAL::WebGPU::TextureSampleType> sampleType;
-        decoder >> sampleType;
-        if (!sampleType)
-            return std::nullopt;
-
-        std::optional<PAL::WebGPU::TextureViewDimension> viewDimension;
-        decoder >> viewDimension;
-        if (!viewDimension)
-            return std::nullopt;
-
-        std::optional<bool> multisampled;
-        decoder >> multisampled;
-        if (!multisampled)
-            return std::nullopt;
-
-        return { { WTFMove(*sampleType), WTFMove(*viewDimension), WTFMove(*multisampled) } };
-    }
 };
 
 } // namespace WebKit::WebGPU

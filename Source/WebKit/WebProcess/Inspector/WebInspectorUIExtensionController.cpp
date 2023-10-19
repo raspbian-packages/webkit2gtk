@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020-2021 Apple Inc. All rights reserved.
+ * Copyright (C) 2020-2023 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,7 +31,6 @@
 #include "Logging.h"
 #include "WebInspectorUI.h"
 #include "WebInspectorUIExtensionControllerMessages.h"
-#include "WebInspectorUIExtensionControllerMessagesReplies.h"
 #include "WebInspectorUIExtensionControllerProxyMessages.h"
 #include "WebPage.h"
 #include "WebProcess.h"
@@ -39,17 +38,16 @@
 #include <JavaScriptCore/JSCInlines.h>
 #include <WebCore/ExceptionDetails.h>
 #include <WebCore/InspectorFrontendAPIDispatcher.h>
+#include <WebCore/JSDOMGlobalObject.h>
 #include <WebCore/SerializedScriptValue.h>
 
 namespace WebKit {
 
-WebInspectorUIExtensionController::WebInspectorUIExtensionController(WebCore::InspectorFrontendClient& inspectorFrontend)
+WebInspectorUIExtensionController::WebInspectorUIExtensionController(WebCore::InspectorFrontendClient& inspectorFrontend, WebCore::PageIdentifier pageIdentifier)
     : m_frontendClient(inspectorFrontend)
+    , m_inspectorPageIdentifier(pageIdentifier)
 {
-    auto* page = inspectorFrontend.frontendPage();
-    ASSERT(page);
-
-    m_inspectorPageIdentifier = WebPage::fromCorePage(*page).identifier();
+    ASSERT(inspectorFrontend.frontendPage() && WebPage::fromCorePage(*inspectorFrontend.frontendPage())->identifier() == pageIdentifier);
 
     WebProcess::singleton().addMessageReceiver(Messages::WebInspectorUIExtensionController::messageReceiverName(), m_inspectorPageIdentifier, *this);
 }
@@ -385,7 +383,7 @@ void WebInspectorUIExtensionController::navigateTabForExtension(const Inspector:
         JSON::Value::create(extensionTabIdentifier),
         JSON::Value::create(sourceURL.string()),
     };
-    m_frontendClient->frontendAPIDispatcher().dispatchCommandWithResultAsync("navigateTabForExtension"_s, WTFMove(arguments), [weakThis = WeakPtr { *this }, completionHandler = WTFMove(completionHandler)](InspectorFrontendAPIDispatcher::EvaluationResult&& result) mutable {
+    m_frontendClient->frontendAPIDispatcher().dispatchCommandWithResultAsync("navigateTabForExtension"_s, WTFMove(arguments), [weakThis = WeakPtr { *this }, completionHandler = WTFMove(completionHandler)](WebCore::InspectorFrontendAPIDispatcher::EvaluationResult&& result) mutable {
         if (!weakThis) {
             completionHandler(Inspector::ExtensionError::ContextDestroyed);
             return;

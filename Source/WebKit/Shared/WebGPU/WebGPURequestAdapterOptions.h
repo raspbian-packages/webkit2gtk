@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 Apple Inc. All rights reserved.
+ * Copyright (C) 2021-2023 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -27,35 +27,14 @@
 
 #if ENABLE(GPU_PROCESS)
 
+#include <WebCore/WebGPUPowerPreference.h>
 #include <optional>
-#include <pal/graphics/WebGPU/WebGPUPowerPreference.h>
 
 namespace WebKit::WebGPU {
 
 struct RequestAdapterOptions {
-    std::optional<PAL::WebGPU::PowerPreference> powerPreference;
+    std::optional<WebCore::WebGPU::PowerPreference> powerPreference;
     bool forceFallbackAdapter { false };
-
-    template<class Encoder> void encode(Encoder& encoder) const
-    {
-        encoder << powerPreference;
-        encoder << forceFallbackAdapter;
-    }
-
-    template<class Decoder> static std::optional<RequestAdapterOptions> decode(Decoder& decoder)
-    {
-        std::optional<std::optional<PAL::WebGPU::PowerPreference>> powerPreference;
-        decoder >> powerPreference;
-        if (!powerPreference)
-            return std::nullopt;
-
-        std::optional<bool> forceFallbackAdapter;
-        decoder >> forceFallbackAdapter;
-        if (!forceFallbackAdapter)
-            return std::nullopt;
-
-        return { { WTFMove(*powerPreference), WTFMove(*forceFallbackAdapter) } };
-    }
 };
 
 } // namespace WebKit::WebGPU

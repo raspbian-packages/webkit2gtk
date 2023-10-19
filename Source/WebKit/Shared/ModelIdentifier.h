@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 Apple Inc. All rights reserved.
+ * Copyright (C) 2021-2023 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -28,7 +28,7 @@
 #import <wtf/text/WTFString.h>
 
 #if ENABLE(ARKIT_INLINE_PREVIEW_IOS)
-#import <WebCore/GraphicsLayer.h>
+#import <WebCore/PlatformLayerIdentifier.h>
 #endif
 
 namespace WebKit {
@@ -39,38 +39,9 @@ struct ModelIdentifier {
 #if ENABLE(ARKIT_INLINE_PREVIEW_MAC)
     String uuid;
 #elif ENABLE(ARKIT_INLINE_PREVIEW_IOS)
-    WebCore::GraphicsLayer::PlatformLayerID layerIdentifier;
+    WebCore::PlatformLayerIdentifier layerIdentifier;
 #endif
-
-    template<class Encoder> void encode(Encoder&) const;
-    template<class Decoder> static std::optional<ModelIdentifier> decode(Decoder&);
 };
-
-template<class Encoder> void ModelIdentifier::encode(Encoder& encoder) const
-{
-#if ENABLE(ARKIT_INLINE_PREVIEW_MAC)
-    encoder << uuid;
-#elif ENABLE(ARKIT_INLINE_PREVIEW_IOS)
-    encoder << layerIdentifier;
-#endif
-}
-
-template<class Decoder> std::optional<ModelIdentifier> ModelIdentifier::decode(Decoder& decoder)
-{
-#if ENABLE(ARKIT_INLINE_PREVIEW_MAC)
-    std::optional<String> uuid;
-    decoder >> uuid;
-    if (!uuid)
-        return std::nullopt;
-    return { { WTFMove(*uuid) } };
-#elif ENABLE(ARKIT_INLINE_PREVIEW_IOS)
-    std::optional<WebCore::GraphicsLayer::PlatformLayerID> layerIdentifier;
-    decoder >> layerIdentifier;
-    if (!layerIdentifier)
-        return std::nullopt;
-    return { { *layerIdentifier } };
-#endif
-}
 
 #endif
 

@@ -33,7 +33,6 @@
 #include <JavaScriptCore/JSArray.h>
 #include <JavaScriptCore/JSArrayBuffer.h>
 #include <JavaScriptCore/JSCJSValueInlines.h>
-#include <JavaScriptCore/JSGlobalObject.h>
 #include <JavaScriptCore/JSObject.h>
 #include <JavaScriptCore/JSObjectInlines.h>
 #include <JavaScriptCore/ObjectConstructor.h>
@@ -102,6 +101,12 @@ JSC::JSValue jsValueForDecodedArgumentValue(JSC::JSGlobalObject* globalObject, O
     return jsValueForDecodedArgumentValue(globalObject, value.toUInt64());
 }
 
+template<typename U>
+JSC::JSValue jsValueForDecodedArgumentValue(JSC::JSGlobalObject* globalObject, AtomicObjectIdentifier<U>&& value)
+{
+    return jsValueForDecodedArgumentValue(globalObject, value.toUInt64());
+}
+
 template<> JSC::JSValue jsValueForDecodedArgumentValue(JSC::JSGlobalObject*, WebCore::IntRect&&);
 template<> JSC::JSValue jsValueForDecodedArgumentValue(JSC::JSGlobalObject*, WebCore::FloatRect&&);
 
@@ -154,7 +159,7 @@ static std::optional<JSC::JSValue> jsValueForDecodedArguments(JSC::JSGlobalObjec
     auto scope = DECLARE_THROW_SCOPE(globalObject->vm());
     auto* array = JSC::constructEmptyArray(globalObject, nullptr);
     RETURN_IF_EXCEPTION(scope, JSC::JSValue());
-    typename IPC::CodingType<T>::Type* dummyArguments = nullptr;
+    T* dummyArguments = nullptr;
     return putJSValueForDecodeArgumentInArray<>(globalObject, decoder, array, 0, dummyArguments);
 }
 

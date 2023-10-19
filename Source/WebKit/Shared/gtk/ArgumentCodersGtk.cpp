@@ -41,22 +41,19 @@ using namespace WebKit;
 
 static void encodeImage(Encoder& encoder, Image& image)
 {
-    RefPtr<ShareableBitmap> bitmap = ShareableBitmap::create(IntSize(image.size()), { });
+    RefPtr<ShareableBitmap> bitmap = ShareableBitmap::create({ IntSize(image.size()) });
     bitmap->createGraphicsContext()->drawImage(image, IntPoint());
-
-    ShareableBitmap::Handle handle;
-    bitmap->createHandle(handle);
-
-    encoder << handle;
+    encoder << bitmap->createHandle();
 }
 
 static WARN_UNUSED_RETURN bool decodeImage(Decoder& decoder, RefPtr<Image>& image)
 {
-    ShareableBitmap::Handle handle;
-    if (!decoder.decode(handle))
+    std::optional<std::optional<ShareableBitmap::Handle>> handle;
+    decoder >> handle;
+    if (!handle || !*handle)
         return false;
 
-    RefPtr<ShareableBitmap> bitmap = ShareableBitmap::create(handle);
+    RefPtr<ShareableBitmap> bitmap = ShareableBitmap::create(WTFMove(**handle));
     if (!bitmap)
         return false;
     image = bitmap->createImage();

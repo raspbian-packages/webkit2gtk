@@ -36,12 +36,15 @@
 #include <wtf/text/WTFString.h>
 
 namespace WebCore {
+class RegistrableDomain;
 class ResourceError;
 class ResourceRequest;
 class ResourceResponse;
+struct ClientOrigin;
 struct Cookie;
 struct MessagePortIdentifier;
 struct MessageWithMessagePorts;
+class SecurityOriginData;
 enum class HTTPCookieAcceptPolicy : uint8_t;
 }
 
@@ -52,9 +55,11 @@ class WebSharedWorkerObjectConnection;
 class WebSWClientConnection;
 class WebSharedWorkerObjectConnection;
 
+enum class WebsiteDataType : uint32_t;
+
 class NetworkProcessConnection : public RefCounted<NetworkProcessConnection>, IPC::Connection::Client {
 public:
-    static Ref<NetworkProcessConnection> create(IPC::Connection::Identifier connectionIdentifier, WebCore::HTTPCookieAcceptPolicy httpCookieAcceptPolicy)
+    static Ref<NetworkProcessConnection> create(IPC::Connection::Identifier&& connectionIdentifier, WebCore::HTTPCookieAcceptPolicy httpCookieAcceptPolicy)
     {
         return adoptRef(*new NetworkProcessConnection(connectionIdentifier, httpCookieAcceptPolicy));
     }
@@ -83,10 +88,12 @@ public:
     bool cookiesEnabled() const;
 
 #if HAVE(COOKIE_CHANGE_LISTENER_API)
-    void cookiesAdded(const String& host, const Vector<WebCore::Cookie>&);
-    void cookiesDeleted(const String& host, const Vector<WebCore::Cookie>&);
+    void cookiesAdded(const String& host, Vector<WebCore::Cookie>&&);
+    void cookiesDeleted(const String& host, Vector<WebCore::Cookie>&&);
     void allCookiesDeleted();
 #endif
+
+    void addAllowedFirstPartyForCookies(WebCore::RegistrableDomain&&);
 
 private:
     NetworkProcessConnection(IPC::Connection::Identifier, WebCore::HTTPCookieAcceptPolicy);
@@ -102,12 +109,11 @@ private:
     void setOnLineState(bool isOnLine);
     void cookieAcceptPolicyChanged(WebCore::HTTPCookieAcceptPolicy);
 
-    void checkProcessLocalPortForActivity(const WebCore::MessagePortIdentifier&, CompletionHandler<void(WebCore::MessagePortChannelProvider::HasActivity)>&&);
     void messagesAvailableForPort(const WebCore::MessagePortIdentifier&);
 
 #if ENABLE(SHAREABLE_RESOURCE)
     // Message handlers.
-    void didCacheResource(const WebCore::ResourceRequest&, const ShareableResource::Handle&);
+    void didCacheResource(const WebCore::ResourceRequest&, ShareableResource::Handle&&);
 #endif
 #if ENABLE(WEB_RTC)
     void connectToRTCDataChannelRemoteSource(WebCore::RTCDataChannelIdentifier source, WebCore::RTCDataChannelIdentifier handler, CompletionHandler<void(std::optional<bool>)>&&);

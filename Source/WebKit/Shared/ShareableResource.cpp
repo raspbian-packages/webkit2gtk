@@ -35,16 +35,16 @@
 namespace WebKit {
 using namespace WebCore;
 
-ShareableResource::Handle::Handle() = default;
+ShareableResourceHandle::ShareableResourceHandle() = default;
 
-void ShareableResource::Handle::encode(IPC::Encoder& encoder) const
+void ShareableResourceHandle::encode(IPC::Encoder& encoder) &&
 {
-    encoder << m_handle;
+    encoder << WTFMove(m_handle);
     encoder << m_offset;
     encoder << m_size;
 }
 
-bool ShareableResource::Handle::decode(IPC::Decoder& decoder, Handle& handle)
+bool ShareableResourceHandle::decode(IPC::Decoder& decoder, ShareableResourceHandle& handle)
 {
     SharedMemory::Handle memoryHandle;
     if (UNLIKELY(!decoder.decode(memoryHandle)))
@@ -70,9 +70,9 @@ RefPtr<SharedBuffer> ShareableResource::wrapInSharedBuffer()
     });
 }
 
-RefPtr<SharedBuffer> ShareableResource::Handle::tryWrapInSharedBuffer() const
+RefPtr<SharedBuffer> ShareableResourceHandle::tryWrapInSharedBuffer() &&
 {
-    RefPtr<ShareableResource> resource = ShareableResource::map(*this);
+    RefPtr<ShareableResource> resource = ShareableResource::map(WTFMove(*this));
     if (!resource) {
         LOG_ERROR("Failed to recreate ShareableResource from handle.");
         return nullptr;
@@ -95,9 +95,9 @@ RefPtr<ShareableResource> ShareableResource::create(Ref<SharedMemory>&& sharedMe
     return adoptRef(*new ShareableResource(WTFMove(sharedMemory), offset, size));
 }
 
-RefPtr<ShareableResource> ShareableResource::map(const Handle& handle)
+RefPtr<ShareableResource> ShareableResource::map(Handle&& handle)
 {
-    auto sharedMemory = SharedMemory::map(handle.m_handle, SharedMemory::Protection::ReadOnly);
+    auto sharedMemory = SharedMemory::map(WTFMove(handle.m_handle), SharedMemory::Protection::ReadOnly);
     if (!sharedMemory)
         return nullptr;
 
@@ -113,14 +113,17 @@ ShareableResource::ShareableResource(Ref<SharedMemory>&& sharedMemory, unsigned 
 
 ShareableResource::~ShareableResource() = default;
 
-bool ShareableResource::createHandle(Handle& handle)
+auto ShareableResource::createHandle() -> std::optional<Handle>
 {
-    if (!m_sharedMemory->createHandle(handle.m_handle, SharedMemory::Protection::ReadOnly))
-        return false;
+    auto memoryHandle = m_sharedMemory->createHandle(SharedMemory::Protection::ReadOnly);
+    if (!memoryHandle)
+        return std::nullopt;
 
+    Handle handle;
+    handle.m_handle = WTFMove(*memoryHandle);
     handle.m_offset = m_offset;
     handle.m_size = m_size;
-    return true;
+    return { WTFMove(handle) };
 }
 
 const uint8_t* ShareableResource::data() const

@@ -33,9 +33,11 @@
 #include "SandboxInitializationParameters.h"
 #include "WebPageProxyIdentifier.h"
 #include <WebCore/LogInitialization.h>
+#include <WebCore/RegistrableDomain.h>
 #include <pal/SessionID.h>
 #include <wtf/LogInitialization.h>
 #include <wtf/SetForScope.h>
+#include <wtf/WTFProcess.h>
 
 #if !OS(WINDOWS)
 #include <unistd.h>
@@ -50,7 +52,7 @@ using namespace WebCore;
 
 AuxiliaryProcess::AuxiliaryProcess()
     : m_terminationCounter(0)
-    , m_processSuppressionDisabled("Process Suppression Disabled by UIProcess")
+    , m_processSuppressionDisabled("Process Suppression Disabled by UIProcess"_s)
 {
 }
 
@@ -67,7 +69,7 @@ void AuxiliaryProcess::didClose(IPC::Connection&)
 #if PLATFORM(GTK) || PLATFORM(WPE)
     stopRunLoop();
 #else
-    _exit(EXIT_SUCCESS);
+    terminateProcess(EXIT_SUCCESS);
 #endif
 }
 
@@ -81,10 +83,6 @@ void AuxiliaryProcess::initialize(const AuxiliaryProcessInitializationParameters
     Process::setIdentifier(*parameters.processIdentifier);
 
     platformInitialize(parameters);
-
-#if PLATFORM(COCOA)
-    m_priorityBoostMessage = parameters.priorityBoostMessage;
-#endif
 
     SandboxInitializationParameters sandboxParameters;
     initializeSandbox(parameters, sandboxParameters);
@@ -104,9 +102,9 @@ void AuxiliaryProcess::initialize(const AuxiliaryProcessInitializationParameters
     ContentWorldIdentifier::enableGenerationProtection();
     WebPageProxyIdentifier::enableGenerationProtection();
 
-    m_connection = IPC::Connection::createClientConnection(parameters.connectionIdentifier, *this);
+    m_connection = IPC::Connection::createClientConnection(parameters.connectionIdentifier);
     initializeConnection(m_connection.get());
-    m_connection->open();
+    m_connection->open(*this);
 }
 
 void AuxiliaryProcess::setProcessSuppressionEnabled(bool enabled)
@@ -252,5 +250,34 @@ void AuxiliaryProcess::didReceiveMemoryPressureEvent(bool isCritical)
 #endif
 
 #endif // !PLATFORM(COCOA)
+
+bool AuxiliaryProcess::allowsFirstPartyForCookies(const URL& firstParty, Function<bool()>&& domainCheck)
+{
+    // FIXME: This should probably not be necessary. If about:blank is the first party for cookies,
+    // we should set it to be the inherited origin then remove this exception.
+    if (firstParty.isAboutBlank())
+        return true;
+
+    if (firstParty.isNull())
+        return true; // FIXME: This shouldn't be allowed.
+
+    return domainCheck();
+}
+
+bool AuxiliaryProcess::allowsFirstPartyForCookies(const WebCore::RegistrableDomain& firstPartyDomain, HashSet<WebCore::RegistrableDomain>& allowedFirstPartiesForCookies)
+{
+    // FIXME: This shouldn't be needed but it is hit sometimes at least with PDFs.
+    if (firstPartyDomain.isEmpty())
+        return true;
+
+    if (!std::remove_reference_t<decltype(allowedFirstPartiesForCookies)>::isValidValue(firstPartyDomain)) {
+        ASSERT_NOT_REACHED();
+        return false;
+    }
+
+    auto result = allowedFirstPartiesForCookies.contains(firstPartyDomain);
+    ASSERT(result);
+    return result;
+}
 
 } // namespace WebKit

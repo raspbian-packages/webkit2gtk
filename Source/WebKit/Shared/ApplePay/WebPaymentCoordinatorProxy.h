@@ -44,6 +44,7 @@ OBJC_CLASS UIViewController;
 
 namespace IPC {
 class Connection;
+enum class ReceiverName : uint8_t;
 }
 
 namespace WebCore {
@@ -64,7 +65,7 @@ OBJC_CLASS PKPaymentAuthorizationViewController;
 OBJC_CLASS PKPaymentRequest;
 OBJC_CLASS UIViewController;
 
-#if PLATFORM(IOS)
+#if PLATFORM(IOS) || PLATFORM(VISION)
 OBJC_CLASS PKPaymentSetupViewController;
 #endif
 
@@ -142,7 +143,7 @@ private:
     void abortPaymentSession();
     void cancelPaymentSession();
 
-    void getSetupFeatures(const PaymentSetupConfiguration&, CompletionHandler<void(const PaymentSetupFeatures&)>&&);
+    void getSetupFeatures(const PaymentSetupConfiguration&, CompletionHandler<void(PaymentSetupFeatures&&)>&&);
     void beginApplePaySetup(const PaymentSetupConfiguration&, const PaymentSetupFeatures&, CompletionHandler<void(bool)>&&);
     void endApplePaySetup();
     void platformBeginApplePaySetup(const PaymentSetupConfiguration&, const PaymentSetupFeatures&, CompletionHandler<void(bool)>&&);
@@ -225,7 +226,7 @@ private:
     RetainPtr<NSWindow> m_sheetWindow;
     RetainPtr<NSObject> m_sheetWindowWillCloseObserver;
 #endif
-#if PLATFORM(IOS)
+#if PLATFORM(IOS) || PLATFORM(VISION)
     WeakObjCPtr<PKPaymentSetupViewController> m_paymentSetupViewController;
 #endif
 };

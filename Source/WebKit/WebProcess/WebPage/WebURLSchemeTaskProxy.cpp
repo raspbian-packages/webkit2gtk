@@ -27,6 +27,7 @@
 #include "WebURLSchemeTaskProxy.h"
 
 #include "Logging.h"
+#include "MessageSenderInlines.h"
 #include "URLSchemeTaskParameters.h"
 #include "WebCoreArgumentCoders.h"
 #include "WebFrame.h"
@@ -59,7 +60,7 @@ static uint64_t pageIDFromWebFrame(const RefPtr<WebFrame>& frame)
 static uint64_t frameIDFromWebFrame(const RefPtr<WebFrame>& frame)
 {
     if (frame)
-        return frame->frameID().toUInt64();
+        return frame->frameID().object().toUInt64();
     return 0;
 }
 #endif

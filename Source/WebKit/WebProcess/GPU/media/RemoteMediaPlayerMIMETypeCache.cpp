@@ -26,7 +26,7 @@
 #include "config.h"
 #include "RemoteMediaPlayerMIMETypeCache.h"
 
-#if ENABLE(GPU_PROCESS)
+#if ENABLE(GPU_PROCESS) && ENABLE(VIDEO)
 
 #include "Logging.h"
 #include "RemoteMediaPlayerManager.h"
@@ -56,12 +56,13 @@ HashSet<String, ASCIICaseInsensitiveHash>& RemoteMediaPlayerMIMETypeCache::suppo
 {
     ASSERT(isMainRunLoop());
     if (!m_hasPopulatedSupportedTypesCacheFromGPUProcess) {
-        Vector<String> types;
-        if (m_manager.gpuProcessConnection().connection().sendSync(Messages::RemoteMediaPlayerManagerProxy::GetSupportedTypes(m_engineIdentifier), Messages::RemoteMediaPlayerManagerProxy::GetSupportedTypes::Reply(types), 0)) {
+        auto sendResult = m_manager.gpuProcessConnection().connection().sendSync(Messages::RemoteMediaPlayerManagerProxy::GetSupportedTypes(m_engineIdentifier), 0);
+        if (sendResult.succeeded()) {
+            auto& [types] = sendResult.reply();
             addSupportedTypes(types);
             m_hasPopulatedSupportedTypesCacheFromGPUProcess = true;
         } else
-            RELEASE_LOG_ERROR(Media, "RemoteMediaPlayerMIMETypeCache::supportedTypes: Sync IPC to the GPUProcess failed.");
+            RELEASE_LOG_ERROR(Media, "RemoteMediaPlayerMIMETypeCache::supportedTypes: Sync IPC to the GPUProcess failed with error %" PUBLIC_LOG_STRING, IPC::errorAsString(sendResult.error));
     }
     return m_supportedTypesCache;
 }
@@ -71,7 +72,7 @@ MediaPlayerEnums::SupportsType RemoteMediaPlayerMIMETypeCache::supportsTypeAndCo
     if (parameters.type.raw().isEmpty())
         return MediaPlayerEnums::SupportsType::MayBeSupported;
 
-    SupportedTypesAndCodecsKey searchKey { parameters.type.raw(), parameters.isMediaSource, parameters.isMediaStream };
+    SupportedTypesAndCodecsKey searchKey { parameters.type.raw(), parameters.isMediaSource, parameters.isMediaStream, parameters.requiresRemotePlayback };
 
     if (m_supportsTypeAndCodecsCache) {
         auto it = m_supportsTypeAndCodecsCache->find(searchKey);
@@ -82,8 +83,9 @@ MediaPlayerEnums::SupportsType RemoteMediaPlayerMIMETypeCache::supportsTypeAndCo
     if (!m_supportsTypeAndCodecsCache)
         m_supportsTypeAndCodecsCache = HashMap<SupportedTypesAndCodecsKey, MediaPlayerEnums::SupportsType> { };
 
-    MediaPlayerEnums::SupportsType result = MediaPlayerEnums::SupportsType::IsNotSupported;
-    if (m_manager.gpuProcessConnection().connection().sendSync(Messages::RemoteMediaPlayerManagerProxy::SupportsTypeAndCodecs(m_engineIdentifier, parameters), Messages::RemoteMediaPlayerManagerProxy::SupportsTypeAndCodecs::Reply(result), 0))
+    auto sendResult = m_manager.gpuProcessConnection().connection().sendSync(Messages::RemoteMediaPlayerManagerProxy::SupportsTypeAndCodecs(m_engineIdentifier, parameters), 0);
+    auto [result] = sendResult.takeReplyOr(MediaPlayerEnums::SupportsType::IsNotSupported);
+    if (sendResult.succeeded())
         m_supportsTypeAndCodecsCache->add(searchKey, result);
 
     return result;
@@ -91,4 +93,4 @@ MediaPlayerEnums::SupportsType RemoteMediaPlayerMIMETypeCache::supportsTypeAndCo
 
 }
 
-#endif // ENABLE(GPU_PROCESS)
+#endif // ENABLE(GPU_PROCESS) && ENABLE(VIDEO)

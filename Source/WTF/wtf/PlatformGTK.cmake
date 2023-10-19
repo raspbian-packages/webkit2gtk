@@ -7,6 +7,7 @@ list(APPEND WTF_PUBLIC_HEADERS
     glib/GSocketMonitor.h
     glib/GTypedefs.h
     glib/GUniquePtr.h
+    glib/GWeakPtr.h
     glib/RunLoopSourcePriority.h
     glib/Sandbox.h
     glib/SocketConnection.h
@@ -43,6 +44,7 @@ list(APPEND WTF_SOURCES
     glib/URLGLib.cpp
 
     posix/CPUTimePOSIX.cpp
+    posix/FileSystemPOSIX.cpp
     posix/OSAllocatorPOSIX.cpp
     posix/ThreadingPOSIX.cpp
 

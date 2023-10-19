@@ -48,6 +48,10 @@ namespace IPC {
 class SharedBufferReference;
 }
 
+namespace WebCore {
+class RegistrableDomain;
+}
+
 namespace WebKit {
 
 class SandboxInitializationParameters;
@@ -71,14 +75,12 @@ public:
     void removeMessageReceiver(IPC::ReceiverName);
     void removeMessageReceiver(IPC::MessageReceiver&);
     
-    template <typename T>
-    void addMessageReceiver(IPC::ReceiverName messageReceiverName, ObjectIdentifier<T> destinationID, IPC::MessageReceiver& receiver)
+    void addMessageReceiver(IPC::ReceiverName messageReceiverName, const ObjectIdentifierGenericBase& destinationID, IPC::MessageReceiver& receiver)
     {
         addMessageReceiver(messageReceiverName, destinationID.toUInt64(), receiver);
     }
     
-    template <typename T>
-    void removeMessageReceiver(IPC::ReceiverName messageReceiverName, ObjectIdentifier<T> destinationID)
+    void removeMessageReceiver(IPC::ReceiverName messageReceiverName, const ObjectIdentifierGenericBase& destinationID)
     {
         removeMessageReceiver(messageReceiverName, destinationID.toUInt64());
     }
@@ -159,7 +161,13 @@ protected:
 #if HAVE(AUDIO_COMPONENT_SERVER_REGISTRATIONS)
     void consumeAudioComponentRegistrations(const IPC::SharedBufferReference&);
 #endif
-    
+
+    // IPC::Connection::Client.
+    void didClose(IPC::Connection&) override;
+
+    bool allowsFirstPartyForCookies(const URL&, Function<bool()>&&);
+    bool allowsFirstPartyForCookies(const WebCore::RegistrableDomain&, HashSet<WebCore::RegistrableDomain>&);
+
 private:
     virtual bool shouldOverrideQuarantine() { return true; }
 
@@ -169,7 +177,6 @@ private:
 
     // IPC::Connection::Client.
     void didReceiveInvalidMessage(IPC::Connection&, IPC::MessageName) final;
-    void didClose(IPC::Connection&) override;
 
     void shutDown();
 
@@ -185,10 +192,6 @@ private:
     IPC::MessageReceiverMap m_messageReceiverMap;
 
     UserActivity m_processSuppressionDisabled;
-
-#if PLATFORM(COCOA)
-    OSObjectPtr<xpc_object_t> m_priorityBoostMessage;
-#endif
 };
 
 struct AuxiliaryProcessInitializationParameters {
@@ -200,7 +203,6 @@ struct AuxiliaryProcessInitializationParameters {
     HashMap<String, String> extraInitializationData;
     WebCore::AuxiliaryProcessType processType;
 #if PLATFORM(COCOA)
-    OSObjectPtr<xpc_object_t> priorityBoostMessage;
     SDKAlignedBehaviors clientSDKAlignedBehaviors;
 #endif
 };

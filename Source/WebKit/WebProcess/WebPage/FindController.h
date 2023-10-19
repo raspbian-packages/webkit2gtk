@@ -41,7 +41,7 @@
 #endif
 
 namespace WebCore {
-class Frame;
+class LocalFrame;
 class Range;
 enum class DidWrap : bool;
 }
@@ -57,10 +57,12 @@ class FindController final : private WebCore::PageOverlay::Client {
     WTF_MAKE_NONCOPYABLE(FindController);
 
 public:
+    enum class TriggerImageAnalysis : bool { No, Yes };
+
     explicit FindController(WebPage*);
     virtual ~FindController();
 
-    void findString(const String&, OptionSet<FindOptions>, unsigned maxMatchCount, CompletionHandler<void(bool)>&&);
+    void findString(const String&, OptionSet<FindOptions>, unsigned maxMatchCount, TriggerImageAnalysis, CompletionHandler<void(bool)>&& = { });
     void findStringMatches(const String&, OptionSet<FindOptions>, unsigned maxMatchCount);
     void findRectsForStringMatches(const String&, OptionSet<WebKit::FindOptions>, unsigned maxMatchCount, CompletionHandler<void(Vector<WebCore::FloatRect>&&)>&&);
     void getImageForFindMatch(uint32_t matchIndex);
@@ -89,7 +91,7 @@ private:
     void drawRect(WebCore::PageOverlay&, WebCore::GraphicsContext&, const WebCore::IntRect& dirtyRect) override;
 
     Vector<WebCore::FloatRect> rectsForTextMatchesInRect(WebCore::IntRect clipRect);
-    bool updateFindIndicator(WebCore::Frame& selectedFrame, bool isShowingOverlay, bool shouldAnimate = true);
+    bool updateFindIndicator(WebCore::LocalFrame& selectedFrame, bool isShowingOverlay, bool shouldAnimate = true);
 
     enum class FindUIOriginator : uint8_t { FindString, FindStringMatches };
     void updateFindUIAfterPageScroll(bool found, const String&, OptionSet<FindOptions>, unsigned maxMatchCount, WebCore::DidWrap, FindUIOriginator);
@@ -107,7 +109,7 @@ private:
     PluginView* mainFramePlugIn();
 #endif
 
-    WebPage* m_webPage;
+    WeakPtr<WebPage> m_webPage;
     WebCore::PageOverlay* m_findPageOverlay { nullptr };
 
     // Whether the UI process is showing the find indicator. Note that this can be true even if

@@ -25,7 +25,7 @@
 
 #pragma once
 
-#if ENABLE(INTELLIGENT_TRACKING_PREVENTION)
+#if ENABLE(TRACKING_PREVENTION)
 
 #include "DatabaseUtilities.h"
 #include "ResourceLoadStatisticsStore.h"
@@ -85,6 +85,7 @@ public:
     void setGrandfathered(const RegistrableDomain&, bool value) override;
     bool isGrandfathered(const RegistrableDomain&) const override;
 
+    void setMostRecentWebPushInteractionTime(const RegistrableDomain&) override;
     void setIsScheduledForAllScriptWrittenStorageRemoval(const RegistrableDomain&, bool value);
     void setSubframeUnderTopFrameDomain(const SubFrameDomain&, const TopFrameDomain&) override;
     void setSubresourceUnderTopFrameDomain(const SubResourceDomain&, const TopFrameDomain&) override;
@@ -115,6 +116,7 @@ public:
     void setIsNewResourceLoadStatisticsDatabaseFile(bool isNewResourceLoadStatisticsDatabaseFile) { m_isNewResourceLoadStatisticsDatabaseFile = isNewResourceLoadStatisticsDatabaseFile; }
     void removeDataForDomain(const RegistrableDomain&) override;
     Vector<RegistrableDomain> allDomains() const final;
+    HashMap<RegistrableDomain, WallTime> allDomainsWithLastAccessedTime() const final;
     bool domainIDExistsInDatabase(int);
     std::optional<Vector<String>> checkForMissingTablesInSchema();
     void insertExpiredStatisticForTesting(const RegistrableDomain&, unsigned numberOfOperatingDaysPassed, bool hasUserInteraction, bool isScheduledForAllButCookieDataRemoval, bool isPrevalent) override;
@@ -122,9 +124,8 @@ public:
 
 private:
     const MemoryCompactLookupOnlyRobinHoodHashMap<String, TableAndIndexPair>& expectedTableAndIndexQueries() final;
-    Span<const ASCIILiteral> sortedTables() final;
+    std::span<const ASCIILiteral> sortedTables() final;
     void includeTodayAsOperatingDateIfNecessary() override;
-    void clearOperatingDates() override { }
     bool hasStatisticsExpired(WallTime mostRecentUserInteractionTime, OperatingDatesWindow) const override;
     void updateOperatingDatesParameters();
 
@@ -166,12 +167,14 @@ private:
         unsigned domainID;
         RegistrableDomain registrableDomain;
         WallTime mostRecentUserInteractionTime;
+        WallTime mostRecentWebPushInteractionTime;
         bool hadUserInteraction;
         bool grandfathered;
         bool isScheduledForAllButCookieDataRemoval;
         unsigned topFrameUniqueRedirectsToSinceSameSiteStrictEnforcement;
     };
     Vector<DomainData> domains() const;
+    bool hasHadRecentWebPushInteraction(const DomainData&) const;
     bool hasHadUnexpiredRecentUserInteraction(const DomainData&, OperatingDatesWindow);
     void clearGrandfathering(Vector<unsigned>&&);
     WebCore::StorageAccessPromptWasShown hasUserGrantedStorageAccessThroughPrompt(unsigned domainID, const RegistrableDomain&);
@@ -201,7 +204,7 @@ private:
     Vector<RegistrableDomain> ensurePrevalentResourcesForDebugMode() override;
     void removeDataRecords(CompletionHandler<void()>&&);
     void pruneStatisticsIfNeeded() override;
-    enum class AddedRecord { No, Yes };
+    enum class AddedRecord : bool { No, Yes };
     std::pair<AddedRecord, std::optional<unsigned>> ensureResourceStatisticsForRegistrableDomain(const RegistrableDomain&) WARN_UNUSED_RETURN;
     bool shouldRemoveAllWebsiteDataFor(const DomainData&, bool shouldCheckForGrandfathering);
     bool shouldRemoveAllButCookiesFor(const DomainData&, bool shouldCheckForGrandfathering);
@@ -216,7 +219,6 @@ private:
 
     mutable std::unique_ptr<WebCore::SQLiteStatement> m_observedDomainCountStatement;
     std::unique_ptr<WebCore::SQLiteStatement> m_insertObservedDomainStatement;
-    std::unique_ptr<WebCore::SQLiteStatement> m_insertTopLevelDomainStatement;
     mutable std::unique_ptr<WebCore::SQLiteStatement> m_domainIDFromStringStatement;
     mutable std::unique_ptr<WebCore::SQLiteStatement> m_topFrameLinkDecorationsFromExistsStatement;
     mutable std::unique_ptr<WebCore::SQLiteStatement> m_topFrameLoadedThirdPartyScriptsExistsStatement;
@@ -234,6 +236,7 @@ private:
     mutable std::unique_ptr<WebCore::SQLiteStatement> m_hadUserInteractionStatement;
     std::unique_ptr<WebCore::SQLiteStatement> m_updateGrandfatheredStatement;
     mutable std::unique_ptr<WebCore::SQLiteStatement> m_updateIsScheduledForAllButCookieDataRemovalStatement;
+    mutable std::unique_ptr<WebCore::SQLiteStatement> m_updateMostRecentWebPushInteractionTimeStatement;
     mutable std::unique_ptr<WebCore::SQLiteStatement> m_isGrandfatheredStatement;
     mutable std::unique_ptr<WebCore::SQLiteStatement> m_countPrevalentResourcesStatement;
     mutable std::unique_ptr<WebCore::SQLiteStatement> m_countPrevalentResourcesWithUserInteractionStatement;
@@ -263,6 +266,7 @@ private:
 
 } // namespace WebKit
 
+// FIXME: Remove this. All ResourceLoadStatisticsStores are ResourceLoadStatisticsDatabaseStores. See FIXME above.
 SPECIALIZE_TYPE_TRAITS_BEGIN(WebKit::ResourceLoadStatisticsDatabaseStore)
     static bool isType(const WebKit::ResourceLoadStatisticsStore& store) { return store.isDatabaseStore(); }
 SPECIALIZE_TYPE_TRAITS_END()

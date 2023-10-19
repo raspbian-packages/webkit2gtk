@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 Apple Inc. All rights reserved.
+ * Copyright (C) 2021-2023 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,72 +32,21 @@
 #include "WebGPUSamplerBindingLayout.h"
 #include "WebGPUStorageTextureBindingLayout.h"
 #include "WebGPUTextureBindingLayout.h"
+#include <WebCore/WebGPUIntegralTypes.h>
+#include <WebCore/WebGPUShaderStage.h>
 #include <optional>
-#include <pal/graphics/WebGPU/WebGPUIntegralTypes.h>
-#include <pal/graphics/WebGPU/WebGPUShaderStage.h>
 
 namespace WebKit::WebGPU {
 
 struct BindGroupLayoutEntry {
-    PAL::WebGPU::Index32 binding { 0 };
-    PAL::WebGPU::ShaderStageFlags visibility;
+    WebCore::WebGPU::Index32 binding { 0 };
+    WebCore::WebGPU::ShaderStageFlags visibility;
 
     std::optional<BufferBindingLayout> buffer;
     std::optional<SamplerBindingLayout> sampler;
     std::optional<TextureBindingLayout> texture;
     std::optional<StorageTextureBindingLayout> storageTexture;
     std::optional<ExternalTextureBindingLayout> externalTexture;
-
-    template<class Encoder> void encode(Encoder& encoder) const
-    {
-        encoder << binding;
-        encoder << visibility;
-        encoder << buffer;
-        encoder << sampler;
-        encoder << texture;
-        encoder << storageTexture;
-        encoder << externalTexture;
-    }
-
-    template<class Decoder> static std::optional<BindGroupLayoutEntry> decode(Decoder& decoder)
-    {
-        std::optional<PAL::WebGPU::Index32> binding;
-        decoder >> binding;
-        if (!binding)
-            return std::nullopt;
-
-        std::optional<PAL::WebGPU::ShaderStageFlags> visibility;
-        decoder >> visibility;
-        if (!visibility)
-            return std::nullopt;
-
-        std::optional<std::optional<BufferBindingLayout>> buffer;
-        decoder >> buffer;
-        if (!buffer)
-            return std::nullopt;
-
-        std::optional<std::optional<SamplerBindingLayout>> sampler;
-        decoder >> sampler;
-        if (!sampler)
-            return std::nullopt;
-
-        std::optional<std::optional<TextureBindingLayout>> texture;
-        decoder >> texture;
-        if (!texture)
-            return std::nullopt;
-
-        std::optional<std::optional<StorageTextureBindingLayout>> storageTexture;
-        decoder >> storageTexture;
-        if (!storageTexture)
-            return std::nullopt;
-
-        std::optional<std::optional<ExternalTextureBindingLayout>> externalTexture;
-        decoder >> externalTexture;
-        if (!externalTexture)
-            return std::nullopt;
-
-        return { { WTFMove(*binding), WTFMove(*visibility), WTFMove(*buffer), WTFMove(*sampler), WTFMove(*texture), WTFMove(*storageTexture), WTFMove(*externalTexture) } };
-    }
 };
 
 } // namespace WebKit::WebGPU

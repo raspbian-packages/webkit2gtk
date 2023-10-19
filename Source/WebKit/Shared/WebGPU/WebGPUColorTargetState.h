@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 Apple Inc. All rights reserved.
+ * Copyright (C) 2021-2023 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -28,44 +28,17 @@
 #if ENABLE(GPU_PROCESS)
 
 #include "WebGPUBlendState.h"
+#include <WebCore/WebGPUColorWrite.h>
+#include <WebCore/WebGPUTextureFormat.h>
 #include <optional>
-#include <pal/graphics/WebGPU/WebGPUColorWrite.h>
-#include <pal/graphics/WebGPU/WebGPUTextureFormat.h>
 
 namespace WebKit::WebGPU {
 
 struct ColorTargetState {
-    PAL::WebGPU::TextureFormat format { PAL::WebGPU::TextureFormat::R8unorm };
+    WebCore::WebGPU::TextureFormat format { WebCore::WebGPU::TextureFormat::R8unorm };
 
     std::optional<BlendState> blend;
-    PAL::WebGPU::ColorWriteFlags writeMask { PAL::WebGPU::ColorWrite::All };
-
-    template<class Encoder> void encode(Encoder& encoder) const
-    {
-        encoder << format;
-        encoder << blend;
-        encoder << writeMask;
-    }
-
-    template<class Decoder> static std::optional<ColorTargetState> decode(Decoder& decoder)
-    {
-        std::optional<PAL::WebGPU::TextureFormat> format;
-        decoder >> format;
-        if (!format)
-            return std::nullopt;
-
-        std::optional<std::optional<BlendState>> blend;
-        decoder >> blend;
-        if (!blend)
-            return std::nullopt;
-
-        std::optional<PAL::WebGPU::ColorWriteFlags> writeMask;
-        decoder >> writeMask;
-        if (!writeMask)
-            return std::nullopt;
-
-        return { { WTFMove(*format), WTFMove(*blend), WTFMove(*writeMask) } };
-    }
+    WebCore::WebGPU::ColorWriteFlags writeMask { WebCore::WebGPU::ColorWrite::All };
 };
 
 } // namespace WebKit::WebGPU

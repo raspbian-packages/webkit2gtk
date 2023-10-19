@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020-2022 Apple Inc. All rights reserved.
+ * Copyright (C) 2020-2023 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -28,6 +28,8 @@
 
 #if ENABLE(GPU_PROCESS)
 
+#include "RemoteImageBuffer.h"
+
 namespace WebKit {
 using namespace WebCore;
 
@@ -36,15 +38,24 @@ RemoteResourceCache::RemoteResourceCache(ProcessIdentifier webProcessIdentifier)
 {
 }
 
-void RemoteResourceCache::cacheImageBuffer(Ref<ImageBuffer>&& imageBuffer, QualifiedRenderingResourceIdentifier renderingResourceIdentifier)
+void RemoteResourceCache::cacheImageBuffer(Ref<RemoteImageBuffer>&& imageBuffer, QualifiedRenderingResourceIdentifier renderingResourceIdentifier)
 {
     ASSERT(renderingResourceIdentifier.object() == imageBuffer->renderingResourceIdentifier());
-    m_resourceHeap.add(renderingResourceIdentifier, WTFMove(imageBuffer));
+    Ref<ImageBuffer> buffer = WTFMove(imageBuffer);
+    m_resourceHeap.add(renderingResourceIdentifier, WTFMove(buffer));
 }
 
-ImageBuffer* RemoteResourceCache::cachedImageBuffer(QualifiedRenderingResourceIdentifier renderingResourceIdentifier) const
+RemoteImageBuffer* RemoteResourceCache::cachedImageBuffer(QualifiedRenderingResourceIdentifier renderingResourceIdentifier) const
 {
-    return m_resourceHeap.getImageBuffer(renderingResourceIdentifier);
+    return static_cast<RemoteImageBuffer*>(m_resourceHeap.getImageBuffer(renderingResourceIdentifier)); 
+}
+
+RefPtr<RemoteImageBuffer> RemoteResourceCache::takeImageBuffer(QualifiedRenderingResourceIdentifier renderingResourceIdentifier)
+{
+    RefPtr<RemoteImageBuffer> buffer = cachedImageBuffer(renderingResourceIdentifier);
+    m_resourceHeap.removeImageBuffer(renderingResourceIdentifier);
+    ASSERT(buffer->hasOneRef());
+    return buffer;
 }
 
 void RemoteResourceCache::cacheNativeImage(Ref<NativeImage>&& image, QualifiedRenderingResourceIdentifier renderingResourceIdentifier)
@@ -57,6 +68,16 @@ void RemoteResourceCache::cacheDecomposedGlyphs(Ref<DecomposedGlyphs>&& decompos
 {
     ASSERT(renderingResourceIdentifier.object() == decomposedGlyphs->renderingResourceIdentifier());
     m_resourceHeap.add(renderingResourceIdentifier, WTFMove(decomposedGlyphs));
+}
+
+void RemoteResourceCache::cacheGradient(Ref<Gradient>&& gradient, QualifiedRenderingResourceIdentifier renderingResourceIdentifier)
+{
+    m_resourceHeap.add(renderingResourceIdentifier, WTFMove(gradient));
+}
+
+void RemoteResourceCache::cacheFilter(Ref<Filter>&& filter, QualifiedRenderingResourceIdentifier renderingResourceIdentifier)
+{
+    m_resourceHeap.add(renderingResourceIdentifier, WTFMove(filter));
 }
 
 NativeImage* RemoteResourceCache::cachedNativeImage(QualifiedRenderingResourceIdentifier renderingResourceIdentifier) const
@@ -80,9 +101,30 @@ Font* RemoteResourceCache::cachedFont(QualifiedRenderingResourceIdentifier rende
     return m_resourceHeap.getFont(renderingResourceIdentifier);
 }
 
+void RemoteResourceCache::cacheFontCustomPlatformData(Ref<FontCustomPlatformData>&& font, QualifiedRenderingResourceIdentifier renderingResourceIdentifier)
+{
+    ASSERT(renderingResourceIdentifier.object() == font->m_renderingResourceIdentifier);
+    m_resourceHeap.add(renderingResourceIdentifier, WTFMove(font));
+}
+
+FontCustomPlatformData* RemoteResourceCache::cachedFontCustomPlatformData(QualifiedRenderingResourceIdentifier renderingResourceIdentifier) const
+{
+    return m_resourceHeap.getFontCustomPlatformData(renderingResourceIdentifier);
+}
+
 DecomposedGlyphs* RemoteResourceCache::cachedDecomposedGlyphs(QualifiedRenderingResourceIdentifier renderingResourceIdentifier) const
 {
     return m_resourceHeap.getDecomposedGlyphs(renderingResourceIdentifier);
+}
+
+Gradient* RemoteResourceCache::cachedGradient(QualifiedRenderingResourceIdentifier renderingResourceIdentifier) const
+{
+    return m_resourceHeap.getGradient(renderingResourceIdentifier);
+}
+
+Filter* RemoteResourceCache::cachedFilter(QualifiedRenderingResourceIdentifier renderingResourceIdentifier) const
+{
+    return m_resourceHeap.getFilter(renderingResourceIdentifier);
 }
 
 void RemoteResourceCache::releaseAllResources()
@@ -90,12 +132,17 @@ void RemoteResourceCache::releaseAllResources()
     m_resourceHeap.releaseAllResources();
 }
 
-bool RemoteResourceCache::releaseResource(QualifiedRenderingResourceIdentifier renderingResourceIdentifier)
+void RemoteResourceCache::releaseAllImageResources()
+{
+    m_resourceHeap.releaseAllImageResources();
+}
+
+bool RemoteResourceCache::releaseRenderingResource(QualifiedRenderingResourceIdentifier renderingResourceIdentifier)
 {
     if (m_resourceHeap.removeImageBuffer(renderingResourceIdentifier)
-        || m_resourceHeap.removeNativeImage(renderingResourceIdentifier)
+        || m_resourceHeap.removeRenderingResource(renderingResourceIdentifier)
         || m_resourceHeap.removeFont(renderingResourceIdentifier)
-        || m_resourceHeap.removeDecomposedGlyphs(renderingResourceIdentifier))
+        || m_resourceHeap.removeFontCustomPlatformData(renderingResourceIdentifier))
         return true;
 
     // Caching the remote resource should have happened before releasing it.

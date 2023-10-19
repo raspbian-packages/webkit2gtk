@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021-2022 Apple Inc. All rights reserved.
+ * Copyright (C) 2021-2023 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -28,43 +28,16 @@
 #if ENABLE(GPU_PROCESS)
 
 #include "WebGPUObjectDescriptorBase.h"
+#include <WebCore/WebGPUIntegralTypes.h>
+#include <WebCore/WebGPUQueryType.h>
 #include <optional>
-#include <pal/graphics/WebGPU/WebGPUIntegralTypes.h>
-#include <pal/graphics/WebGPU/WebGPUQueryType.h>
 #include <wtf/Vector.h>
 
 namespace WebKit::WebGPU {
 
 struct QuerySetDescriptor : public ObjectDescriptorBase {
-    PAL::WebGPU::QueryType type { PAL::WebGPU::QueryType::Occlusion };
-    PAL::WebGPU::Size32 count { 0 };
-
-    template<class Encoder> void encode(Encoder& encoder) const
-    {
-        encoder << static_cast<const ObjectDescriptorBase&>(*this);
-        encoder << type;
-        encoder << count;
-    }
-
-    template<class Decoder> static std::optional<QuerySetDescriptor> decode(Decoder& decoder)
-    {
-        std::optional<ObjectDescriptorBase> objectDescriptorBase;
-        decoder >> objectDescriptorBase;
-        if (!objectDescriptorBase)
-            return std::nullopt;
-
-        std::optional<PAL::WebGPU::QueryType> type;
-        decoder >> type;
-        if (!type)
-            return std::nullopt;
-
-        std::optional<PAL::WebGPU::Size32> count;
-        decoder >> count;
-        if (!count)
-            return std::nullopt;
-
-        return { { WTFMove(*objectDescriptorBase), WTFMove(*type), WTFMove(*count) } };
-    }
+    WebCore::WebGPU::QueryType type { WebCore::WebGPU::QueryType::Occlusion };
+    WebCore::WebGPU::Size32 count { 0 };
 };
 
 } // namespace WebKit::WebGPU

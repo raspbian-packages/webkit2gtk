@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 Apple Inc. All rights reserved.
+ * Copyright (C) 2021-2023 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -28,79 +28,22 @@
 #if ENABLE(GPU_PROCESS)
 
 #include "WebGPUObjectDescriptorBase.h"
+#include <WebCore/WebGPUIntegralTypes.h>
+#include <WebCore/WebGPUTextureAspect.h>
+#include <WebCore/WebGPUTextureFormat.h>
+#include <WebCore/WebGPUTextureViewDimension.h>
 #include <optional>
-#include <pal/graphics/WebGPU/WebGPUIntegralTypes.h>
-#include <pal/graphics/WebGPU/WebGPUTextureAspect.h>
-#include <pal/graphics/WebGPU/WebGPUTextureFormat.h>
-#include <pal/graphics/WebGPU/WebGPUTextureViewDimension.h>
 
 namespace WebKit::WebGPU {
 
 struct TextureViewDescriptor : public ObjectDescriptorBase {
-    std::optional<PAL::WebGPU::TextureFormat> format;
-    std::optional<PAL::WebGPU::TextureViewDimension> dimension;
-    PAL::WebGPU::TextureAspect aspect { PAL::WebGPU::TextureAspect::All };
-    PAL::WebGPU::IntegerCoordinate baseMipLevel { 0 };
-    std::optional<PAL::WebGPU::IntegerCoordinate> mipLevelCount;
-    PAL::WebGPU::IntegerCoordinate baseArrayLayer { 0 };
-    std::optional<PAL::WebGPU::IntegerCoordinate> arrayLayerCount;
-
-    template<class Encoder> void encode(Encoder& encoder) const
-    {
-        encoder << static_cast<const ObjectDescriptorBase&>(*this);
-        encoder << format;
-        encoder << dimension;
-        encoder << aspect;
-        encoder << baseMipLevel;
-        encoder << mipLevelCount;
-        encoder << baseArrayLayer;
-        encoder << arrayLayerCount;
-    }
-
-    template<class Decoder> static std::optional<TextureViewDescriptor> decode(Decoder& decoder)
-    {
-        std::optional<ObjectDescriptorBase> objectDescriptorBase;
-        decoder >> objectDescriptorBase;
-        if (!objectDescriptorBase)
-            return std::nullopt;
-
-        std::optional<std::optional<PAL::WebGPU::TextureFormat>> format;
-        decoder >> format;
-        if (!format)
-            return std::nullopt;
-
-        std::optional<std::optional<PAL::WebGPU::TextureViewDimension>> dimension;
-        decoder >> dimension;
-        if (!dimension)
-            return std::nullopt;
-
-        std::optional<PAL::WebGPU::TextureAspect> aspect;
-        decoder >> aspect;
-        if (!aspect)
-            return std::nullopt;
-
-        std::optional<PAL::WebGPU::IntegerCoordinate> baseMipLevel;
-        decoder >> baseMipLevel;
-        if (!baseMipLevel)
-            return std::nullopt;
-
-        std::optional<std::optional<PAL::WebGPU::IntegerCoordinate>> mipLevelCount;
-        decoder >> mipLevelCount;
-        if (!mipLevelCount)
-            return std::nullopt;
-
-        std::optional<PAL::WebGPU::IntegerCoordinate> baseArrayLayer;
-        decoder >> baseArrayLayer;
-        if (!baseArrayLayer)
-            return std::nullopt;
-
-        std::optional<std::optional<PAL::WebGPU::IntegerCoordinate>> arrayLayerCount;
-        decoder >> arrayLayerCount;
-        if (!arrayLayerCount)
-            return std::nullopt;
-
-        return { { WTFMove(*objectDescriptorBase), WTFMove(*format), WTFMove(*dimension), WTFMove(*aspect), WTFMove(*baseMipLevel), WTFMove(*mipLevelCount), WTFMove(*baseArrayLayer), WTFMove(*arrayLayerCount) } };
-    }
+    std::optional<WebCore::WebGPU::TextureFormat> format;
+    std::optional<WebCore::WebGPU::TextureViewDimension> dimension;
+    WebCore::WebGPU::TextureAspect aspect { WebCore::WebGPU::TextureAspect::All };
+    WebCore::WebGPU::IntegerCoordinate baseMipLevel { 0 };
+    std::optional<WebCore::WebGPU::IntegerCoordinate> mipLevelCount;
+    WebCore::WebGPU::IntegerCoordinate baseArrayLayer { 0 };
+    std::optional<WebCore::WebGPU::IntegerCoordinate> arrayLayerCount;
 };
 
 } // namespace WebKit::WebGPU

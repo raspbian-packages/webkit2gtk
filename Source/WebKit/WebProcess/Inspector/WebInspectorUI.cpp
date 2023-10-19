@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2021 Apple Inc. All rights reserved.
+ * Copyright (C) 2014-2023 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,12 +34,12 @@
 #include <WebCore/CertificateInfo.h>
 #include <WebCore/Chrome.h>
 #include <WebCore/DOMWrapperWorld.h>
-#include <WebCore/DeprecatedGlobalSettings.h>
 #include <WebCore/ExceptionDetails.h>
 #include <WebCore/FloatRect.h>
 #include <WebCore/InspectorController.h>
 #include <WebCore/InspectorFrontendHost.h>
 #include <WebCore/NotImplemented.h>
+#include <WebCore/Page.h>
 #include <WebCore/Settings.h>
 
 #if ENABLE(INSPECTOR_EXTENSIONS)
@@ -56,14 +56,7 @@ Ref<WebInspectorUI> WebInspectorUI::create(WebPage& page)
 
 void WebInspectorUI::enableFrontendFeatures(WebPage& page)
 {
-    // FIXME: These should be enabled in the UIProcess by the preferences for the inspector page's WKWebView.
-    DeprecatedGlobalSettings::setImageBitmapEnabled(true);
-#if ENABLE(WEBGL2)
-    page.corePage()->settings().setWebGL2Enabled(true);
-#endif
-#if ENABLE(CSS_TYPED_OM)
     page.corePage()->settings().setCSSTypedOMEnabled(true);
-#endif
 }
 
 WebInspectorUI::WebInspectorUI(WebPage& page)
@@ -85,7 +78,7 @@ void WebInspectorUI::establishConnection(WebPageProxyIdentifier inspectedPageIde
 
 #if ENABLE(INSPECTOR_EXTENSIONS)
     if (!m_extensionController)
-        m_extensionController = makeUnique<WebInspectorUIExtensionController>(*this);
+        m_extensionController = makeUnique<WebInspectorUIExtensionController>(*this, m_page.identifier());
 #endif
 
     m_frontendAPIDispatcher->reset();
@@ -105,10 +98,10 @@ void WebInspectorUI::updateConnection()
     if (!connectionIdentifiers)
         return;
 
-    m_backendConnection = IPC::Connection::createServerConnection(connectionIdentifiers->server, *this);
-    m_backendConnection->open();
+    m_backendConnection = IPC::Connection::createServerConnection(connectionIdentifiers->server);
+    m_backendConnection->open(*this);
 
-    WebProcess::singleton().parentProcessConnection()->send(Messages::WebInspectorUIProxy::SetFrontendConnection(connectionIdentifiers->client), m_inspectedPageIdentifier);
+    WebProcess::singleton().parentProcessConnection()->send(Messages::WebInspectorUIProxy::SetFrontendConnection(WTFMove(connectionIdentifiers->client)), m_inspectedPageIdentifier);
 }
 
 void WebInspectorUI::windowObjectCleared()
@@ -326,6 +319,11 @@ void WebInspectorUI::showCertificate(const CertificateInfo& certificateInfo)
     WebProcess::singleton().parentProcessConnection()->send(Messages::WebInspectorUIProxy::ShowCertificate(certificateInfo), m_inspectedPageIdentifier);
 }
 
+void WebInspectorUI::setInspectorPageDeveloperExtrasEnabled(bool enabled)
+{
+    WebProcess::singleton().parentProcessConnection()->send(Messages::WebInspectorUIProxy::SetInspectorPageDeveloperExtrasEnabled(enabled), m_inspectedPageIdentifier);
+}
+
 #if ENABLE(INSPECTOR_TELEMETRY)
 bool WebInspectorUI::supportsDiagnosticLogging()
 {
@@ -353,7 +351,7 @@ bool WebInspectorUI::supportsWebExtensions()
     return true;
 }
 
-void WebInspectorUI::didShowExtensionTab(const String& extensionID, const String& extensionTabID, WebCore::FrameIdentifier frameID)
+void WebInspectorUI::didShowExtensionTab(const String& extensionID, const String& extensionTabID, const WebCore::FrameIdentifier& frameID)
 {
     if (!m_extensionController)
         return;

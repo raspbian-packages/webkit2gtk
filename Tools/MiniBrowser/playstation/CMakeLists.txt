@@ -22,14 +22,20 @@ set(MiniBrowser_LIBRARIES
 )
 set(MiniBrowser_FRAMEWORKS WebKit)
 
+if (USE_WPE_BACKEND_PLAYSTATION)
+    set(MiniBrowser_DEFINITIONS USE_WPE_BACKEND_PLAYSTATION)
+    list(APPEND MiniBrowser_LIBRARIES WebKit::WPEToolingBackends)
+endif ()
+
 WEBKIT_EXECUTABLE_DECLARE(MiniBrowser)
 WEBKIT_EXECUTABLE(MiniBrowser)
 
 target_link_options(MiniBrowser PRIVATE -Wl,--no-demangle)
 
-#
-# Set the debugger working directory for Visual Studio
-#
 if (${CMAKE_GENERATOR} MATCHES "Visual Studio")
+    # Set the debugger working directory for Visual Studio
     set_target_properties(MiniBrowser PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
+
+    # Set the startup target to MiniBrowser
+    set_property(DIRECTORY ${PROJECT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT MiniBrowser)
 endif ()

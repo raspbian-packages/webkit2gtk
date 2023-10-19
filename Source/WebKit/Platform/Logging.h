@@ -53,18 +53,21 @@ extern "C" {
     M(DiskPersistency) \
     M(DragAndDrop) \
     M(EME) \
+    M(Extensions) \
     M(Fullscreen) \
     M(Gamepad) \
     M(IPC) \
     M(IPCMessages) \
     M(ITPDebug) \
     M(IconDatabase) \
+    M(Images) \
     M(ImageAnalysis) \
     M(IncrementalPDF) \
     M(IncrementalPDFVerbose) \
     M(IndexedDB) \
     M(Inspector) \
     M(KeyHandling) \
+    M(Keychain) \
     M(Language) \
     M(Layers) \
     M(Layout) \
@@ -88,13 +91,14 @@ extern "C" {
     M(ProcessSwapping) \
     M(ProximityNetworking) \
     M(Push) \
-    M(RemoteRenderingBufferVolatility) \
+    M(RemoteLayerBuffers) \
     M(RemoteLayerTree) \
     M(Resize) \
     M(ResourceLoadStatistics) \
     M(Sandbox) \
     M(ScrollAnimations) \
     M(Scrolling) \
+    M(SecureCoding) \
     M(Selection) \
     M(ServiceWorker) \
     M(SessionState) \
@@ -102,7 +106,9 @@ extern "C" {
     M(SharedWorker) \
     M(Storage) \
     M(StorageAPI) \
+    M(SystemPreview) \
     M(TextInput) \
+    M(TextInteraction) \
     M(Translation) \
     M(UIHitTesting) \
     M(ViewGestures) \

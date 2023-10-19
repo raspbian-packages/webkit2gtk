@@ -4,7 +4,7 @@
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation; either
- * version 2,1 of the License, or (at your option) any later version.
+ * version 2.1 of the License, or (at your option) any later version.
  *
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -90,7 +90,7 @@ struct _WebKitWebInspectorPrivate {
     bool canAttach;
 };
 
-WEBKIT_DEFINE_TYPE(WebKitWebInspector, webkit_web_inspector, G_TYPE_OBJECT)
+WEBKIT_DEFINE_FINAL_TYPE(WebKitWebInspector, webkit_web_inspector, G_TYPE_OBJECT, GObject)
 
 static guint signals[LAST_SIGNAL] = { 0, };
 
@@ -126,8 +126,7 @@ static void webkit_web_inspector_class_init(WebKitWebInspectorClass* findClass)
     sObjProperties[PROP_INSPECTED_URI] =
         g_param_spec_string(
             "inspected-uri",
-            _("Inspected URI"),
-            _("The URI that is currently being inspected"),
+            nullptr, nullptr,
             nullptr,
             WEBKIT_PARAM_READABLE);
     /**
@@ -138,8 +137,7 @@ static void webkit_web_inspector_class_init(WebKitWebInspectorClass* findClass)
     sObjProperties[PROP_ATTACHED_HEIGHT] =
         g_param_spec_uint(
             "attached-height",
-            _("Attached Height"),
-            _("The height that the inspector view should have when it is attached"),
+            nullptr, nullptr,
             0, G_MAXUINT, 0,
             WEBKIT_PARAM_READABLE);
 
@@ -154,8 +152,7 @@ static void webkit_web_inspector_class_init(WebKitWebInspectorClass* findClass)
     sObjProperties[PROP_CAN_ATTACH] =
         g_param_spec_boolean(
             "can-attach",
-            _("Can Attach"),
-            _("Whether the inspector can be attached to the same window that contains the inspected view"),
+            nullptr, nullptr,
             FALSE,
             WEBKIT_PARAM_READABLE);
 

@@ -38,11 +38,12 @@ WI.SpreadsheetRulesStyleDetailsPanel = class SpreadsheetRulesStyleDetailsPanel e
         this._headerMap = new Map;
         this._sections = [];
         this._newRuleSelector = null;
+        this._newRuleStyleId = null;
         this._ruleMediaAndInherticanceList = [];
         this._propertyToSelectAndHighlight = null;
         this._filterText = null;
         this._shouldRefreshSubviews = false;
-        this._suppressLayoutAfterSelectorChange = false;
+        this._suppressLayoutAfterSelectorOrGroupChange = false;
 
         this._emptyFilterResultsElement = WI.createMessageTextView(WI.UIString("No Results Found"));
     }
@@ -199,7 +200,7 @@ WI.SpreadsheetRulesStyleDetailsPanel = class SpreadsheetRulesStyleDetailsPanel e
                 if (delta < 0)
                     section._propertiesEditor.startEditingLastProperty();
                 else
-                    section.startEditingRuleSelector();
+                    section.startEditingFirstGroupingOrRuleSelector();
                 break;
             }
 
@@ -210,7 +211,7 @@ WI.SpreadsheetRulesStyleDetailsPanel = class SpreadsheetRulesStyleDetailsPanel e
     spreadsheetCSSStyleDeclarationSectionAddNewRule(section, selector, text)
     {
         this._newRuleSelector = selector;
-        this.nodeStyles.addRule(this._newRuleSelector, text);
+        this.nodeStyles.addRule(this._newRuleSelector, text).then((rulePayload) => {this._newRuleStyleId = rulePayload.style.styleId;});
     }
 
     spreadsheetCSSStyleDeclarationSectionSetAllPropertyVisibilityMode(section, propertyVisibilityMode)
@@ -228,8 +229,8 @@ WI.SpreadsheetRulesStyleDetailsPanel = class SpreadsheetRulesStyleDetailsPanel e
 
         this._shouldRefreshSubviews = false;
 
-        if (this._suppressLayoutAfterSelectorChange) {
-            this._suppressLayoutAfterSelectorChange = false;
+        if (this._suppressLayoutAfterSelectorOrGroupChange) {
+            this._suppressLayoutAfterSelectorOrGroupChange = false;
             return;
         }
 
@@ -276,11 +277,11 @@ WI.SpreadsheetRulesStyleDetailsPanel = class SpreadsheetRulesStyleDetailsPanel e
             if (!section) {
                 section = new WI.SpreadsheetCSSStyleDeclarationSection(this, style);
                 section.addEventListener(WI.SpreadsheetCSSStyleDeclarationSection.Event.FilterApplied, this._handleSectionFilterApplied, this);
-                section.addEventListener(WI.SpreadsheetCSSStyleDeclarationSection.Event.SelectorWillChange, this._handleSectionSelectorWillChange, this);
+                section.addEventListener(WI.SpreadsheetCSSStyleDeclarationSection.Event.SelectorOrGroupingWillChange, this._handleSectionSelectorOrGroupingWillChange, this);
                 style[SpreadsheetRulesStyleDetailsPanel.StyleSectionSymbol] = section;
             }
 
-            if (this._newRuleSelector === style.selectorText && style.enabledProperties.length === 0)
+            if (this._newRuleSelector === style.selectorText && style.enabledProperties.length === 0 && Object.shallowEqual(this._newRuleStyleId, style.id))
                 section.startEditingRuleSelector();
 
             addSection(section);
@@ -327,6 +328,7 @@ WI.SpreadsheetRulesStyleDetailsPanel = class SpreadsheetRulesStyleDetailsPanel e
         addPseudoStyles();
 
         this._newRuleSelector = null;
+        this._newRuleStyleId = null;
 
         this.element.append(this._emptyFilterResultsElement);
 
@@ -359,12 +361,12 @@ WI.SpreadsheetRulesStyleDetailsPanel = class SpreadsheetRulesStyleDetailsPanel e
         this._newRuleSelector = this.nodeStyles.node.appropriateSelectorFor(justSelector);
 
         const text = "";
-        this.nodeStyles.addRule(this._newRuleSelector, text, stylesheetId);
+        this.nodeStyles.addRule(this._newRuleSelector, text, stylesheetId).then((rulePayload) => {this._newRuleStyleId = rulePayload.style.styleId;});
     }
 
-    _handleSectionSelectorWillChange(event)
+    _handleSectionSelectorOrGroupingWillChange(event)
     {
-        this._suppressLayoutAfterSelectorChange = true;
+        this._suppressLayoutAfterSelectorOrGroupChange = true;
     }
 };
 

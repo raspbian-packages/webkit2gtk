@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 Apple Inc. All rights reserved.
+ * Copyright (C) 2021-2023 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -27,42 +27,15 @@
 
 #if ENABLE(GPU_PROCESS)
 
+#include <WebCore/WebGPUIntegralTypes.h>
 #include <optional>
-#include <pal/graphics/WebGPU/WebGPUIntegralTypes.h>
 
 namespace WebKit::WebGPU {
 
 struct ImageDataLayout {
-    PAL::WebGPU::Size64 offset { 0 };
-    std::optional<PAL::WebGPU::Size32> bytesPerRow;
-    std::optional<PAL::WebGPU::Size32> rowsPerImage;
-
-    template<class Encoder> void encode(Encoder& encoder) const
-    {
-        encoder << offset;
-        encoder << bytesPerRow;
-        encoder << rowsPerImage;
-    }
-
-    template<class Decoder> static std::optional<ImageDataLayout> decode(Decoder& decoder)
-    {
-        std::optional<PAL::WebGPU::Size64> offset;
-        decoder >> offset;
-        if (!offset)
-            return std::nullopt;
-
-        std::optional<std::optional<PAL::WebGPU::Size32>> bytesPerRow;
-        decoder >> bytesPerRow;
-        if (!bytesPerRow)
-            return std::nullopt;
-
-        std::optional<std::optional<PAL::WebGPU::Size32>> rowsPerImage;
-        decoder >> rowsPerImage;
-        if (!rowsPerImage)
-            return std::nullopt;
-
-        return { { WTFMove(*offset), WTFMove(*bytesPerRow), WTFMove(*rowsPerImage) } };
-    }
+    WebCore::WebGPU::Size64 offset { 0 };
+    std::optional<WebCore::WebGPU::Size32> bytesPerRow;
+    std::optional<WebCore::WebGPU::Size32> rowsPerImage;
 };
 
 } // namespace WebKit::WebGPU

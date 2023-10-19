@@ -49,11 +49,11 @@ class ManagerInterface {
 public:
     virtual ~ManagerInterface() { };
 
-    using AttributionDestinationSite = WebCore::PrivateClickMeasurement::AttributionDestinationSite;
-    using AttributionTriggerData = WebCore::PrivateClickMeasurement::AttributionTriggerData;
+    using AttributionDestinationSite = WebCore::PCM::AttributionDestinationSite;
+    using AttributionTriggerData = WebCore::PCM::AttributionTriggerData;
     using PrivateClickMeasurement = WebCore::PrivateClickMeasurement;
     using RegistrableDomain = WebCore::RegistrableDomain;
-    using SourceSite = WebCore::PrivateClickMeasurement::SourceSite;
+    using SourceSite = WebCore::PCM::SourceSite;
     using ApplicationBundleIdentifier = String;
 
     virtual void storeUnattributed(PrivateClickMeasurement&&, CompletionHandler<void()>&&) = 0;
@@ -108,7 +108,7 @@ enum class MessageType : uint8_t {
 constexpr const char* protocolEncodedMessageKey { "encoded message" };
 using EncodedMessage = Vector<uint8_t>;
 
-void decodeMessageAndSendToManager(const Daemon::Connection&, MessageType, Span<const uint8_t> encodedMessage, CompletionHandler<void(Vector<uint8_t>&&)>&&);
+void decodeMessageAndSendToManager(const Daemon::Connection&, MessageType, std::span<const uint8_t> encodedMessage, CompletionHandler<void(Vector<uint8_t>&&)>&&);
 void doDailyActivityInManager();
 bool messageTypeSendsReply(MessageType);
 

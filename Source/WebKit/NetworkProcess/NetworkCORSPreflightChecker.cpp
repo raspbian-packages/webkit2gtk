@@ -67,7 +67,8 @@ void NetworkCORSPreflightChecker::startPreflight()
     CORS_CHECKER_RELEASE_LOG("startPreflight");
 
     NetworkLoadParameters loadParameters;
-    loadParameters.request = createAccessControlPreflightRequest(m_parameters.originalRequest, m_parameters.sourceOrigin, m_parameters.referrer);
+    loadParameters.request = createAccessControlPreflightRequest(m_parameters.originalRequest, m_parameters.sourceOrigin, m_parameters.referrer, m_parameters.includeFetchMetadata);
+    loadParameters.advancedPrivacyProtections = m_parameters.advancedPrivacyProtections;
     if (!m_parameters.userAgent.isNull())
         loadParameters.request.setHTTPHeaderField(HTTPHeaderName::UserAgent, m_parameters.userAgent);
 
@@ -75,6 +76,7 @@ void NetworkCORSPreflightChecker::startPreflight()
         m_loadInformation = NetworkTransactionInformation { NetworkTransactionInformation::Type::Preflight, loadParameters.request, { }, { } };
 
     loadParameters.webPageProxyID = m_parameters.webPageProxyID;
+    loadParameters.allowPrivacyProxy = m_parameters.allowPrivacyProxy;
 
     if (auto* networkSession = m_networkProcess->networkSession(m_parameters.sessionID)) {
         m_task = NetworkDataTask::create(*networkSession, *this, WTFMove(loadParameters));

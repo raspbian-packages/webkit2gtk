@@ -47,13 +47,13 @@ messages -> TestWithLegacyReceiver LegacyReceiver {
     GetPlugins(bool refresh) -> (Vector<WebCore::PluginInfo> plugins)
     GetPluginProcessConnection(String pluginPath) -> (IPC::Connection::Handle connectionHandle) Synchronous
 
-    TestMultipleAttributes() -> () WantsConnection Synchronous
+    TestMultipleAttributes() -> () Synchronous
 
     TestParameterAttributes([AttributeOne AttributeTwo] uint64_t foo, double bar, [AttributeThree] double baz)
 
     TemplateTest(HashMap<String, std::pair<String, uint64_t>> a)
 
-    SetVideoLayerID(WebCore::GraphicsLayer::PlatformLayerID videoLayerID)
+    SetVideoLayerID(WebCore::PlatformLayerIdentifier videoLayerID)
 
 #if PLATFORM(MAC)
     DidCreateWebProcessConnection(MachSendRight connectionIdentifier, OptionSet<WebKit::SelectionFlags> flags)

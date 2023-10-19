@@ -23,7 +23,10 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#if PLATFORM(IOS)
+#if PLATFORM(IOS) || PLATFORM(VISION)
+
+#import <pal/spi/cocoa/LaunchServicesSPI.h>
+
 #if USE(APPLE_INTERNAL_SDK)
 
 // This space intentionally left blank
@@ -61,7 +64,12 @@ typedef NS_OPTIONS(uint64_t, LSApplicationEnumerationOptions) {
 + (LSEnumerator<LSApplicationRecord *> *)enumeratorWithOptions:(LSApplicationEnumerationOptions)options;
 @end
 
+@interface LSApplicationWorkspace : NSObject
++ (LSApplicationWorkspace *)defaultWorkspace;
+- (void)openURL:(NSURL *)url configuration:(_LSOpenConfiguration *)configuration completionHandler:(void (^)(NSDictionary<NSString *, id> *result, NSError *error))completionHandler;
+@end
+
 NS_ASSUME_NONNULL_END
 
 #endif // USE(APPLE_INTERNAL_SDK)
-#endif // PLATFORM(IOS)
+#endif // PLATFORM(IOS) || PLATFORM(VISION)

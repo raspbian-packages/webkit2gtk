@@ -48,22 +48,24 @@
 #include <WebCore/EventHandler.h>
 #include <WebCore/EventNames.h>
 #include <WebCore/FocusController.h>
-#include <WebCore/Frame.h>
 #include <WebCore/FrameLoadRequest.h>
 #include <WebCore/FrameLoader.h>
-#include <WebCore/FrameLoaderClient.h>
-#include <WebCore/FrameView.h>
 #include <WebCore/GraphicsContext.h>
 #include <WebCore/HTMLPlugInElement.h>
 #include <WebCore/HTTPHeaderNames.h>
 #include <WebCore/HostWindow.h>
+#include <WebCore/LocalFrame.h>
+#include <WebCore/LocalFrameLoaderClient.h>
+#include <WebCore/LocalFrameView.h>
 #include <WebCore/MIMETypeRegistry.h>
 #include <WebCore/MouseEvent.h>
 #include <WebCore/NetscapePlugInStreamLoader.h>
 #include <WebCore/NetworkStorageSession.h>
+#include <WebCore/OriginAccessPatterns.h>
 #include <WebCore/PageInlines.h>
 #include <WebCore/PlatformMouseEvent.h>
 #include <WebCore/ProtectionSpace.h>
+#include <WebCore/RenderBoxModelObjectInlines.h>
 #include <WebCore/RenderEmbeddedObject.h>
 #include <WebCore/ScriptController.h>
 #include <WebCore/ScrollView.h>
@@ -128,7 +130,7 @@ void PluginView::Stream::start()
 {
     ASSERT(!m_loader);
 
-    Frame* frame = m_pluginView->frame();
+    auto* frame = m_pluginView->frame();
     ASSERT(frame);
 
     WebProcess::singleton().webLoaderStrategy().schedulePluginStreamLoad(*frame, *this, ResourceRequest {m_request}, [this, protectedThis = Ref { *this }](RefPtr<NetscapePlugInStreamLoader>&& loader) {
@@ -231,7 +233,7 @@ PluginView::~PluginView()
     m_plugin->destroy();
 }
 
-Frame* PluginView::frame() const
+LocalFrame* PluginView::frame() const
 {
     return m_pluginElement->document().frame();
 }
@@ -359,8 +361,8 @@ void PluginView::initializePlugin()
     m_plugin->visibilityDidChange(isVisible());
 #endif
 
-    if (Frame* frame = this->frame()) {
-        if (FrameView* frameView = frame->view())
+    if (auto* frame = this->frame()) {
+        if (auto* frameView = frame->view())
             frameView->setNeedsLayoutAfterViewConfigurationChange();
         if (frame->isMainFrame() && m_plugin->isFullFramePlugin())
             WebFrame::fromCoreFrame(*frame)->page()->send(Messages::WebPageProxy::MainFramePluginHandlesPageScaleGestureDidChange(true));
@@ -382,6 +384,13 @@ PlatformLayer* PluginView::platformLayer() const
 bool PluginView::scroll(ScrollDirection direction, ScrollGranularity granularity)
 {
     return m_isInitialized && m_plugin->scroll(direction, granularity);
+}
+
+ScrollPosition PluginView::scrollPositionForTesting() const
+{
+    if (!m_isInitialized)
+        return { };
+    return m_plugin->scrollPositionForTesting();
 }
 
 Scrollbar* PluginView::horizontalScrollbar()
@@ -411,7 +420,7 @@ void PluginView::setFrameRect(const WebCore::IntRect& rect)
     viewGeometryDidChange();
 }
 
-void PluginView::paint(GraphicsContext& context, const IntRect& /*dirtyRect*/, Widget::SecurityOriginPaintPolicy, EventRegionContext*)
+void PluginView::paint(GraphicsContext& context, const IntRect& /*dirtyRect*/, Widget::SecurityOriginPaintPolicy, RegionContext*)
 {
     if (!m_isInitialized)
         return;
@@ -428,8 +437,15 @@ void PluginView::paint(GraphicsContext& context, const IntRect& /*dirtyRect*/, W
     if (paintRect.isEmpty())
         return;
 
-    if (m_transientPaintingSnapshot)
-        m_transientPaintingSnapshot->paint(context, m_plugin->deviceScaleFactor(), frameRect().location(), m_transientPaintingSnapshot->bounds());
+    if (m_transientPaintingSnapshot) {
+        if (!context.platformContext()) {
+            auto image = m_transientPaintingSnapshot->createImage();
+            if (!image)
+                return;
+            context.drawImage(*image, frameRect());
+        } else
+            m_transientPaintingSnapshot->paint(context, m_plugin->deviceScaleFactor(), frameRect().location(), m_transientPaintingSnapshot->bounds());
+    }
 }
 
 void PluginView::frameRectsChanged()
@@ -486,27 +502,27 @@ void PluginView::handleEvent(Event& event)
 
     bool didHandleEvent = false;
 
-    if ((event.type() == eventNames().mousemoveEvent && currentEvent->type() == WebEvent::MouseMove)
-        || (event.type() == eventNames().mousedownEvent && currentEvent->type() == WebEvent::MouseDown)
-        || (event.type() == eventNames().mouseupEvent && currentEvent->type() == WebEvent::MouseUp)) {
+    if ((event.type() == eventNames().mousemoveEvent && currentEvent->type() == WebEventType::MouseMove)
+        || (event.type() == eventNames().mousedownEvent && currentEvent->type() == WebEventType::MouseDown)
+        || (event.type() == eventNames().mouseupEvent && currentEvent->type() == WebEventType::MouseUp)) {
         // FIXME: Clicking in a scroll bar should not change focus.
-        if (currentEvent->type() == WebEvent::MouseDown) {
+        if (currentEvent->type() == WebEventType::MouseDown) {
             focusPluginElement();
             frame()->eventHandler().setCapturingMouseEventsElement(m_pluginElement.ptr());
-        } else if (currentEvent->type() == WebEvent::MouseUp)
+        } else if (currentEvent->type() == WebEventType::MouseUp)
             frame()->eventHandler().setCapturingMouseEventsElement(nullptr);
 
         didHandleEvent = m_plugin->handleMouseEvent(static_cast<const WebMouseEvent&>(*currentEvent));
-    } else if (eventNames().isWheelEventType(event.type()) && currentEvent->type() == WebEvent::Wheel)
+    } else if (eventNames().isWheelEventType(event.type()) && currentEvent->type() == WebEventType::Wheel)
         didHandleEvent = m_plugin->handleWheelEvent(static_cast<const WebWheelEvent&>(*currentEvent));
-    else if (event.type() == eventNames().mouseoverEvent && currentEvent->type() == WebEvent::MouseMove)
+    else if (event.type() == eventNames().mouseoverEvent && currentEvent->type() == WebEventType::MouseMove)
         didHandleEvent = m_plugin->handleMouseEnterEvent(static_cast<const WebMouseEvent&>(*currentEvent));
-    else if (event.type() == eventNames().mouseoutEvent && currentEvent->type() == WebEvent::MouseMove)
+    else if (event.type() == eventNames().mouseoutEvent && currentEvent->type() == WebEventType::MouseMove)
         didHandleEvent = m_plugin->handleMouseLeaveEvent(static_cast<const WebMouseEvent&>(*currentEvent));
-    else if (event.type() == eventNames().contextmenuEvent && currentEvent->type() == WebEvent::MouseDown)
+    else if (event.type() == eventNames().contextmenuEvent && currentEvent->type() == WebEventType::MouseDown)
         didHandleEvent = m_plugin->handleContextMenuEvent(static_cast<const WebMouseEvent&>(*currentEvent));
-    else if ((event.type() == eventNames().keydownEvent && currentEvent->type() == WebEvent::KeyDown)
-        || (event.type() == eventNames().keyupEvent && currentEvent->type() == WebEvent::KeyUp))
+    else if ((event.type() == eventNames().keydownEvent && currentEvent->type() == WebEventType::KeyDown)
+        || (event.type() == eventNames().keyupEvent && currentEvent->type() == WebEventType::KeyUp))
         didHandleEvent = m_plugin->handleKeyboardEvent(static_cast<const WebKeyboardEvent&>(*currentEvent));
 
     if (didHandleEvent)
@@ -653,7 +669,7 @@ IntRect PluginView::clipRectInWindowCoordinates() const
     // Get the frame rect in window coordinates.
     IntRect frameRectInWindowCoordinates = parent()->contentsToWindow(frameRect());
 
-    Frame* frame = this->frame();
+    auto* frame = this->frame();
 
     // Get the window clip rect for the plugin element (in window coordinates).
     IntRect windowClipRect = frame->view()->windowClipRectForFrameOwner(m_pluginElement.ptr(), true);
@@ -738,7 +754,7 @@ void PluginView::invalidateRect(const IntRect& dirtyRect)
 
 void PluginView::loadMainResource()
 {
-    auto referrer = SecurityPolicy::generateReferrerHeader(frame()->document()->referrerPolicy(), m_mainResourceURL, frame()->loader().outgoingReferrer());
+    auto referrer = SecurityPolicy::generateReferrerHeader(frame()->document()->referrerPolicy(), m_mainResourceURL, frame()->loader().outgoingReferrer(), OriginAccessPatternsForWebProcess::singleton());
     if (referrer.isEmpty())
         referrer = { };
 
@@ -752,7 +768,7 @@ bool PluginView::shouldCreateTransientPaintingSnapshot() const
     if (!m_isInitialized)
         return false;
 
-    if (FrameView* frameView = frame()->view()) {
+    if (auto* frameView = frame()->view()) {
         if (frameView->paintBehavior().containsAny({ PaintBehavior::SelectionOnly, PaintBehavior::SelectionAndBackgroundsOnly, PaintBehavior::ForceBlackText })) {
             // This paint behavior is used when drawing the find indicator and there's no need to
             // snapshot plug-ins, because they can never be painted as part of the find indicator.
@@ -796,6 +812,11 @@ WebCore::FloatRect PluginView::rectForSelectionInRootView(PDFSelection *selectio
 CGFloat PluginView::contentScaleFactor() const
 {
     return m_plugin->scaleFactor();
+}
+
+bool PluginView::isUsingUISideCompositing() const
+{
+    return m_webPage->isUsingUISideCompositing();
 }
 
 } // namespace WebKit

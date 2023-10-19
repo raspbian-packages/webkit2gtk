@@ -56,6 +56,7 @@ class RenderTargetVk final : public FramebufferAttachmentRenderTarget
               vk::ImageViewHelper *imageViews,
               vk::ImageHelper *resolveImage,
               vk::ImageViewHelper *resolveImageViews,
+              UniqueSerial imageSiblingSerial,
               gl::LevelIndex levelIndexGL,
               uint32_t layerIndex,
               uint32_t layerCount,
@@ -136,10 +137,11 @@ class RenderTargetVk final : public FramebufferAttachmentRenderTarget
 
     void onNewFramebuffer(const vk::SharedFramebufferCacheKey &sharedFramebufferCacheKey)
     {
+        ASSERT(!mFramebufferCacheManager.containsKey(sharedFramebufferCacheKey));
         mFramebufferCacheManager.addKey(sharedFramebufferCacheKey);
     }
     void release(ContextVk *contextVk) { mFramebufferCacheManager.releaseKeys(contextVk); }
-    void destroy() { mFramebufferCacheManager.destroy(); }
+    void destroy(RendererVk *renderer) { mFramebufferCacheManager.destroyKeys(renderer); }
 
   private:
     void reset();
@@ -169,6 +171,8 @@ class RenderTargetVk final : public FramebufferAttachmentRenderTarget
     // LOAD.
     vk::ImageHelper *mResolveImage;
     vk::ImageViewHelper *mResolveImageViews;
+
+    UniqueSerial mImageSiblingSerial;
 
     // Which subresource of the image is used as render target.  For single-layer render targets,
     // |mLayerIndex| will contain the layer index and |mLayerCount| will be 1.  For layered render

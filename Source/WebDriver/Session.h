@@ -59,7 +59,7 @@ public:
 
     enum class FindElementsMode { Single, Multiple };
     enum class ExecuteScriptMode { Sync, Async };
-    enum class ElementIsShadowRoot { No, Yes };
+    enum class ElementIsShadowRoot : bool { No, Yes };
 
     struct Cookie {
         String name;
@@ -109,6 +109,8 @@ public:
     void getElementTagName(const String& elementID, Function<void (CommandResult&&)>&&);
     void getElementRect(const String& elementID, Function<void (CommandResult&&)>&&);
     void isElementEnabled(const String& elementID, Function<void (CommandResult&&)>&&);
+    void getComputedRole(const String& elementID, Function<void (CommandResult&&)>&&);
+    void getComputedLabel(const String& elementID, Function<void (CommandResult&&)>&&);
     void isElementDisplayed(const String& elementID, Function<void (CommandResult&&)>&&);
     void elementClick(const String& elementID, Function<void (CommandResult&&)>&&);
     void elementClear(const String& elementID, Function<void (CommandResult&&)>&&);

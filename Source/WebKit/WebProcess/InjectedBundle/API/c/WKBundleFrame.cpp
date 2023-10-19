@@ -40,10 +40,11 @@
 #include "WebPage.h"
 #include <WebCore/Document.h>
 #include <WebCore/FocusController.h>
-#include <WebCore/Frame.h>
 #include <WebCore/FrameLoader.h>
-#include <WebCore/FrameView.h>
+#include <WebCore/LocalFrame.h>
+#include <WebCore/LocalFrameView.h>
 #include <WebCore/Page.h>
+#include <WebCore/ReportingScope.h>
 
 WKTypeID WKBundleFrameGetTypeID()
 {
@@ -72,7 +73,7 @@ WKURLRef WKBundleFrameCopyProvisionalURL(WKBundleFrameRef frameRef)
 
 WKFrameLoadState WKBundleFrameGetFrameLoadState(WKBundleFrameRef frameRef)
 {
-    WebCore::Frame* coreFrame = WebKit::toImpl(frameRef)->coreFrame();
+    auto* coreFrame = WebKit::toImpl(frameRef)->coreLocalFrame();
     if (!coreFrame)
         return kWKFrameLoadStateFinished;
 
@@ -146,7 +147,7 @@ WKBundlePageRef WKBundleFrameGetPage(WKBundleFrameRef frameRef)
 
 void WKBundleFrameClearOpener(WKBundleFrameRef frameRef)
 {
-    WebCore::Frame* coreFrame = WebKit::toImpl(frameRef)->coreFrame();
+    auto* coreFrame = WebKit::toImpl(frameRef)->coreLocalFrame();
     if (coreFrame)
         coreFrame->loader().setOpener(0);
 }
@@ -259,7 +260,7 @@ WKDataRef WKBundleFrameCopyWebArchiveFilteringSubframes(WKBundleFrameRef frameRe
 
 bool WKBundleFrameCallShouldCloseOnWebView(WKBundleFrameRef frameRef)
 {
-    WebCore::Frame* coreFrame = WebKit::toImpl(frameRef)->coreFrame();
+    auto* coreFrame = WebKit::toImpl(frameRef)->coreLocalFrame();
     if (!coreFrame)
         return true;
 
@@ -273,7 +274,7 @@ WKBundleHitTestResultRef WKBundleFrameCreateHitTestResult(WKBundleFrameRef frame
 
 WKSecurityOriginRef WKBundleFrameCopySecurityOrigin(WKBundleFrameRef frameRef)
 {
-    WebCore::Frame* coreFrame = WebKit::toImpl(frameRef)->coreFrame();
+    auto* coreFrame = WebKit::toImpl(frameRef)->coreLocalFrame();
     if (!coreFrame)
         return 0;
 
@@ -282,9 +283,19 @@ WKSecurityOriginRef WKBundleFrameCopySecurityOrigin(WKBundleFrameRef frameRef)
 
 void WKBundleFrameFocus(WKBundleFrameRef frameRef)
 {
-    RefPtr coreFrame = WebKit::toImpl(frameRef)->coreFrame();
+    RefPtr coreFrame = WebKit::toImpl(frameRef)->coreLocalFrame();
     if (!coreFrame)
         return;
 
     CheckedRef(coreFrame->page()->focusController())->setFocusedFrame(coreFrame.get());
+}
+
+void _WKBundleFrameGenerateTestReport(WKBundleFrameRef frameRef, WKStringRef message, WKStringRef group)
+{
+    RefPtr coreFrame = WebKit::toImpl(frameRef)->coreLocalFrame();
+    if (!coreFrame)
+        return;
+
+    if (RefPtr document = coreFrame->document())
+        document->reportingScope().generateTestReport(WebKit::toWTFString(message), WebKit::toWTFString(group));
 }

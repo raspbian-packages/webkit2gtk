@@ -27,7 +27,14 @@
 
 #if ENABLE(CG_DISPLAY_LIST_BACKED_IMAGE_BUFFER)
 
+#include "WebCoreArgumentCoders.h"
 #include <WebCore/SharedBuffer.h>
+#include <wtf/MachSendRight.h>
+
+namespace IPC {
+class Encoder;
+class Decoder;
+}
 
 namespace WebKit {
 
@@ -47,7 +54,7 @@ public:
     RefPtr<WebCore::SharedBuffer> buffer() const { return m_displayList; }
     Vector<MachSendRight> takeSurfaces() { return std::exchange(m_surfaces, { }); }
 
-    void encode(IPC::Encoder&) const;
+    void encode(IPC::Encoder&) &&;
     static WARN_UNUSED_RETURN bool decode(IPC::Decoder&, CGDisplayList&);
 
 private:

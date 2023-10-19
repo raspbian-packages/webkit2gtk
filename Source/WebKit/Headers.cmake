@@ -19,7 +19,6 @@ set(WebKit_PUBLIC_FRAMEWORK_HEADERS
     Shared/API/c/WKMutableDictionary.h
     Shared/API/c/WKNumber.h
     Shared/API/c/WKPageLoadTypes.h
-    Shared/API/c/WKPageLoadTypesPrivate.h
     Shared/API/c/WKPageVisibilityTypes.h
     Shared/API/c/WKPluginInformation.h
     Shared/API/c/WKSecurityOriginRef.h
@@ -49,7 +48,7 @@ set(WebKit_PUBLIC_FRAMEWORK_HEADERS
     UIProcess/API/C/WKCredentialTypes.h
     UIProcess/API/C/WKDownloadClient.h
     UIProcess/API/C/WKDownloadRef.h
-    UIProcess/API/C/WKExperimentalFeature.h
+    UIProcess/API/C/WKFeature.h
     UIProcess/API/C/WKFormSubmissionListener.h
     UIProcess/API/C/WKFrame.h
     UIProcess/API/C/WKFrameHandleRef.h
@@ -62,7 +61,6 @@ set(WebKit_PUBLIC_FRAMEWORK_HEADERS
     UIProcess/API/C/WKHitTestResult.h
     UIProcess/API/C/WKIconDatabase.h
     UIProcess/API/C/WKInspector.h
-    UIProcess/API/C/WKInternalDebugFeature.h
     UIProcess/API/C/WKLayoutMode.h
     UIProcess/API/C/WKMediaKeySystemPermissionCallback.h
     UIProcess/API/C/WKMessageListener.h

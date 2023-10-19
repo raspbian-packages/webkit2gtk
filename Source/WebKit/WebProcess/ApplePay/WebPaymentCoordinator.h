@@ -34,6 +34,7 @@
 #include <wtf/Forward.h>
 #include <wtf/HashMap.h>
 #include <wtf/HashSet.h>
+#include <wtf/MonotonicTime.h>
 #include <wtf/text/StringHash.h>
 
 namespace WebCore {
@@ -59,7 +60,7 @@ public:
 
 private:
     // WebCore::PaymentCoordinatorClient.
-    std::optional<String> validatedPaymentNetwork(const String&) override;
+    std::optional<String> validatedPaymentNetwork(const String&) const override;
     bool canMakePayments() override;
     void canMakePaymentsWithActiveCard(const String& merchantIdentifier, const String& domainName, CompletionHandler<void(bool)>&&) override;
     void openPaymentSetup(const String& merchantIdentifier, const String& domainName, CompletionHandler<void(bool)>&&) override;
@@ -75,8 +76,6 @@ private:
 
     void abortPaymentSession() override;
     void cancelPaymentSession() override;
-
-    void paymentCoordinatorDestroyed() override;
 
     bool isWebPaymentCoordinator() const override { return true; }
 
@@ -109,7 +108,10 @@ private:
 
     WebPage& m_webPage;
 
-    std::optional<AvailablePaymentNetworksSet> m_availablePaymentNetworks;
+    mutable std::optional<AvailablePaymentNetworksSet> m_availablePaymentNetworks;
+
+    MonotonicTime m_timestampOfLastCanMakePaymentsRequest;
+    std::optional<bool> m_lastCanMakePaymentsResult;
 };
 
 } // namespace WebKit

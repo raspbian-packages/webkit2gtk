@@ -26,8 +26,9 @@
 
 #include "config.h"
 #include "RemoteGraphicsContextGLProxy.h"
+#include "RemoteRenderingBackendProxy.h"
 
-#if ENABLE(GPU_PROCESS) && ENABLE(WEBGL) && USE(LIBGBM)
+#if ENABLE(GPU_PROCESS) && ENABLE(WEBGL) && USE(GBM)
 
 // This is a standalone check of additional requirements in this implementation,
 // avoiding having to place an overwhelming amount of build guards over the rest of the code.
@@ -99,7 +100,7 @@ void NicosiaDisplayDelegate::swapBuffersIfNeeded()
 
 class RemoteGraphicsContextGLProxyGBM final : public RemoteGraphicsContextGLProxy {
 public:
-    RemoteGraphicsContextGLProxyGBM(GPUProcessConnection&, const WebCore::GraphicsContextGLAttributes&, RenderingBackendIdentifier);
+    RemoteGraphicsContextGLProxyGBM(IPC::Connection&, Ref<IPC::StreamClientConnection>, const WebCore::GraphicsContextGLAttributes&, Ref<RemoteVideoFrameObjectHeapProxy>&&);
     virtual ~RemoteGraphicsContextGLProxyGBM() = default;
 
 private:
@@ -110,8 +111,8 @@ private:
     Ref<NicosiaDisplayDelegate> m_layerContentsDisplayDelegate;
 };
 
-RemoteGraphicsContextGLProxyGBM::RemoteGraphicsContextGLProxyGBM(GPUProcessConnection& processConnection, const WebCore::GraphicsContextGLAttributes& attributes, RenderingBackendIdentifier renderingBackend)
-    : RemoteGraphicsContextGLProxy(processConnection, attributes, renderingBackend)
+RemoteGraphicsContextGLProxyGBM::RemoteGraphicsContextGLProxyGBM(IPC::Connection& connection, Ref<IPC::StreamClientConnection> streamConnection, const WebCore::GraphicsContextGLAttributes& attributes, Ref<RemoteVideoFrameObjectHeapProxy>&& videoFrameObjectHeapProxy)
+    : RemoteGraphicsContextGLProxy(connection, WTFMove(streamConnection), attributes, WTFMove(videoFrameObjectHeapProxy))
     , m_layerContentsDisplayDelegate(adoptRef(*new NicosiaDisplayDelegate(!attributes.alpha)))
 { }
 
@@ -125,22 +126,22 @@ void RemoteGraphicsContextGLProxyGBM::prepareForDisplay()
     if (isContextLost())
         return;
 
-    WebCore::DMABufObject dmabufObject(0);
-    auto sendResult = sendSync(Messages::RemoteGraphicsContextGL::PrepareForDisplay(), Messages::RemoteGraphicsContextGL::PrepareForDisplay::Reply(dmabufObject));
+    auto sendResult = sendSync(Messages::RemoteGraphicsContextGL::PrepareForDisplay());
     if (!sendResult) {
         markContextLost();
         return;
     }
 
+    auto& [dmabufObject] = sendResult.reply();
     m_layerContentsDisplayDelegate->present(WTFMove(dmabufObject));
     markLayerComposited();
 }
 
-RefPtr<RemoteGraphicsContextGLProxy> RemoteGraphicsContextGLProxy::create(const WebCore::GraphicsContextGLAttributes& attributes, RenderingBackendIdentifier renderingBackend)
+Ref<RemoteGraphicsContextGLProxy> RemoteGraphicsContextGLProxy::platformCreate(IPC::Connection& connection, Ref<IPC::StreamClientConnection> streamConnection, const WebCore::GraphicsContextGLAttributes& attributes, Ref<RemoteVideoFrameObjectHeapProxy>&& videoFrameObjectHeapProxy)
 {
-    return adoptRef(new RemoteGraphicsContextGLProxyGBM(WebProcess::singleton().ensureGPUProcessConnection(), attributes, renderingBackend));
+    return adoptRef(*new RemoteGraphicsContextGLProxyGBM(connection, WTFMove(streamConnection), attributes, WTFMove(videoFrameObjectHeapProxy)));
 }
 
 } // namespace WebKit
 
-#endif // ENABLE(GPU_PROCESS) && ENABLE(WEBGL) && USE(LIBGBM)
+#endif // ENABLE(GPU_PROCESS) && ENABLE(WEBGL) && USE(GBM)

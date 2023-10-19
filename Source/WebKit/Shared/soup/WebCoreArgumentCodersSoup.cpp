@@ -29,13 +29,12 @@
 #include "WebCoreArgumentCoders.h"
 
 #include "ArgumentCodersGLib.h"
-#include "DaemonDecoder.h"
-#include "DaemonEncoder.h"
 #include "DataReference.h"
 #include <WebCore/CertificateInfo.h>
 #include <WebCore/Credential.h>
 #include <WebCore/DictionaryPopupInfo.h>
 #include <WebCore/Font.h>
+#include <WebCore/FontCustomPlatformData.h>
 #include <WebCore/ResourceError.h>
 #include <WebCore/ResourceRequest.h>
 #include <WebCore/ResourceResponse.h>
@@ -44,53 +43,6 @@
 
 namespace IPC {
 using namespace WebCore;
-
-void ArgumentCoder<ResourceRequest>::encodePlatformData(Encoder& encoder, const ResourceRequest& resourceRequest)
-{
-    resourceRequest.encodeWithPlatformData(encoder);
-}
-
-bool ArgumentCoder<ResourceRequest>::decodePlatformData(Decoder& decoder, ResourceRequest& resourceRequest)
-{
-    return resourceRequest.decodeWithPlatformData(decoder);
-}
-
-template<typename Encoder>
-void ArgumentCoder<CertificateInfo>::encode(Encoder& encoder, const CertificateInfo& certificateInfo)
-{
-    GRefPtr<GTlsCertificate> certificate = certificateInfo.certificate();
-    encoder << certificate;
-    if (!certificate)
-        return;
-
-    encoder << static_cast<uint32_t>(certificateInfo.tlsErrors());
-}
-template void ArgumentCoder<CertificateInfo>::encode<Encoder>(Encoder&, const CertificateInfo&);
-template void ArgumentCoder<CertificateInfo>::encode<WebKit::Daemon::Encoder>(WebKit::Daemon::Encoder&, const CertificateInfo&);
-
-template<typename Decoder>
-std::optional<CertificateInfo> ArgumentCoder<CertificateInfo>::decode(Decoder& decoder)
-{
-    std::optional<GRefPtr<GTlsCertificate>> certificate;
-    decoder >> certificate;
-    if (!certificate)
-        return std::nullopt;
-
-    CertificateInfo certificateInfo;
-    if (certificate.value()) {
-        std::optional<uint32_t> tlsErrors;
-        decoder >> tlsErrors;
-        if (!tlsErrors)
-            return std::nullopt;
-
-        certificateInfo.setCertificate(certificate->get());
-        certificateInfo.setTLSErrors(static_cast<GTlsCertificateFlags>(*tlsErrors));
-    }
-
-    return certificateInfo;
-}
-template std::optional<CertificateInfo> ArgumentCoder<CertificateInfo>::decode<Decoder>(Decoder&);
-template std::optional<CertificateInfo> ArgumentCoder<CertificateInfo>::decode<WebKit::Daemon::Decoder>(WebKit::Daemon::Decoder&);
 
 void ArgumentCoder<ResourceError>::encodePlatformData(Encoder& encoder, const ResourceError& resourceError)
 {
@@ -126,7 +78,7 @@ bool ArgumentCoder<ResourceError>::decodePlatformData(Decoder& decoder, Resource
     if (!decoder.decode(certificateInfo))
         return false;
 
-    resourceError.setCertificate(certificateInfo.certificate());
+    resourceError.setCertificate(certificateInfo.certificate().get());
     resourceError.setTLSErrors(certificateInfo.tlsErrors());
     return true;
 }
@@ -186,17 +138,6 @@ bool ArgumentCoder<SoupNetworkProxySettings>::decode(Decoder& decoder, SoupNetwo
     return !settings.isEmpty();
 }
 
-void ArgumentCoder<ProtectionSpace>::encodePlatformData(Encoder&, const ProtectionSpace&)
-{
-    ASSERT_NOT_REACHED();
-}
-
-bool ArgumentCoder<ProtectionSpace>::decodePlatformData(Decoder&, ProtectionSpace&)
-{
-    ASSERT_NOT_REACHED();
-    return false;
-}
-
 void ArgumentCoder<Credential>::encodePlatformData(Encoder& encoder, const Credential& credential)
 {
     GRefPtr<GTlsCertificate> certificate = credential.certificate();
@@ -217,28 +158,6 @@ bool ArgumentCoder<Credential>::decodePlatformData(Decoder& decoder, Credential&
 
     credential = Credential(certificate->get(), persistence);
     return true;
-}
-
-void ArgumentCoder<DictionaryPopupInfo>::encodePlatformData(Encoder&, const DictionaryPopupInfo&)
-{
-    ASSERT_NOT_REACHED();
-}
-
-bool ArgumentCoder<DictionaryPopupInfo>::decodePlatformData(Decoder&, DictionaryPopupInfo&)
-{
-    ASSERT_NOT_REACHED();
-    return false;
-}
-
-void ArgumentCoder<Font>::encodePlatformData(Encoder&, const Font&)
-{
-    ASSERT_NOT_REACHED();
-}
-
-std::optional<FontPlatformData> ArgumentCoder<Font>::decodePlatformData(Decoder&)
-{
-    ASSERT_NOT_REACHED();
-    return std::nullopt;
 }
 
 #if ENABLE(VIDEO)

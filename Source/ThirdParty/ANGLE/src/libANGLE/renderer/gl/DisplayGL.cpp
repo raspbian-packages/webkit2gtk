@@ -120,9 +120,9 @@ StreamProducerImpl *DisplayGL::createStreamProducerD3DTexture(
     return nullptr;
 }
 
-ShareGroupImpl *DisplayGL::createShareGroup()
+ShareGroupImpl *DisplayGL::createShareGroup(const egl::ShareGroupState &state)
 {
-    return new ShareGroupGL();
+    return new ShareGroupGL(state);
 }
 
 egl::Error DisplayGL::makeCurrent(egl::Display *display,
@@ -155,6 +155,11 @@ gl::Version DisplayGL::getMaxConformantESVersion() const
 {
     // 3.1 support is in progress.
     return std::min(getMaxSupportedESVersion(), gl::Version(3, 0));
+}
+
+Optional<gl::Version> DisplayGL::getMaxSupportedDesktopVersion() const
+{
+    return Optional<gl::Version>::Invalid();
 }
 
 void DisplayGL::generateExtensions(egl::DisplayExtensions *outExtensions) const

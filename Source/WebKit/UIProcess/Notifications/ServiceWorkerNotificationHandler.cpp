@@ -26,6 +26,7 @@
 #include "config.h"
 #include "ServiceWorkerNotificationHandler.h"
 
+#include "Logging.h"
 #include "WebsiteDataStore.h"
 #include <WebCore/NotificationData.h>
 #include <wtf/Scope.h>
@@ -44,7 +45,7 @@ void ServiceWorkerNotificationHandler::requestSystemNotificationPermission(const
     RELEASE_ASSERT_NOT_REACHED();
 }
 
-WebsiteDataStore* ServiceWorkerNotificationHandler::dataStoreForNotificationID(const UUID& notificationID)
+WebsiteDataStore* ServiceWorkerNotificationHandler::dataStoreForNotificationID(const WTF::UUID& notificationID)
 {
     auto iterator = m_notificationToSessionMap.find(notificationID);
     if (iterator == m_notificationToSessionMap.end())
@@ -55,6 +56,8 @@ WebsiteDataStore* ServiceWorkerNotificationHandler::dataStoreForNotificationID(c
 
 void ServiceWorkerNotificationHandler::showNotification(IPC::Connection& connection, const WebCore::NotificationData& data, RefPtr<WebCore::NotificationResources>&&, CompletionHandler<void()>&& callback)
 {
+    RELEASE_LOG(Push, "ServiceWorkerNotificationHandler showNotification called");
+
     auto scope = makeScopeExit([&callback] { callback(); });
 
     auto* dataStore = WebsiteDataStore::existingDataStoreForSessionID(data.sourceSession);
@@ -65,13 +68,13 @@ void ServiceWorkerNotificationHandler::showNotification(IPC::Connection& connect
     dataStore->showServiceWorkerNotification(connection, data);
 }
 
-void ServiceWorkerNotificationHandler::cancelNotification(const UUID& notificationID)
+void ServiceWorkerNotificationHandler::cancelNotification(const WTF::UUID& notificationID)
 {
     if (auto* dataStore = dataStoreForNotificationID(notificationID))
         dataStore->cancelServiceWorkerNotification(notificationID);
 }
 
-void ServiceWorkerNotificationHandler::clearNotifications(const Vector<UUID>& notificationIDs)
+void ServiceWorkerNotificationHandler::clearNotifications(const Vector<WTF::UUID>& notificationIDs)
 {
     for (auto& notificationID : notificationIDs) {
         if (auto* dataStore = dataStoreForNotificationID(notificationID))
@@ -79,7 +82,7 @@ void ServiceWorkerNotificationHandler::clearNotifications(const Vector<UUID>& no
     }
 }
 
-void ServiceWorkerNotificationHandler::didDestroyNotification(const UUID& notificationID)
+void ServiceWorkerNotificationHandler::didDestroyNotification(const WTF::UUID& notificationID)
 {
     if (auto* dataStore = dataStoreForNotificationID(notificationID))
         dataStore->didDestroyServiceWorkerNotification(notificationID);

@@ -43,10 +43,11 @@
 #include "WKRetainPtr.h"
 #include "WKString.h"
 #include "WKWebsiteDataStoreRef.h"
-#include "WebCertificateInfo.h"
 #include "WebContextInjectedBundleClient.h"
+#include "WebFrameProxy.h"
 #include "WebPageProxy.h"
 #include "WebProcessPool.h"
+#include <WebCore/GamepadProvider.h>
 #include <wtf/RefPtr.h>
 #include <wtf/text/WTFString.h>
 
@@ -326,9 +327,9 @@ void WKContextSetAlwaysUsesComplexTextCodePath(WKContextRef contextRef, bool alw
     WebKit::toImpl(contextRef)->setAlwaysUsesComplexTextCodePath(alwaysUseComplexTextCodePath);
 }
 
-void WKContextSetShouldUseFontSmoothing(WKContextRef contextRef, bool useFontSmoothing)
+void WKContextSetDisableFontSubpixelAntialiasingForTesting(WKContextRef contextRef, bool disable)
 {
-    WebKit::toImpl(contextRef)->setShouldUseFontSmoothing(useFontSmoothing);
+    WebKit::toImpl(contextRef)->setDisableFontSubpixelAntialiasingForTesting(disable);
 }
 
 void WKContextSetAdditionalPluginsDirectory(WKContextRef contextRef, WKStringRef pluginsDirectory)
@@ -391,9 +392,8 @@ bool WKContextGetUsesSingleWebProcess(WKContextRef contextRef)
     return WebKit::toImpl(contextRef)->configuration().usesSingleWebProcess();
 }
 
-void WKContextSetCustomWebContentServiceBundleIdentifier(WKContextRef contextRef, WKStringRef name)
+void WKContextSetCustomWebContentServiceBundleIdentifier(WKContextRef, WKStringRef)
 {
-    WebKit::toImpl(contextRef)->setCustomWebContentServiceBundleIdentifier(WebKit::toImpl(name)->string());
 }
 
 void WKContextSetDiskCacheSpeculativeValidationEnabled(WKContextRef, bool)
@@ -570,4 +570,23 @@ void WKContextSetUseSeparateServiceWorkerProcess(WKContextRef, bool useSeparateS
 
 void WKContextSetPrimaryWebsiteDataStore(WKContextRef, WKWebsiteDataStoreRef)
 {
+}
+
+WKArrayRef WKContextCopyLocalhostAliases(WKContextRef)
+{
+    return WebKit::toAPI(&API::Array::createStringArray(copyToVector(WebKit::LegacyGlobalSettings::singleton().hostnamesToRegisterAsLocal())).leakRef());
+}
+
+void WKContextSetLocalhostAliases(WKContextRef, WKArrayRef localhostAliases)
+{
+    for (const auto& hostname : WebKit::toImpl(localhostAliases)->toStringVector())
+        WebKit::LegacyGlobalSettings::singleton().registerHostnameAsLocal(hostname);
+}
+
+void WKContextClearMockGamepadsForTesting(WKContextRef)
+{
+#if ENABLE(GAMEPAD)
+    if (WebCore::GamepadProvider::singleton().isMockGamepadProvider())
+        WebCore::GamepadProvider::singleton().clearGamepadsForTesting();
+#endif
 }

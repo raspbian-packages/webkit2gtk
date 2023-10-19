@@ -25,7 +25,7 @@
 
 #pragma once
 
-#if ENABLE(INTELLIGENT_TRACKING_PREVENTION)
+#if ENABLE(TRACKING_PREVENTION)
 
 #include "ResourceLoadStatisticsClassifier.h"
 #include "WebResourceLoadStatisticsStore.h"
@@ -77,8 +77,8 @@ private:
     int m_monthDay { 0 }; // [1, 31].
 };
 
-constexpr unsigned operatingDatesWindowLong { 30 };
-constexpr unsigned operatingDatesWindowShort { 7 };
+constexpr unsigned operatingDatesWindowLong { 30 }; // days
+constexpr unsigned operatingDatesWindowShort { 7 }; // days
 constexpr Seconds operatingTimeWindowForLiveOnTesting { 1_h };
 
 enum class OperatingDatesWindow : uint8_t { Long, Short, ForLiveOnTesting, ForReproTesting };
@@ -109,7 +109,6 @@ public:
 
     virtual void updateCookieBlocking(CompletionHandler<void()>&&) = 0;
     void updateCookieBlockingForDomains(RegistrableDomainsToBlockCookiesFor&&, CompletionHandler<void()>&&);
-    void clearBlockingStateForDomains(const Vector<RegistrableDomain>& domains, CompletionHandler<void()>&&);
 
     void processStatisticsAndDataRecords();
 
@@ -132,6 +131,7 @@ public:
     virtual bool isVeryPrevalentResource(const RegistrableDomain&) const = 0;
     virtual void setPrevalentResource(const RegistrableDomain&) = 0;
     virtual void setVeryPrevalentResource(const RegistrableDomain&) = 0;
+    virtual void setMostRecentWebPushInteractionTime(const RegistrableDomain&) = 0;
 
     virtual void setGrandfathered(const RegistrableDomain&, bool value) = 0;
     virtual bool isGrandfathered(const RegistrableDomain&) const = 0;
@@ -173,6 +173,9 @@ public:
 #if ENABLE(APP_BOUND_DOMAINS)
     void setAppBoundDomains(HashSet<RegistrableDomain>&&);
 #endif
+#if ENABLE(MANAGED_DOMAINS)
+    void setManagedDomains(HashSet<RegistrableDomain>&&);
+#endif
     virtual bool areAllThirdPartyCookiesBlockedUnder(const TopFrameDomain&) = 0;
     virtual void hasStorageAccess(SubFrameDomain&&, TopFrameDomain&&, std::optional<WebCore::FrameIdentifier>, WebCore::PageIdentifier, CompletionHandler<void(bool)>&&) = 0;
     virtual void requestStorageAccess(SubFrameDomain&&, TopFrameDomain&&, WebCore::FrameIdentifier, WebCore::PageIdentifier, WebCore::StorageAccessScope, CompletionHandler<void(StorageAccessStatus)>&&) = 0;
@@ -190,6 +193,8 @@ public:
     virtual void removeDataForDomain(const RegistrableDomain&) = 0;
 
     virtual Vector<RegistrableDomain> allDomains() const = 0;
+    virtual HashMap<RegistrableDomain, WallTime> allDomainsWithLastAccessedTime() const = 0;
+    HashSet<RegistrableDomain> domainsExemptFromWebsiteDataDeletion() const;
 
     void didCreateNetworkProcess();
 
@@ -201,7 +206,6 @@ public:
     virtual bool isDatabaseStore()const { return false; }
 
     virtual void includeTodayAsOperatingDateIfNecessary() = 0;
-    virtual void clearOperatingDates() = 0;
     virtual bool hasStatisticsExpired(WallTime mostRecentUserInteractionTime, OperatingDatesWindow) const = 0;
     virtual void insertExpiredStatisticForTesting(const RegistrableDomain&, unsigned numberOfOperatingDaysPassed, bool hasUserInteraction, bool isScheduledForAllButCookieDataRemoval, bool) = 0;
 
@@ -244,7 +248,6 @@ protected:
     const Parameters& parameters() const { return m_parameters; }
     WallTime& endOfGrandfatheringTimestamp() { return m_endOfGrandfatheringTimestamp; }
     const WallTime& endOfGrandfatheringTimestamp() const { return m_endOfGrandfatheringTimestamp; }
-    void setEndOfGrandfatheringTimestamp(const WallTime& grandfatheringTime) { m_endOfGrandfatheringTimestamp = grandfatheringTime; }
     void clearEndOfGrandfatheringTimeStamp() { m_endOfGrandfatheringTimestamp = { }; }
     const RegistrableDomain& debugManualPrevalentResource() const { return m_debugManualPrevalentResource; }
     const RegistrableDomain& debugStaticPrevalentResource() const { return m_debugStaticPrevalentResource; }
@@ -292,6 +295,7 @@ private:
     WebCore::FirstPartyWebsiteDataRemovalMode m_firstPartyWebsiteDataRemovalMode { WebCore::FirstPartyWebsiteDataRemovalMode::AllButCookies };
     RegistrableDomain m_standaloneApplicationDomain;
     HashSet<RegistrableDomain> m_appBoundDomains;
+    HashSet<RegistrableDomain> m_managedDomains;
 };
 
 } // namespace WebKit

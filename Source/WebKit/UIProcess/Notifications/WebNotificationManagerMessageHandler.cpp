@@ -26,8 +26,11 @@
 #include "config.h"
 #include "WebNotificationManagerMessageHandler.h"
 
+#include "Logging.h"
 #include "ServiceWorkerNotificationHandler.h"
 #include "WebPageProxy.h"
+#include <WebCore/NotificationData.h>
+#include <wtf/CompletionHandler.h>
 
 namespace WebKit {
 
@@ -43,6 +46,8 @@ void WebNotificationManagerMessageHandler::requestSystemNotificationPermission(c
 
 void WebNotificationManagerMessageHandler::showNotification(IPC::Connection& connection, const WebCore::NotificationData& data, RefPtr<WebCore::NotificationResources>&& resources, CompletionHandler<void()>&& callback)
 {
+    RELEASE_LOG(Push, "WebNotificationManagerMessageHandler showNotification called");
+
     if (!data.serviceWorkerRegistrationURL.isEmpty()) {
         ServiceWorkerNotificationHandler::singleton().showNotification(connection, data, WTFMove(resources), WTFMove(callback));
         return;
@@ -51,7 +56,7 @@ void WebNotificationManagerMessageHandler::showNotification(IPC::Connection& con
     callback();
 }
 
-void WebNotificationManagerMessageHandler::cancelNotification(const UUID& notificationID)
+void WebNotificationManagerMessageHandler::cancelNotification(const WTF::UUID& notificationID)
 {
     auto& serviceWorkerNotificationHandler = ServiceWorkerNotificationHandler::singleton();
     if (serviceWorkerNotificationHandler.handlesNotification(notificationID)) {
@@ -61,12 +66,12 @@ void WebNotificationManagerMessageHandler::cancelNotification(const UUID& notifi
     m_webPageProxy.cancelNotification(notificationID);
 }
 
-void WebNotificationManagerMessageHandler::clearNotifications(const Vector<UUID>& notificationIDs)
+void WebNotificationManagerMessageHandler::clearNotifications(const Vector<WTF::UUID>& notificationIDs)
 {
     auto& serviceWorkerNotificationHandler = ServiceWorkerNotificationHandler::singleton();
 
-    Vector<UUID> persistentNotifications;
-    Vector<UUID> pageNotifications;
+    Vector<WTF::UUID> persistentNotifications;
+    Vector<WTF::UUID> pageNotifications;
     persistentNotifications.reserveInitialCapacity(notificationIDs.size());
     pageNotifications.reserveInitialCapacity(notificationIDs.size());
     for (auto& notificationID : notificationIDs) {
@@ -81,7 +86,7 @@ void WebNotificationManagerMessageHandler::clearNotifications(const Vector<UUID>
         m_webPageProxy.clearNotifications(pageNotifications);
 }
 
-void WebNotificationManagerMessageHandler::didDestroyNotification(const UUID& notificationID)
+void WebNotificationManagerMessageHandler::didDestroyNotification(const WTF::UUID& notificationID)
 {
     auto& serviceWorkerNotificationHandler = ServiceWorkerNotificationHandler::singleton();
     if (serviceWorkerNotificationHandler.handlesNotification(notificationID)) {
@@ -89,6 +94,11 @@ void WebNotificationManagerMessageHandler::didDestroyNotification(const UUID& no
         return;
     }
     m_webPageProxy.didDestroyNotification(notificationID);
+}
+
+void WebNotificationManagerMessageHandler::pageWasNotifiedOfNotificationPermission()
+{
+    m_webPageProxy.pageWillLikelyUseNotifications();
 }
 
 } // namespace WebKit

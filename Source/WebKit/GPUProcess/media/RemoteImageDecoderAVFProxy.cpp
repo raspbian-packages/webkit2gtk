@@ -58,8 +58,9 @@ void RemoteImageDecoderAVFProxy::createDecoder(const IPC::SharedBufferReference&
     auto identifier = ImageDecoderIdentifier::generate();
     m_imageDecoders.add(identifier, imageDecoder.copyRef());
 
-    imageDecoder->setEncodedDataStatusChangeCallback([this, identifier](auto) mutable {
-        encodedDataStatusChanged(identifier);
+    imageDecoder->setEncodedDataStatusChangeCallback([proxy = WeakPtr<MessageReceiver> { *this },  identifier](auto) mutable {
+        if (proxy)
+            static_cast<RemoteImageDecoderAVFProxy*>(proxy.get())->encodedDataStatusChanged(identifier);
     });
 
     imageDecoderIdentifier = identifier;
@@ -140,7 +141,7 @@ void RemoteImageDecoderAVFProxy::createFrameImageAtIndex(ImageDecoderIdentifier 
     DestinationColorSpace colorSpace { CGImageGetColorSpace(frameImage.get()) };
     bool isOpaque = false;
 
-    auto bitmap = ShareableBitmap::create(IntSize(width, height), { WTFMove(colorSpace), isOpaque });
+    auto bitmap = ShareableBitmap::create({ IntSize(width, height), WTFMove(colorSpace), isOpaque });
     if (!bitmap)
         return;
     auto context = bitmap->createGraphicsContext();
@@ -151,7 +152,8 @@ void RemoteImageDecoderAVFProxy::createFrameImageAtIndex(ImageDecoderIdentifier 
     FloatSize imageSize { float(width), float(height) };
     FloatRect imageRect { { }, imageSize };
     context->drawNativeImage(*nativeImage, imageSize, imageRect, imageRect, { CompositeOperator::Copy });
-    bitmap->createHandle(imageHandle);
+    if (auto handle = bitmap->createHandle())
+        imageHandle = WTFMove(*handle);
 }
 
 void RemoteImageDecoderAVFProxy::clearFrameBufferCache(ImageDecoderIdentifier identifier, size_t index)

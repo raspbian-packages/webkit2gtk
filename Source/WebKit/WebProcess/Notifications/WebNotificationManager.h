@@ -28,6 +28,7 @@
 #include "MessageReceiver.h"
 #include "WebProcessSupplement.h"
 #include <WebCore/NotificationClient.h>
+#include <WebCore/ScriptExecutionContextIdentifier.h>
 #include <optional>
 #include <wtf/CompletionHandler.h>
 #include <wtf/HashMap.h>
@@ -38,8 +39,9 @@
 #include <wtf/text/StringHash.h>
 
 namespace WebCore {
-class Notification;
 class SecurityOrigin;
+
+struct NotificationData;
 }
 
 namespace WebKit {
@@ -56,16 +58,16 @@ public:
 
     static const char* supplementName();
     
-    bool show(WebCore::Notification&, WebPage*, CompletionHandler<void()>&&);
-    void cancel(WebCore::Notification&, WebPage*);
+    bool show(WebCore::NotificationData&&, RefPtr<WebCore::NotificationResources>&&, WebPage*, CompletionHandler<void()>&&);
+    void cancel(WebCore::NotificationData&&, WebPage*);
 
     // This callback comes from WebCore, not messaged from the UI process.
-    void didDestroyNotification(WebCore::Notification&, WebPage*);
+    void didDestroyNotification(WebCore::NotificationData&&, WebPage*);
 
     void didUpdateNotificationDecision(const String& originString, bool allowed);
 
     // Looks in local cache for permission. If not found, returns DefaultDenied.
-    WebCore::NotificationClient::Permission policyForOrigin(const String& originString) const;
+    WebCore::NotificationClient::Permission policyForOrigin(const String& originString, WebPage* = nullptr) const;
 
     void removeAllPermissionsForTesting();
 
@@ -77,18 +79,13 @@ private:
     // Implemented in generated WebNotificationManagerMessageReceiver.cpp
     void didReceiveMessage(IPC::Connection&, IPC::Decoder&) override;
     
-    void didShowNotification(const UUID& notificationID);
-    void didClickNotification(const UUID& notificationID);
-    void didCloseNotifications(const Vector<UUID>& notificationIDs);
+    void didShowNotification(const WTF::UUID& notificationID);
+    void didClickNotification(const WTF::UUID& notificationID);
+    void didCloseNotifications(const Vector<WTF::UUID>& notificationIDs);
     void didRemoveNotificationDecisions(const Vector<String>& originStrings);
 
-    template<typename U> bool sendNotificationMessage(U&& message, WebCore::Notification&, WebPage*);
-    template<typename U> bool sendNotificationMessageWithAsyncReply(U&& message, WebCore::Notification&, WebPage*, CompletionHandler<void()>&&);
-
-    WebProcess& m_process;
-
 #if ENABLE(NOTIFICATIONS)
-    HashMap<UUID, Ref<WebCore::Notification>> m_nonPersistentNotifications;    
+    HashMap<WTF::UUID, WebCore::ScriptExecutionContextIdentifier> m_nonPersistentNotificationsContexts;
     HashMap<String, bool> m_permissionsMap;
 #endif
 };

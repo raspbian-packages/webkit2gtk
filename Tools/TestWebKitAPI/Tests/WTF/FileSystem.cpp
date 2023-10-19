@@ -38,7 +38,7 @@ const char* FileSystemTestData = "This is a test";
 
 static void createTestFile(const String& path)
 {
-    auto fileHandle = FileSystem::openFile(path, FileSystem::FileOpenMode::Write);
+    auto fileHandle = FileSystem::openFile(path, FileSystem::FileOpenMode::Truncate);
     EXPECT_TRUE(FileSystem::isHandleValid(fileHandle));
     FileSystem::writeToFile(fileHandle, FileSystemTestData, strlen(FileSystemTestData));
     FileSystem::closeFile(fileHandle);
@@ -234,11 +234,131 @@ TEST_F(FileSystemTest, UnicodeDirectoryName)
     EXPECT_TRUE(expectedDirectoryName == directoryName);
 }
 
-TEST_F(FileSystemTest, openExistingFileAndFailIfFileExists)
+// ===========================================================
+// Tests for all the combinations for openFile, in this order:
+// Level 1: ExistingFile, NonExistingFile
+// Level 2: Truncate, ReadWrite, ReadOnly
+// Level 3: default, FailIfFileExists
+
+// =================== ExistingFile ==========================
+
+// --------------------- Truncate ----------------------------
+TEST_F(FileSystemTest, openExistingFileTruncate)
+{
+    auto handle = FileSystem::openFile(tempFilePath(), FileSystem::FileOpenMode::Truncate, FileSystem::FileAccessPermission::All, false);
+    EXPECT_TRUE(FileSystem::isHandleValid(handle));
+    // Check the existing file WAS truncated when the operation succeded.
+    EXPECT_EQ(FileSystem::fileSize(tempFilePath()), 0);
+    // Write data to it and check the file size grows.
+    FileSystem::writeToFile(handle, FileSystemTestData, strlen(FileSystemTestData));
+    EXPECT_EQ(FileSystem::fileSize(tempFilePath()), strlen(FileSystemTestData));
+    FileSystem::closeFile(handle);
+}
+TEST_F(FileSystemTest, openExistingFileTruncateFailIfFileExists)
+{
+    auto handle = FileSystem::openFile(tempFilePath(), FileSystem::FileOpenMode::Truncate, FileSystem::FileAccessPermission::All, true);
+    EXPECT_FALSE(FileSystem::isHandleValid(handle));
+    // Check the existing file wasn't truncated when the operation failed.
+    EXPECT_EQ(FileSystem::fileSize(tempFilePath()), strlen(FileSystemTestData));
+}
+
+// -------------------- ReadWrite ----------------------------
+TEST_F(FileSystemTest, openExistingFileReadWrite)
+{
+    auto handle = FileSystem::openFile(tempFilePath(), FileSystem::FileOpenMode::ReadWrite, FileSystem::FileAccessPermission::All, false);
+    EXPECT_TRUE(FileSystem::isHandleValid(handle));
+    // ReadWrite mode shouldn't truncate the contents of the file.
+    EXPECT_EQ(FileSystem::fileSize(tempFilePath()), strlen(FileSystemTestData));
+    // Write data to it and check the file size grows.
+    FileSystem::writeToFile(handle, FileSystemTestData, strlen(FileSystemTestData));
+    FileSystem::writeToFile(handle, FileSystemTestData, strlen(FileSystemTestData));
+    EXPECT_EQ(FileSystem::fileSize(tempFilePath()), strlen(FileSystemTestData) * 2);
+    FileSystem::closeFile(handle);
+}
+TEST_F(FileSystemTest, openExistingFileReadWriteFailIfFileExists)
 {
     auto handle = FileSystem::openFile(tempFilePath(), FileSystem::FileOpenMode::ReadWrite, FileSystem::FileAccessPermission::All, true);
     EXPECT_FALSE(FileSystem::isHandleValid(handle));
+    // Check the existing file wasn't truncated when the operation failed.
+    EXPECT_EQ(FileSystem::fileSize(tempFilePath()), strlen(FileSystemTestData));
 }
+
+// --------------------- ReadOnly ----------------------------
+TEST_F(FileSystemTest, openExistingFileReadOnly)
+{
+    auto handle = FileSystem::openFile(tempFilePath(), FileSystem::FileOpenMode::Read, FileSystem::FileAccessPermission::All);
+    EXPECT_TRUE(FileSystem::isHandleValid(handle));
+    EXPECT_EQ(FileSystem::fileSize(tempFilePath()), strlen(FileSystemTestData));
+}
+
+// ================== NonExistingFile ========================
+
+// --------------------- Truncate ----------------------------
+
+TEST_F(FileSystemTest, openNonExistingFileTruncate)
+{
+    auto doesNotExistPath = FileSystem::pathByAppendingComponent(tempEmptyFolderPath(), "does-not-exist"_s);
+    EXPECT_FALSE(FileSystem::fileExists(doesNotExistPath));
+
+    auto handle = FileSystem::openFile(doesNotExistPath, FileSystem::FileOpenMode::Truncate, FileSystem::FileAccessPermission::All, false);
+    EXPECT_TRUE(FileSystem::isHandleValid(handle));
+
+    // The file exists at the latest by the time we request a flush (or close the handle).
+    FileSystem::flushFile(handle);
+    EXPECT_TRUE(FileSystem::fileExists(doesNotExistPath));
+}
+
+TEST_F(FileSystemTest, openNonExistingFileTruncateFailIfFileExists)
+{
+    auto doesNotExistPath = FileSystem::pathByAppendingComponent(tempEmptyFolderPath(), "does-not-exist"_s);
+    EXPECT_FALSE(FileSystem::fileExists(doesNotExistPath));
+
+    auto handle = FileSystem::openFile(doesNotExistPath, FileSystem::FileOpenMode::Truncate, FileSystem::FileAccessPermission::All, true);
+    EXPECT_TRUE(FileSystem::isHandleValid(handle));
+
+    // The file exists at the latest by the time we request a flush (or close the handle).
+    FileSystem::flushFile(handle);
+    EXPECT_TRUE(FileSystem::fileExists(doesNotExistPath));
+}
+
+// -------------------- ReadWrite ----------------------------
+
+TEST_F(FileSystemTest, openNonExistingFileReadWrite)
+{
+    auto doesNotExistPath = FileSystem::pathByAppendingComponent(tempEmptyFolderPath(), "does-not-exist"_s);
+    EXPECT_FALSE(FileSystem::fileExists(doesNotExistPath));
+
+    auto handle = FileSystem::openFile(doesNotExistPath, FileSystem::FileOpenMode::ReadWrite, FileSystem::FileAccessPermission::All, false);
+    EXPECT_TRUE(FileSystem::isHandleValid(handle));
+
+    // The file exists at the latest by the time we request a flush (or close the handle).
+    FileSystem::flushFile(handle);
+    EXPECT_TRUE(FileSystem::fileExists(doesNotExistPath));
+}
+TEST_F(FileSystemTest, openNonExistingFileReadWriteFailIfFileExists)
+{
+    auto doesNotExistPath = FileSystem::pathByAppendingComponent(tempEmptyFolderPath(), "does-not-exist"_s);
+    EXPECT_FALSE(FileSystem::fileExists(doesNotExistPath));
+
+    auto handle = FileSystem::openFile(doesNotExistPath, FileSystem::FileOpenMode::ReadWrite, FileSystem::FileAccessPermission::All, true);
+    EXPECT_TRUE(FileSystem::isHandleValid(handle));
+
+    // The file exists at the latest by the time we request a flush (or close the handle).
+    FileSystem::flushFile(handle);
+    EXPECT_TRUE(FileSystem::fileExists(doesNotExistPath));
+}
+
+// --------------------- ReadOnly ----------------------------
+TEST_F(FileSystemTest, openNonExistingFileReadOnly)
+{
+    auto doesNotExistPath = FileSystem::pathByAppendingComponent(tempEmptyFolderPath(), "does-not-exist"_s);
+    EXPECT_FALSE(FileSystem::fileExists(doesNotExistPath));
+
+    auto handle = FileSystem::openFile(doesNotExistPath, FileSystem::FileOpenMode::Read, FileSystem::FileAccessPermission::All);
+    EXPECT_FALSE(FileSystem::isHandleValid(handle));
+}
+
+// ===========================================================
 
 TEST_F(FileSystemTest, deleteNonEmptyDirectory)
 {
@@ -345,7 +465,7 @@ TEST_F(FileSystemTest, deleteEmptyDirectoryContainingDSStoreFile)
 
     // Create .DSStore file.
     auto dsStorePath = FileSystem::pathByAppendingComponent(tempEmptyFolderPath(), ".DS_Store"_s);
-    auto dsStoreHandle = FileSystem::openFile(dsStorePath, FileSystem::FileOpenMode::Write);
+    auto dsStoreHandle = FileSystem::openFile(dsStorePath, FileSystem::FileOpenMode::Truncate);
     FileSystem::writeToFile(dsStoreHandle, FileSystemTestData, strlen(FileSystemTestData));
     FileSystem::closeFile(dsStoreHandle);
     EXPECT_TRUE(FileSystem::fileExists(dsStorePath));
@@ -361,14 +481,14 @@ TEST_F(FileSystemTest, deleteEmptyDirectoryOnNonEmptyDirectory)
 
     // Create .DSStore file.
     auto dsStorePath = FileSystem::pathByAppendingComponent(tempEmptyFolderPath(), ".DS_Store"_s);
-    auto dsStoreHandle = FileSystem::openFile(dsStorePath, FileSystem::FileOpenMode::Write);
+    auto dsStoreHandle = FileSystem::openFile(dsStorePath, FileSystem::FileOpenMode::Truncate);
     FileSystem::writeToFile(dsStoreHandle, FileSystemTestData, strlen(FileSystemTestData));
     FileSystem::closeFile(dsStoreHandle);
     EXPECT_TRUE(FileSystem::fileExists(dsStorePath));
 
     // Create a dummy file.
     auto dummyFilePath = FileSystem::pathByAppendingComponent(tempEmptyFolderPath(), "dummyFile"_s);
-    auto dummyFileHandle = FileSystem::openFile(dummyFilePath, FileSystem::FileOpenMode::Write);
+    auto dummyFileHandle = FileSystem::openFile(dummyFilePath, FileSystem::FileOpenMode::Truncate);
     FileSystem::writeToFile(dummyFileHandle, FileSystemTestData, strlen(FileSystemTestData));
     FileSystem::closeFile(dummyFileHandle);
     EXPECT_TRUE(FileSystem::fileExists(dummyFilePath));
@@ -438,7 +558,7 @@ TEST_F(FileSystemTest, moveDirectory)
     EXPECT_TRUE(FileSystem::deleteFile(temporaryTestFolder));
     EXPECT_TRUE(FileSystem::makeAllDirectories(temporaryTestFolder));
     auto testFilePath = FileSystem::pathByAppendingComponent(temporaryTestFolder, "testFile"_s);
-    auto fileHandle = FileSystem::openFile(testFilePath, FileSystem::FileOpenMode::Write);
+    auto fileHandle = FileSystem::openFile(testFilePath, FileSystem::FileOpenMode::Truncate);
     FileSystem::writeToFile(fileHandle, FileSystemTestData, strlen(FileSystemTestData));
     FileSystem::closeFile(fileHandle);
 
@@ -638,12 +758,12 @@ static void runGetFileModificationTimeTest(const String& path, Function<std::opt
 
     unsigned timeout = 0;
     while (*modificationTime >= WallTime::now() && ++timeout < 20)
-        TestWebKitAPI::Util::sleep(0.1);
+        TestWebKitAPI::Util::runFor(0.1_s);
     EXPECT_LT(modificationTime->secondsSinceEpoch().value(), WallTime::now().secondsSinceEpoch().value());
 
     auto timeBeforeModification = WallTime::now();
 
-    TestWebKitAPI::Util::sleep(2);
+    TestWebKitAPI::Util::runFor(2_s);
 
     // Modify the file.
     auto fileHandle = FileSystem::openFile(path, FileSystem::FileOpenMode::ReadWrite);
@@ -674,10 +794,10 @@ TEST_F(FileSystemTest, updateFileModificationTime)
 
     unsigned timeout = 0;
     while (*modificationTime >= WallTime::now() && ++timeout < 20)
-        TestWebKitAPI::Util::sleep(0.1);
+        TestWebKitAPI::Util::runFor(0.1_s);
     EXPECT_LT(modificationTime->secondsSinceEpoch().value(), WallTime::now().secondsSinceEpoch().value());
 
-    TestWebKitAPI::Util::sleep(1);
+    TestWebKitAPI::Util::runFor(1_s);
 
     EXPECT_TRUE(FileSystem::updateFileModificationTime(tempFilePath()));
     auto newModificationTime = FileSystem::fileModificationTime(tempFilePath());

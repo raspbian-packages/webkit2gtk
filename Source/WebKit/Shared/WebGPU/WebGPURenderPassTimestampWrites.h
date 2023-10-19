@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 Apple Inc. All rights reserved.
+ * Copyright (C) 2021-2023 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -28,9 +28,9 @@
 #if ENABLE(GPU_PROCESS)
 
 #include "WebGPUIdentifier.h"
+#include <WebCore/WebGPUIntegralTypes.h>
+#include <WebCore/WebGPURenderPassTimestampLocation.h>
 #include <optional>
-#include <pal/graphics/WebGPU/WebGPUIntegralTypes.h>
-#include <pal/graphics/WebGPU/WebGPURenderPassTimestampLocation.h>
 #include <wtf/Ref.h>
 #include <wtf/Vector.h>
 
@@ -38,35 +38,8 @@ namespace WebKit::WebGPU {
 
 struct RenderPassTimestampWrite {
     WebGPUIdentifier querySet;
-    PAL::WebGPU::Size32 queryIndex { 0 };
-    PAL::WebGPU::RenderPassTimestampLocation location { PAL::WebGPU::RenderPassTimestampLocation::Beginning };
-
-    template<class Encoder> void encode(Encoder& encoder) const
-    {
-        encoder << querySet;
-        encoder << queryIndex;
-        encoder << location;
-    }
-
-    template<class Decoder> static std::optional<RenderPassTimestampWrite> decode(Decoder& decoder)
-    {
-        std::optional<WebGPUIdentifier> querySet;
-        decoder >> querySet;
-        if (!querySet)
-            return std::nullopt;
-
-        std::optional<PAL::WebGPU::Size32> queryIndex;
-        decoder >> queryIndex;
-        if (!queryIndex)
-            return std::nullopt;
-
-        std::optional<PAL::WebGPU::RenderPassTimestampLocation> location;
-        decoder >> location;
-        if (!location)
-            return std::nullopt;
-
-        return { { WTFMove(*querySet), WTFMove(*queryIndex), WTFMove(*location) } };
-    }
+    WebCore::WebGPU::Size32 queryIndex { 0 };
+    WebCore::WebGPU::RenderPassTimestampLocation location { WebCore::WebGPU::RenderPassTimestampLocation::Beginning };
 };
 
 using RenderPassTimestampWrites = Vector<RenderPassTimestampWrite>;

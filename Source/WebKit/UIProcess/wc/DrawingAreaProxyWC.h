@@ -25,6 +25,8 @@
 
 #pragma once
 
+#if USE(GRAPHICS_LAYER_WC)
+
 #include "BackingStore.h"
 #include "DrawingAreaProxy.h"
 
@@ -36,7 +38,7 @@ namespace WebKit {
 
 class DrawingAreaProxyWC final : public DrawingAreaProxy {
 public:
-    DrawingAreaProxyWC(WebPageProxy&, WebProcessProxy&);
+    DrawingAreaProxyWC(WebPageProxy&);
 
     void paint(BackingStore::PlatformGraphicsContext, const WebCore::IntRect&, WebCore::Region& unpaintedRegion);
 
@@ -44,12 +46,13 @@ private:
     // DrawingAreaProxy
     void deviceScaleFactorDidChange() override { }
     void sizeDidChange() override;
-    void dispatchAfterEnsuringDrawing(WTF::Function<void(CallbackBase::Error)>&&) override;
-    // message handers
-    void update(uint64_t, const UpdateInfo&);
-    void enterAcceleratedCompositingMode(uint64_t, const LayerTreeContext&);
+    bool shouldSendWheelEventsToEventDispatcher() const final { return true; }
 
-    void incorporateUpdate(const UpdateInfo&);
+    // message handers
+    void update(uint64_t, UpdateInfo&&) override;
+    void enterAcceleratedCompositingMode(uint64_t, const LayerTreeContext&) override;
+
+    void incorporateUpdate(UpdateInfo&&);
     void discardBackingStore();
 
     uint64_t m_currentBackingStoreStateID { 0 };
@@ -57,3 +60,7 @@ private:
 };
 
 } // namespace WebKit
+
+SPECIALIZE_TYPE_TRAITS_DRAWING_AREA_PROXY(DrawingAreaProxyWC, DrawingAreaType::WC)
+
+#endif // USE(GRAPHICS_LAYER_WC)

@@ -31,6 +31,7 @@
 #include "APIUIClient.h"
 #include "AuthenticatorManager.h"
 #include "LocalService.h"
+#include "Logging.h"
 #include "WebAuthenticationFlags.h"
 #include "WebAuthenticatorCoordinatorProxyMessages.h"
 #include "WebPageProxy.h"
@@ -71,16 +72,22 @@ void WebAuthenticatorCoordinatorProxy::getAssertion(FrameIdentifier frameId, Fra
 
 void WebAuthenticatorCoordinatorProxy::handleRequest(WebAuthenticationRequestData&& data, RequestCompletionHandler&& handler)
 {
-    auto origin = API::SecurityOrigin::create(data.frameInfo.securityOrigin.protocol, data.frameInfo.securityOrigin.host, data.frameInfo.securityOrigin.port);
+    auto origin = API::SecurityOrigin::create(data.frameInfo.securityOrigin.protocol(), data.frameInfo.securityOrigin.host(), data.frameInfo.securityOrigin.port());
 
     CompletionHandler<void(bool)> afterConsent = [this, data = WTFMove(data), handler = WTFMove(handler)] (bool result) mutable {
         auto& authenticatorManager = m_webPageProxy.websiteDataStore().authenticatorManager();
         if (result) {
 #if HAVE(UNIFIED_ASC_AUTH_UI)
             if (!authenticatorManager.isMock() && !authenticatorManager.isVirtual()) {
+                if (!isASCAvailable()) {
+                    handler({ }, AuthenticatorAttachment::Platform, ExceptionData { NotSupportedError, "Not implemented."_s });
+                    RELEASE_LOG_ERROR(WebAuthn, "Web Authentication is not currently supported in this environment.");
+                    return;
+                }
                 auto context = contextForRequest(WTFMove(data));
                 if (context.get() == nullptr) {
                     handler({ }, (AuthenticatorAttachment)0, ExceptionData { NotAllowedError, "The origin of the document is not the same as its ancestors."_s });
+                    RELEASE_LOG_ERROR(WebAuthn, "The origin of the document is not the same as its ancestors.");
                     return;
                 }
                 // performRequest calls out to ASCAgent which will then call [_WKWebAuthenticationPanel makeCredential/getAssertionWithChallenge]
@@ -91,6 +98,7 @@ void WebAuthenticatorCoordinatorProxy::handleRequest(WebAuthenticationRequestDat
 #else
             if (data.parentOrigin && !authenticatorManager.isMock() && !authenticatorManager.isVirtual()) {
                 handler({ }, (AuthenticatorAttachment)0, ExceptionData { NotAllowedError, "The origin of the document is not the same as its ancestors."_s });
+                RELEASE_LOG_ERROR(WebAuthn, "The origin of the document is not the same as its ancestors.");
                 return;
             }
 #endif // HAVE(UNIFIED_ASC_AUTH_UI)
@@ -103,8 +111,10 @@ void WebAuthenticatorCoordinatorProxy::handleRequest(WebAuthenticationRequestDat
                     handler({ }, (AuthenticatorAttachment)0, exception);
                 });
             });
-        } else
+        } else {
             handler({ }, (AuthenticatorAttachment)0, ExceptionData { NotAllowedError, "This request has been cancelled by the user."_s });
+            RELEASE_LOG_ERROR(WebAuthn, "Request cancelled due to rejected prompt after lack of user gesture.");
+        }
     };
     
     if (!data.processingUserGesture && data.mediation != MediationRequirement::Conditional && !m_webPageProxy.websiteDataStore().authenticatorManager().isVirtual())
@@ -114,12 +124,16 @@ void WebAuthenticatorCoordinatorProxy::handleRequest(WebAuthenticationRequestDat
 }
 
 #if !HAVE(UNIFIED_ASC_AUTH_UI)
-void WebAuthenticatorCoordinatorProxy::isUserVerifyingPlatformAuthenticatorAvailable(QueryCompletionHandler&& handler)
+void WebAuthenticatorCoordinatorProxy::cancel()
+{
+}
+
+void WebAuthenticatorCoordinatorProxy::isUserVerifyingPlatformAuthenticatorAvailable(const SecurityOriginData&, QueryCompletionHandler&& handler)
 {
     handler(LocalService::isAvailable());
 }
 
-void WebAuthenticatorCoordinatorProxy::isConditionalMediationAvailable(QueryCompletionHandler&& handler)
+void WebAuthenticatorCoordinatorProxy::isConditionalMediationAvailable(const SecurityOriginData&, QueryCompletionHandler&& handler)
 {
     handler(false);
 }

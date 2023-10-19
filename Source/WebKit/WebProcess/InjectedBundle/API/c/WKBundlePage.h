@@ -118,6 +118,8 @@ WK_EXPORT void WKBundlePageStartMonitoringScrollOperations(WKBundlePageRef page,
 
 WK_EXPORT WKStringRef WKBundlePageCopyGroupIdentifier(WKBundlePageRef page);
 
+WK_EXPORT void WKBundlePageSetSkipDecidePolicyForResponseIfPossible(WKBundlePageRef page, bool skip);
+
 typedef void (*WKBundlePageTestNotificationCallback)(void* context);
 // Returns true  if the callback function will be called, else false.
 WK_EXPORT bool WKBundlePageRegisterScrollOperationCompletionCallback(WKBundlePageRef, WKBundlePageTestNotificationCallback, bool expectWheelEndOrCancel, bool expectMomentumEnd, void* context);
@@ -133,6 +135,8 @@ WK_EXPORT void WKBundlePagePostMessage(WKBundlePageRef page, WKStringRef message
 WK_EXPORT void WKBundlePagePostSynchronousMessageForTesting(WKBundlePageRef page, WKStringRef messageName, WKTypeRef messageBody, WKTypeRef* returnRetainedData);
 // Same as WKBundlePagePostMessage() but the message cannot become synchronous, even if the connection is in fully synchronous mode.
 WK_EXPORT void WKBundlePagePostMessageIgnoringFullySynchronousMode(WKBundlePageRef page, WKStringRef messageName, WKTypeRef messageBody);
+
+WK_EXPORT void WKBundlePageFlushDeferredDidReceiveMouseEventForTesting(WKBundlePageRef page);
 
 #ifdef __cplusplus
 }

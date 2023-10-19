@@ -23,11 +23,6 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-.console-find-banner {
-    --find-banner-outer-child-margin: 0;
-    --find-banner-input-margin-start: 0;
-}
-
 .message-channel-scope-bar.default-item-selected:not(:hover) {
     --scope-bar-text-color-override: var(--text-color);
     --scope-bar-background-color-override: transparent;
@@ -59,6 +54,45 @@
 
 .console-other-filters-button.active:active > .glyph {
     color: var(--glyph-color-active-pressed);
+}
+
+.navigation-bar > .item.find-banner.console {
+    flex-wrap: nowrap;
+    position: relative;
+    top: auto;
+    border: none;
+}
+
+:not(.console-drawer) > .navigation-bar > .item.find-banner.console {
+    margin-inline-start: var(--find-banner-inline-space);
+}
+
+.navigation-bar > .item.find-banner.console > input[type="search"] {
+    padding-top: 0;
+    border: 1px solid var(--border-color);
+    outline: none;
+}
+
+.navigation-bar > .item.find-banner.console > :is(input[type="search"], button) {
+    background-color: inherit;
+    height: 22px;
+}
+
+.navigation-bar > .item.find-banner.console > input[type="search"]::-webkit-textfield-decoration-container {
+    margin-inline-start: 4px;
+}
+
+.navigation-bar > .item.find-banner.console > input[type="search"]:focus,
+.navigation-bar > .item.find-banner.console > input[type="search"]:focus ~ button,
+.navigation-bar > .item.find-banner.console > input[type="search"]:not(:placeholder-shown),
+.navigation-bar > .item.find-banner.console > input[type="search"]:not(:placeholder-shown) ~ button {
+    background-color: var(--background-color);
+}
+
+.navigation-bar > .item.console-snippets > img {
+    width: 16px;
+    height: 16px;
+    content: url(../Images/ClippingIcons.svg#js-light);
 }
 
 .content-view.log {
@@ -267,7 +301,24 @@ body[dir=rtl] .console-group-title::before {
         alt: attr(data-labelprefix);
 }
 
+.console-user-command:not(:hover) > .console-snippet-options {
+    display: none;
+}
+
+.create-snippet-popover > .label {
+    display: inline-block;
+    margin-inline-end: 6px;
+    font-weight: bold;
+    line-height: 23px;
+    white-space: nowrap;
+    color: hsl(0, 0%, 34%);
+}
+
 @media (prefers-color-scheme: dark) {
+    .navigation-bar > .item.console-snippets > img {
+        content: url(../Images/ClippingIcons.svg#js-dark);
+    }
+
     .console-messages {
         background-color: var(--background-color-content);
     }

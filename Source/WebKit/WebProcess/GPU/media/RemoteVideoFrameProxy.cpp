@@ -42,7 +42,7 @@
 
 namespace WebKit {
 
-RemoteVideoFrameProxy::Properties RemoteVideoFrameProxy::properties(WebKit::RemoteVideoFrameReference&& reference, const WebCore::VideoFrame& videoFrame)
+RemoteVideoFrameProxy::Properties RemoteVideoFrameProxy::properties(WebKit::RemoteVideoFrameReference reference, const WebCore::VideoFrame& videoFrame)
 {
     return {
         WTFMove(reference),
@@ -50,7 +50,8 @@ RemoteVideoFrameProxy::Properties RemoteVideoFrameProxy::properties(WebKit::Remo
         videoFrame.isMirrored(),
         videoFrame.rotation(),
         expandedIntSize(videoFrame.presentationSize()),
-        videoFrame.pixelFormat()
+        videoFrame.pixelFormat(),
+        videoFrame.colorSpace()
     };
 }
 
@@ -70,7 +71,7 @@ void RemoteVideoFrameProxy::releaseUnused(IPC::Connection& connection, Propertie
 }
 
 RemoteVideoFrameProxy::RemoteVideoFrameProxy(IPC::Connection& connection, RemoteVideoFrameObjectHeapProxy& videoFrameObjectHeapProxy, Properties&& properties)
-    : VideoFrame(properties.presentationTime, properties.isMirrored, properties.rotation)
+    : VideoFrame(properties.presentationTime, properties.isMirrored, properties.rotation, WTFMove(properties.colorSpace))
     , m_connection(connection)
     , m_referenceTracker(properties.reference)
     , m_size(properties.size)
@@ -116,16 +117,21 @@ CVPixelBufferRef RemoteVideoFrameProxy::pixelBuffer() const
             });
             semaphore.wait();
         } else {
-            RetainPtr<CVPixelBufferRef> pixelBuffer;
-            auto result = m_connection->sendSync(Messages::RemoteVideoFrameObjectHeap::PixelBuffer(newReadReference()), Messages::RemoteVideoFrameObjectHeap::PixelBuffer::Reply(pixelBuffer), 0, defaultTimeout);
-            if (result)
-                m_pixelBuffer = WTFMove(pixelBuffer);
+            auto sendResult = m_connection->sendSync(Messages::RemoteVideoFrameObjectHeap::PixelBuffer(newReadReference()), 0, defaultTimeout);
+            if (sendResult.succeeded())
+                std::tie(m_pixelBuffer) = sendResult.takeReply();
         }
     }
     // FIXME: Some code paths do not like empty pixel buffers.
     if (!m_pixelBuffer)
         m_pixelBuffer = WebCore::createBlackPixelBuffer(static_cast<size_t>(m_size.width()), static_cast<size_t>(m_size.height()));
     return m_pixelBuffer.get();
+}
+
+VideoFrame::ResourceIdentifier RemoteVideoFrameProxy::resourceIdentifier() const
+{
+    auto ref = newReadReference();
+    return std::make_pair(ref.identifier().toUInt64(), ref.version());
 }
 #endif
 

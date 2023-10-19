@@ -28,34 +28,21 @@
 
 #if ENABLE(GPU_PROCESS)
 
-#include "RemoteDisplayListRecorder.h"
+#include <WebCore/GraphicsContext.h>
 
 namespace WebKit {
-using namespace WebCore;
-
-RemoteImageBuffer::RemoteImageBuffer(const ImageBufferBackend::Parameters& parameters, const ImageBufferBackend::Info& info, std::unique_ptr<ImageBufferBackend>&& backend, RemoteRenderingBackend& remoteRenderingBackend, QualifiedRenderingResourceIdentifier renderingResourceIdentifier)
-    : ImageBuffer(parameters, info, WTFMove(backend), renderingResourceIdentifier.object())
-    , m_renderingResourceIdentifier(renderingResourceIdentifier)
-    , m_remoteDisplayList({ RemoteDisplayListRecorder::create(*this, renderingResourceIdentifier, renderingResourceIdentifier.processIdentifier(), remoteRenderingBackend) })
-    , m_renderingResourcesRequest(ScopedRenderingResourcesRequest::acquire())
-{
-}
 
 RemoteImageBuffer::~RemoteImageBuffer()
 {
     // Volatile image buffers do not have contexts.
-    if (this->volatilityState() == VolatilityState::Volatile)
+    if (this->volatilityState() == WebCore::VolatilityState::Volatile)
+        return;
+    if (!m_backend)
         return;
     // Unwind the context's state stack before destruction, since calls to restore may not have
     // been flushed yet, or the web process may have terminated.
     while (context().stackSize())
         context().restore();
-}
-
-void RemoteImageBuffer::setOwnershipIdentity(const ProcessIdentity& resourceOwner)
-{
-    if (m_backend)
-        m_backend->setOwnershipIdentity(resourceOwner);
 }
 
 } // namespace WebKit

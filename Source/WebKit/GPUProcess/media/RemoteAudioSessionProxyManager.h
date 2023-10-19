@@ -52,13 +52,17 @@ public:
 
     bool tryToSetActiveForProcess(RemoteAudioSessionProxy&, bool);
 
+    void beginInterruptionRemote();
+    void endInterruptionRemote(WebCore::AudioSession::MayResume);
+
     WebCore::AudioSession& session() { return WebCore::AudioSession::sharedSession(); }
     const WebCore::AudioSession& session() const { return WebCore::AudioSession::sharedSession(); }
 
     void updatePresentingProcesses();
 
     using WebCore::AudioSession::InterruptionObserver::weakPtrFactory;
-    using WeakValueType = WebCore::AudioSession::InterruptionObserver::WeakValueType;
+    using WebCore::AudioSession::InterruptionObserver::WeakValueType;
+    using WebCore::AudioSession::InterruptionObserver::WeakPtrImplType;
 
 private:
     void beginAudioSessionInterruption() final;

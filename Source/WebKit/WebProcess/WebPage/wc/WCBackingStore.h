@@ -25,6 +25,8 @@
 
 #pragma once
 
+#if USE(GRAPHICS_LAYER_WC)
+
 #include "ImageBufferBackendHandle.h"
 #include "ImageBufferBackendHandleSharing.h"
 #include <WebCore/ImageBuffer.h>
@@ -51,7 +53,7 @@ public:
                 if (is<ImageBufferBackendHandleSharing>(sharing))
                     handle = downcast<ImageBufferBackendHandleSharing>(*sharing).createBackendHandle();
             }
-            encoder << handle;
+            encoder << WTFMove(handle);
         }
     }
 
@@ -65,7 +67,7 @@ public:
             ImageBufferBackendHandle handle;
             if (!decoder.decode(handle))
                 return false;
-            result.m_bitmap = ShareableBitmap::create(std::get<ShareableBitmap::Handle>(handle));
+            result.m_bitmap = ShareableBitmap::create(WTFMove(std::get<ShareableBitmap::Handle>(handle)));
         }
         return true;
     }
@@ -76,3 +78,5 @@ private:
 };
 
 } // namespace WebKit
+
+#endif // USE(GRAPHICS_LAYER_WC)

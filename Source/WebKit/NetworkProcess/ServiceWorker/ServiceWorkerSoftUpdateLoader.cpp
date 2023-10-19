@@ -32,6 +32,7 @@
 #include "NetworkCache.h"
 #include "NetworkLoad.h"
 #include "NetworkSession.h"
+#include <WebCore/AdvancedPrivacyProtections.h>
 #include <WebCore/ServiceWorkerJob.h>
 #include <WebCore/TextResourceDecoder.h>
 #include <WebCore/WorkerFetchResult.h>
@@ -40,14 +41,6 @@
 namespace WebKit {
 
 using namespace WebCore;
-
-void ServiceWorkerSoftUpdateLoader::start(NetworkSession* session, ServiceWorkerJobData&& jobData, bool shouldRefreshCache, ResourceRequest&& request, Handler&& completionHandler)
-{
-    if (!session)
-        return completionHandler(workerFetchError(ResourceError { ResourceError::Type::Cancellation }));
-    auto loader = std::unique_ptr<ServiceWorkerSoftUpdateLoader>(new ServiceWorkerSoftUpdateLoader(*session, WTFMove(jobData), shouldRefreshCache, WTFMove(request), WTFMove(completionHandler)));
-    session->addSoftUpdateLoader(WTFMove(loader));
-}
 
 ServiceWorkerSoftUpdateLoader::ServiceWorkerSoftUpdateLoader(NetworkSession& session, ServiceWorkerJobData&& jobData, bool shouldRefreshCache, ResourceRequest&& request, Handler&& completionHandler)
     : m_completionHandler(WTFMove(completionHandler))
@@ -60,7 +53,9 @@ ServiceWorkerSoftUpdateLoader::ServiceWorkerSoftUpdateLoader(NetworkSession& ses
         // We set cache policy to disable speculative loading/async revalidation from the cache.
         request.setCachePolicy(ResourceRequestCachePolicy::ReturnCacheDataDontLoad);
 
-        session.cache()->retrieve(request, NetworkCache::GlobalFrameID { }, NavigatingToAppBoundDomain::No, [this, weakThis = WeakPtr { *this }, request, shouldRefreshCache](auto&& entry, auto&&) mutable {
+        OptionSet<AdvancedPrivacyProtections> advancedPrivacyProtections;
+        bool allowPrivacyProxy { true };
+        session.cache()->retrieve(request, NetworkCache::GlobalFrameID { }, NavigatingToAppBoundDomain::No, allowPrivacyProxy, advancedPrivacyProtections, [this, weakThis = WeakPtr { *this }, request, shouldRefreshCache](auto&& entry, auto&&) mutable {
             if (!weakThis)
                 return;
             if (!m_session) {
@@ -127,7 +122,7 @@ void ServiceWorkerSoftUpdateLoader::loadFromNetwork(NetworkSession& session, Res
     parameters.contentEncodingSniffingPolicy = ContentEncodingSniffingPolicy::Default;
     parameters.needsCertificateInfo = true;
     parameters.request = WTFMove(request);
-    m_networkLoad = makeUnique<NetworkLoad>(*this, nullptr, WTFMove(parameters), session);
+    m_networkLoad = makeUnique<NetworkLoad>(*this, WTFMove(parameters), session);
     m_networkLoad->start();
 
 #if PLATFORM(COCOA)
@@ -135,8 +130,9 @@ void ServiceWorkerSoftUpdateLoader::loadFromNetwork(NetworkSession& session, Res
 #endif
 }
 
-void ServiceWorkerSoftUpdateLoader::willSendRedirectedRequest(ResourceRequest&&, ResourceRequest&&, ResourceResponse&&)
+void ServiceWorkerSoftUpdateLoader::willSendRedirectedRequest(ResourceRequest&&, ResourceRequest&&, ResourceResponse&&, CompletionHandler<void(WebCore::ResourceRequest&&)>&& completionHandler)
 {
+    completionHandler({ });
     fail(ResourceError { ResourceError::Type::Cancellation });
 }
 
@@ -178,7 +174,7 @@ ResourceError ServiceWorkerSoftUpdateLoader::processResponse(const ResourceRespo
     return { };
 }
 
-void ServiceWorkerSoftUpdateLoader::didReceiveBuffer(const WebCore::FragmentedSharedBuffer& buffer, int reportedEncodedDataLength)
+void ServiceWorkerSoftUpdateLoader::didReceiveBuffer(const WebCore::FragmentedSharedBuffer& buffer, uint64_t reportedEncodedDataLength)
 {
     if (!m_decoder) {
         if (!m_responseEncoding.isEmpty())

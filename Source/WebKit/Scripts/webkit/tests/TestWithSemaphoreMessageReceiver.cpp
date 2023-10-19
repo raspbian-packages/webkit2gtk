@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 Apple Inc. All rights reserved.
+ * Copyright (C) 2021-2023 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,31 +33,6 @@
 #if ENABLE(IPC_TESTING_API)
 #include "JSIPCBinding.h"
 #endif
-
-namespace Messages {
-
-namespace TestWithSemaphore {
-
-void ReceiveSemaphore::callReply(IPC::Decoder& decoder, CompletionHandler<void(IPC::Semaphore&&)>&& completionHandler)
-{
-    std::optional<IPC::Semaphore> r0;
-    decoder >> r0;
-    if (!r0) {
-        ASSERT_NOT_REACHED();
-        cancelReply(WTFMove(completionHandler));
-        return;
-    }
-    completionHandler(WTFMove(*r0));
-}
-
-void ReceiveSemaphore::cancelReply(CompletionHandler<void(IPC::Semaphore&&)>&& completionHandler)
-{
-    completionHandler(IPC::AsyncReplyError<IPC::Semaphore>::create());
-}
-
-} // namespace TestWithSemaphore
-
-} // namespace Messages
 
 namespace WebKit {
 

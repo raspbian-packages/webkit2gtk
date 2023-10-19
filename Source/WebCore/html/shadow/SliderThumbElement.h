@@ -57,6 +57,7 @@ public:
     void hostDisabledStateChanged();
 
 private:
+    constexpr static auto CreateSliderThumbElement = CreateHTMLDivElement | NodeFlag::HasCustomStyleResolveCallbacks;
     SliderThumbElement(Document&);
     bool isSliderThumbElement() const final { return true; }
 
@@ -73,7 +74,7 @@ private:
 #endif
     void willDetachRenderers() final;
 
-    std::optional<Style::ElementStyle> resolveCustomStyle(const Style::ResolutionContext&, const RenderStyle*) final;
+    std::optional<Style::ResolvedStyle> resolveCustomStyle(const Style::ResolutionContext&, const RenderStyle*) final;
 
     void startDragging();
     void stopDragging();
@@ -112,6 +113,7 @@ public:
     static Ref<SliderContainerElement> create(Document&);
 
 private:
+    constexpr static auto CreateSliderContainerElement = CreateHTMLDivElement | NodeFlag::HasCustomStyleResolveCallbacks;
     SliderContainerElement(Document&);
     RenderPtr<RenderElement> createElementRenderer(RenderStyle&&, const RenderTreePosition&) final;
     bool isSliderContainerElement() const final { return true; }

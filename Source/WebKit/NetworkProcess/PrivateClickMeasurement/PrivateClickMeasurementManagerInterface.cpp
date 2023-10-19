@@ -195,7 +195,7 @@ static PrivateClickMeasurementManager& daemonManager()
 }
 
 template<typename Info>
-void handlePCMMessage(Span<const uint8_t> encodedMessage)
+void handlePCMMessage(std::span<const uint8_t> encodedMessage)
 {
     Daemon::Decoder decoder(encodedMessage);
 
@@ -204,10 +204,10 @@ void handlePCMMessage(Span<const uint8_t> encodedMessage)
     if (UNLIKELY(!arguments))
         return;
 
-    IPC::callMemberFunction(WTFMove(*arguments), &daemonManager(), Info::MemberFunction);
+    IPC::callMemberFunction(&daemonManager(), Info::MemberFunction, WTFMove(*arguments));
 }
 
-static void handlePCMMessageSetDebugModeIsEnabled(const Daemon::Connection& connection, Span<const uint8_t> encodedMessage)
+static void handlePCMMessageSetDebugModeIsEnabled(const Daemon::Connection& connection, std::span<const uint8_t> encodedMessage)
 {
 #if PLATFORM(COCOA)
     Daemon::Decoder decoder(encodedMessage);
@@ -228,7 +228,7 @@ static void handlePCMMessageSetDebugModeIsEnabled(const Daemon::Connection& conn
 }
 
 template<typename Info>
-void handlePCMMessageWithReply(Span<const uint8_t> encodedMessage, CompletionHandler<void(PCM::EncodedMessage&&)>&& replySender)
+void handlePCMMessageWithReply(std::span<const uint8_t> encodedMessage, CompletionHandler<void(PCM::EncodedMessage&&)>&& replySender)
 {
     Daemon::Decoder decoder(encodedMessage);
 
@@ -241,7 +241,7 @@ void handlePCMMessageWithReply(Span<const uint8_t> encodedMessage, CompletionHan
         replySender(Info::encodeReply(args...));
     }};
 
-    IPC::callMemberFunction(WTFMove(*arguments), WTFMove(completionHandler), &daemonManager(), Info::MemberFunction);
+    IPC::callMemberFunction(&daemonManager(), Info::MemberFunction, WTFMove(*arguments), WTFMove(completionHandler));
 }
 
 void doDailyActivityInManager()
@@ -249,7 +249,7 @@ void doDailyActivityInManager()
     daemonManager().firePendingAttributionRequests();
 }
 
-void decodeMessageAndSendToManager(const Daemon::Connection& connection, MessageType messageType, Span<const uint8_t> encodedMessage, CompletionHandler<void(Vector<uint8_t>&&)>&& replySender)
+void decodeMessageAndSendToManager(const Daemon::Connection& connection, MessageType messageType, std::span<const uint8_t> encodedMessage, CompletionHandler<void(Vector<uint8_t>&&)>&& replySender)
 {
     ASSERT(messageTypeSendsReply(messageType) == !!replySender);
     switch (messageType) {

@@ -30,16 +30,14 @@
 #include "Decoder.h"
 #include "QualifiedRenderingResourceIdentifier.h"
 #include "RemoteRenderingBackend.h"
+#include "SharedVideoFrame.h"
 #include "StreamMessageReceiver.h"
 #include "StreamServerConnection.h"
+#include <WebCore/ControlFactory.h>
 #include <WebCore/DisplayListItems.h>
 #include <WebCore/ProcessIdentifier.h>
 #include <wtf/RefCounted.h>
 #include <wtf/WeakPtr.h>
-
-namespace IPC {
-class FilterReference;
-}
 
 namespace WebKit {
 
@@ -56,7 +54,6 @@ public:
     }
 
     void stopListeningForIPC();
-    void clearImageBufferReference();
 
     void save();
     void restore();
@@ -75,16 +72,19 @@ public:
     void setMiterLimit(float);
     void clearShadow();
     void clip(const WebCore::FloatRect&);
+    void clipRoundedRect(const WebCore::FloatRoundedRect&);
     void clipOut(const WebCore::FloatRect&);
+    void clipOutRoundedRect(const WebCore::FloatRoundedRect&);
     void clipToImageBuffer(WebCore::RenderingResourceIdentifier, const WebCore::FloatRect& destinationRect);
     void clipOutToPath(const WebCore::Path&);
     void clipPath(const WebCore::Path&, WebCore::WindRule);
+    void resetClip();
     void drawGlyphs(WebCore::DisplayList::DrawGlyphs&&);
     void drawDecomposedGlyphs(WebCore::RenderingResourceIdentifier fontIdentifier, WebCore::RenderingResourceIdentifier decomposedGlyphsIdentifier);
-    void drawFilteredImageBuffer(std::optional<WebCore::RenderingResourceIdentifier> sourceImageIdentifier, const WebCore::FloatRect& sourceImageRect, IPC::FilterReference);
+    void drawFilteredImageBuffer(std::optional<WebCore::RenderingResourceIdentifier> sourceImageIdentifier, const WebCore::FloatRect& sourceImageRect, Ref<WebCore::Filter>);
     void drawImageBuffer(WebCore::RenderingResourceIdentifier imageBufferIdentifier, const WebCore::FloatRect& destinationRect, const WebCore::FloatRect& srcRect, const WebCore::ImagePaintingOptions&);
     void drawNativeImage(WebCore::RenderingResourceIdentifier imageIdentifier, const WebCore::FloatSize& imageSize, const WebCore::FloatRect& destRect, const WebCore::FloatRect& srcRect, const WebCore::ImagePaintingOptions&);
-    void drawSystemImage(WebCore::SystemImage&, const WebCore::FloatRect&);
+    void drawSystemImage(Ref<WebCore::SystemImage>, const WebCore::FloatRect&);
     void drawPattern(WebCore::RenderingResourceIdentifier imageIdentifier, const WebCore::FloatRect& destRect, const WebCore::FloatRect& tileRect, const WebCore::AffineTransform&, const WebCore::FloatPoint&, const WebCore::FloatSize& spacing, const WebCore::ImagePaintingOptions&);
     void beginTransparencyLayer(float opacity);
     void endTransparencyLayer();
@@ -94,8 +94,8 @@ public:
     void drawDotsForDocumentMarker(const WebCore::FloatRect&, const WebCore::DocumentMarkerLineStyle&);
     void drawEllipse(const WebCore::FloatRect&);
     void drawPath(const WebCore::Path&);
-    void drawFocusRingPath(const WebCore::Path&, float width, float offset, const WebCore::Color&);
-    void drawFocusRingRects(const Vector<WebCore::FloatRect>& rects, float width, float offset, const WebCore::Color&);
+    void drawFocusRingPath(const WebCore::Path&, float outlineWidth, const WebCore::Color&);
+    void drawFocusRingRects(const Vector<WebCore::FloatRect>&, float outlineOffset, float outlineWidth, const WebCore::Color&);
     void fillRect(const WebCore::FloatRect&);
     void fillRectWithColor(const WebCore::FloatRect&, const WebCore::Color&);
     void fillRectWithGradient(WebCore::DisplayList::FillRectWithGradient&&);
@@ -103,33 +103,39 @@ public:
     void fillRoundedRect(const WebCore::FloatRoundedRect&, const WebCore::Color&, WebCore::BlendMode);
     void fillRectWithRoundedHole(const WebCore::FloatRect&, const WebCore::FloatRoundedRect&, const WebCore::Color&);
 #if ENABLE(INLINE_PATH_DATA)
-    void fillLine(const WebCore::LineData&);
-    void fillArc(const WebCore::ArcData&);
-    void fillQuadCurve(const WebCore::QuadCurveData&);
-    void fillBezierCurve(const WebCore::BezierCurveData&);
+    void fillLine(const WebCore::PathDataLine&);
+    void fillArc(const WebCore::PathArc&);
+    void fillQuadCurve(const WebCore::PathDataQuadCurve&);
+    void fillBezierCurve(const WebCore::PathDataBezierCurve&);
 #endif
+    void fillPathSegment(const WebCore::PathSegment&);
     void fillPath(const WebCore::Path&);
     void fillEllipse(const WebCore::FloatRect&);
     void convertToLuminanceMask();
     void transformToColorSpace(const WebCore::DestinationColorSpace&);
+#if ENABLE(VIDEO)
     void paintFrameForMedia(WebCore::MediaPlayerIdentifier, const WebCore::FloatRect& destination);
+#endif
     void strokeRect(const WebCore::FloatRect&, float lineWidth);
 #if ENABLE(INLINE_PATH_DATA)
-    void strokeLine(const WebCore::LineData&);
-    void strokeLineWithColorAndThickness(WebCore::DisplayList::SetInlineStrokeColor&&, float, const WebCore::LineData&);
-    void strokeArc(const WebCore::ArcData&);
-    void strokeQuadCurve(const WebCore::QuadCurveData&);
-    void strokeBezierCurve(const WebCore::BezierCurveData&);
+    void strokeLine(const WebCore::PathDataLine&);
+    void strokeLineWithColorAndThickness(const WebCore::PathDataLine&, WebCore::DisplayList::SetInlineStrokeColor&&, float thickness);
+    void strokeArc(const WebCore::PathArc&);
+    void strokeQuadCurve(const WebCore::PathDataQuadCurve&);
+    void strokeBezierCurve(const WebCore::PathDataBezierCurve&);
 #endif
+    void strokePathSegment(const WebCore::PathSegment&);
     void strokePath(const WebCore::Path&);
     void strokeEllipse(const WebCore::FloatRect&);
     void clearRect(const WebCore::FloatRect&);
+    void drawControlPart(Ref<WebCore::ControlPart>, const WebCore::FloatRoundedRect& borderRect, float deviceScaleFactor, const WebCore::ControlStyle&);
 #if USE(CG)
     void applyStrokePattern();
     void applyFillPattern();
 #endif
     void applyDeviceScaleFactor(float);
-    void flushContext(WebCore::GraphicsContextFlushIdentifier);
+    void flushContext(IPC::Semaphore&&);
+    void flushContextSync(CompletionHandler<void()>&&);
 
 private:
     RemoteDisplayListRecorder(WebCore::ImageBuffer&, QualifiedRenderingResourceIdentifier, WebCore::ProcessIdentifier webProcessIdentifier, RemoteRenderingBackend&);
@@ -138,6 +144,7 @@ private:
     void clipToImageBufferWithQualifiedIdentifier(QualifiedRenderingResourceIdentifier, const WebCore::FloatRect& destinationRect);
     void drawGlyphsWithQualifiedIdentifier(WebCore::DisplayList::DrawGlyphs&&, QualifiedRenderingResourceIdentifier fontIdentifier);
     void drawDecomposedGlyphsWithQualifiedIdentifiers(QualifiedRenderingResourceIdentifier fontIdentifier, QualifiedRenderingResourceIdentifier decomposedGlyphsIdentifier);
+    void drawFilteredImageBufferInternal(std::optional<WebCore::RenderingResourceIdentifier> sourceImageIdentifier, const WebCore::FloatRect& sourceImageRect, WebCore::Filter&, WebCore::FilterResults&);
     void drawImageBufferWithQualifiedIdentifier(QualifiedRenderingResourceIdentifier imageBufferIdentifier, const WebCore::FloatRect& destinationRect, const WebCore::FloatRect& srcRect, const WebCore::ImagePaintingOptions&);
     void drawNativeImageWithQualifiedIdentifier(QualifiedRenderingResourceIdentifier imageIdentifier, const WebCore::FloatSize& imageSize, const WebCore::FloatRect& destRect, const WebCore::FloatRect& srcRect, const WebCore::ImagePaintingOptions&);
     void drawPatternWithQualifiedIdentifier(QualifiedRenderingResourceIdentifier imageIdentifier, const WebCore::FloatRect& destRect, const WebCore::FloatRect& tileRect, const WebCore::AffineTransform&, const WebCore::FloatPoint&, const WebCore::FloatSize& spacing, const WebCore::ImagePaintingOptions&);
@@ -157,10 +164,20 @@ private:
     void startListeningForIPC();
     void didReceiveStreamMessage(IPC::StreamServerConnection&, IPC::Decoder&) final;
 
-    WeakPtr<WebCore::ImageBuffer> m_imageBuffer;
+#if PLATFORM(COCOA) && ENABLE(VIDEO)
+    void paintVideoFrame(SharedVideoFrame&&, const WebCore::FloatRect&, bool shouldDiscardAlpha);
+    void setSharedVideoFrameSemaphore(IPC::Semaphore&&);
+    void setSharedVideoFrameMemory(SharedMemory::Handle&&);
+#endif
+
+    ThreadSafeWeakPtr<WebCore::ImageBuffer> m_imageBuffer;
     QualifiedRenderingResourceIdentifier m_imageBufferIdentifier;
     WebCore::ProcessIdentifier m_webProcessIdentifier;
     RefPtr<RemoteRenderingBackend> m_renderingBackend;
+    std::unique_ptr<WebCore::ControlFactory> m_controlFactory;
+#if PLATFORM(COCOA) && ENABLE(VIDEO)
+    SharedVideoFrameReader m_sharedVideoFrameReader;
+#endif
 };
 
 } // namespace WebKit

@@ -13,8 +13,11 @@
 #include "util/EGLWindow.h"
 
 #include <CoreFoundation/CoreFoundation.h>
-#include <IOSurface/IOSurface.h>
-
+#if TARGET_OS_OSX
+#    include <IOSurface/IOSurface.h>
+#else
+#    include <IOSurface/IOSurfaceRef.h>
+#endif
 using namespace angle;
 
 namespace
@@ -268,7 +271,7 @@ class IOSurfaceClientBufferTest : public ANGLETest<>
                sizeof(T) * data.size());
         IOSurfaceUnlock(ioSurface.get(), kIOSurfaceLockReadOnly, nullptr);
 
-        if (internalFormat == GL_RGB && IsOSX() && IsOpenGL())
+        if (internalFormat == GL_RGB && IsMac() && IsOpenGL())
         {
             // Ignore alpha component for BGRX, the alpha value is undefined
             for (int i = 0; i < 3; i++)

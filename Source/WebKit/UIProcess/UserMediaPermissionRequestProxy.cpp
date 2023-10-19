@@ -20,6 +20,7 @@
 #include "config.h"
 #include "UserMediaPermissionRequestProxy.h"
 
+#include "APIUIClient.h"
 #include "MediaPermissionUtilities.h"
 #include "UserMediaPermissionRequestManagerProxy.h"
 #include <WebCore/CaptureDeviceManager.h>
@@ -143,15 +144,15 @@ String convertEnumerationToString(UserMediaPermissionRequestProxy::UserMediaAcce
     static_assert(static_cast<size_t>(UserMediaPermissionRequestProxy::UserMediaAccessDenialReason::HardwareError) == 4, "UserMediaPermissionRequestProxy::UserMediaAccessDenialReason::HardwareError is not 4 as expected");
     static_assert(static_cast<size_t>(UserMediaPermissionRequestProxy::UserMediaAccessDenialReason::PermissionDenied) == 5, "UserMediaPermissionRequestProxy::UserMediaAccessDenialReason::PermissionDenied is not 5 as expected");
     static_assert(static_cast<size_t>(UserMediaPermissionRequestProxy::UserMediaAccessDenialReason::OtherFailure) == 6, "UserMediaPermissionRequestProxy::UserMediaAccessDenialReason::OtherFailure is not 6 as expected");
-    ASSERT(static_cast<size_t>(enumerationValue) < WTF_ARRAY_LENGTH(values));
+    ASSERT(static_cast<size_t>(enumerationValue) < std::size(values));
     return values[static_cast<size_t>(enumerationValue)];
 }
 
 void UserMediaPermissionRequestProxy::promptForGetDisplayMedia(UserMediaDisplayCapturePromptType promptType)
 {
 #if ENABLE(MEDIA_STREAM) && PLATFORM(COCOA)
-    ASSERT(m_manager && canPromptForGetDisplayMedia() && promptType != UserMediaDisplayCapturePromptType::UserChoose);
-    if (!m_manager || !canPromptForGetDisplayMedia() || promptType != UserMediaDisplayCapturePromptType::UserChoose) {
+    ASSERT(m_manager && canRequestDisplayCapturePermission() && promptType == UserMediaDisplayCapturePromptType::UserChoose);
+    if (!m_manager || !canRequestDisplayCapturePermission() || promptType != UserMediaDisplayCapturePromptType::UserChoose) {
         deny(UserMediaAccessDenialReason::PermissionDenied);
         return;
     }
@@ -190,23 +191,18 @@ void UserMediaPermissionRequestProxy::promptForGetUserMedia()
 void UserMediaPermissionRequestProxy::doDefaultAction()
 {
 #if ENABLE(MEDIA_STREAM) && PLATFORM(COCOA)
-    if (requiresDisplayCapture()) {
-        if (!canPromptForGetDisplayMedia()) {
-            deny(UserMediaAccessDenialReason::PermissionDenied);
-            return;
-        }
-
-        promptForGetDisplayMedia();
-    } else
+    if (requiresDisplayCapture())
+        promptForGetDisplayMedia(UserMediaDisplayCapturePromptType::UserChoose);
+    else
         promptForGetUserMedia();
 #else
     deny();
 #endif
 }
 
-bool UserMediaPermissionRequestProxy::canPromptForGetDisplayMedia()
+bool UserMediaPermissionRequestProxy::canRequestDisplayCapturePermission()
 {
-#if ENABLE(MEDIA_STREAM) && PLATFORM(IOS)
+#if ENABLE(MEDIA_STREAM) && (PLATFORM(IOS) || PLATFORM(VISION))
     return true;
 #else
     return false;

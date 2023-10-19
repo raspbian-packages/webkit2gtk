@@ -29,8 +29,7 @@
 #if ENABLE(GPU_PROCESS) && ENABLE(WEBGL) && PLATFORM(COCOA)
 
 #include "GPUConnectionToWebProcess.h"
-#include "IPCTester.h"
-#include <WebCore/ProcessIdentity.h>
+#include "IPCUtilities.h"
 #include <wtf/MachSendRight.h>
 
 
@@ -44,13 +43,13 @@
 namespace WebKit {
 
 #if ENABLE(VIDEO)
-void RemoteGraphicsContextGL::copyTextureFromVideoFrame(WebKit::RemoteVideoFrameReadReference read, uint32_t texture, uint32_t target, int32_t level, uint32_t internalFormat, uint32_t format, uint32_t type, bool premultiplyAlpha, bool flipY, CompletionHandler<void(bool)>&& completionHandler)
+void RemoteGraphicsContextGL::copyTextureFromVideoFrame(WebKit::SharedVideoFrame&& frame, uint32_t texture, uint32_t target, int32_t level, uint32_t internalFormat, uint32_t format, uint32_t type, bool premultiplyAlpha, bool flipY, CompletionHandler<void(bool)>&& completionHandler)
 {
     assertIsCurrent(workQueue());
     UNUSED_VARIABLE(premultiplyAlpha);
     ASSERT_UNUSED(target, target == WebCore::GraphicsContextGL::TEXTURE_2D);
 
-    auto videoFrame = m_videoFrameObjectHeap->get(WTFMove(read));
+    auto videoFrame = m_sharedVideoFrameReader.read(WTFMove(frame));
     if (!videoFrame) {
         ASSERT_IS_TESTING_IPC();
         completionHandler(false);
@@ -73,53 +72,69 @@ void RemoteGraphicsContextGL::copyTextureFromVideoFrame(WebKit::RemoteVideoFrame
 
     completionHandler(contextCV->copyVideoSampleToTexture(*videoFrameCV, texture, level, internalFormat, format, type, WebCore::GraphicsContextGL::FlipY(flipY)));
 }
+
+void RemoteGraphicsContextGL::setSharedVideoFrameSemaphore(IPC::Semaphore&& semaphore)
+{
+    m_sharedVideoFrameReader.setSemaphore(WTFMove(semaphore));
+}
+
+void RemoteGraphicsContextGL::setSharedVideoFrameMemory(SharedMemory::Handle&& handle)
+{
+    m_sharedVideoFrameReader.setSharedMemory(WTFMove(handle));
+}
 #endif
 
 namespace {
 
 class RemoteGraphicsContextGLCocoa final : public RemoteGraphicsContextGL {
 public:
-    RemoteGraphicsContextGLCocoa(GPUConnectionToWebProcess&, GraphicsContextGLIdentifier, RemoteRenderingBackend&, IPC::StreamConnectionBuffer&&);
+    RemoteGraphicsContextGLCocoa(GPUConnectionToWebProcess&, GraphicsContextGLIdentifier, RemoteRenderingBackend&, Ref<IPC::StreamServerConnection>&&);
     ~RemoteGraphicsContextGLCocoa() final = default;
 
     // RemoteGraphicsContextGL overrides.
+    void createEGLSync(WTF::MachSendRight syncEvent, uint64_t signalValue, CompletionHandler<void(uint64_t)>&&) final;
     void platformWorkQueueInitialize(WebCore::GraphicsContextGLAttributes&&) final;
-    void prepareForDisplay(CompletionHandler<void(WTF::MachSendRight&&)>&&) final;
+    void prepareForDisplay(IPC::Semaphore&&, CompletionHandler<void(WTF::MachSendRight&&)>&&) final;
 private:
-    const WebCore::ProcessIdentity m_resourceOwner;
 };
 
 }
 
-Ref<RemoteGraphicsContextGL> RemoteGraphicsContextGL::create(GPUConnectionToWebProcess& gpuConnectionToWebProcess, WebCore::GraphicsContextGLAttributes&& attributes, GraphicsContextGLIdentifier graphicsContextGLIdentifier, RemoteRenderingBackend& renderingBackend, IPC::StreamConnectionBuffer&& stream)
+Ref<RemoteGraphicsContextGL> RemoteGraphicsContextGL::create(GPUConnectionToWebProcess& gpuConnectionToWebProcess, WebCore::GraphicsContextGLAttributes&& attributes, GraphicsContextGLIdentifier graphicsContextGLIdentifier, RemoteRenderingBackend& renderingBackend, Ref<IPC::StreamServerConnection>&& streamConnection)
 {
-    auto instance = adoptRef(*new RemoteGraphicsContextGLCocoa(gpuConnectionToWebProcess, graphicsContextGLIdentifier, renderingBackend, WTFMove(stream)));
+    auto instance = adoptRef(*new RemoteGraphicsContextGLCocoa(gpuConnectionToWebProcess, graphicsContextGLIdentifier, renderingBackend, WTFMove(streamConnection)));
     instance->initialize(WTFMove(attributes));
     return instance;
 }
 
-RemoteGraphicsContextGLCocoa::RemoteGraphicsContextGLCocoa(GPUConnectionToWebProcess& gpuConnectionToWebProcess, GraphicsContextGLIdentifier graphicsContextGLIdentifier, RemoteRenderingBackend& renderingBackend, IPC::StreamConnectionBuffer&& stream)
-    : RemoteGraphicsContextGL(gpuConnectionToWebProcess, graphicsContextGLIdentifier, renderingBackend, WTFMove(stream))
-    , m_resourceOwner(gpuConnectionToWebProcess.webProcessIdentity())
+RemoteGraphicsContextGLCocoa::RemoteGraphicsContextGLCocoa(GPUConnectionToWebProcess& gpuConnectionToWebProcess, GraphicsContextGLIdentifier graphicsContextGLIdentifier, RemoteRenderingBackend& renderingBackend, Ref<IPC::StreamServerConnection>&& streamConnection)
+    : RemoteGraphicsContextGL(gpuConnectionToWebProcess, graphicsContextGLIdentifier, renderingBackend, WTFMove(streamConnection))
 {
+}
+
+void RemoteGraphicsContextGLCocoa::createEGLSync(WTF::MachSendRight syncEvent, uint64_t signalValue, CompletionHandler<void(uint64_t)>&& completionHandler)
+{
+    GCEGLSync returnValue = { };
+    assertIsCurrent(workQueue());
+    returnValue = m_context->createEGLSync(std::make_tuple(WTFMove(syncEvent), signalValue));
+    completionHandler(static_cast<uint64_t>(reinterpret_cast<intptr_t>(returnValue)));
 }
 
 void RemoteGraphicsContextGLCocoa::platformWorkQueueInitialize(WebCore::GraphicsContextGLAttributes&& attributes)
 {
     assertIsCurrent(workQueue());
-    m_context = WebCore::GraphicsContextGLCocoa::create(WTFMove(attributes), WebCore::ProcessIdentity { m_resourceOwner });
+    m_context = WebCore::GraphicsContextGLCocoa::create(WTFMove(attributes), ProcessIdentity { m_resourceOwner });
 }
 
-void RemoteGraphicsContextGLCocoa::prepareForDisplay(CompletionHandler<void(WTF::MachSendRight&&)>&& completionHandler)
+void RemoteGraphicsContextGLCocoa::prepareForDisplay(IPC::Semaphore&& finishedSemaphore, CompletionHandler<void(WTF::MachSendRight&&)>&& completionHandler)
 {
     assertIsCurrent(workQueue());
-    m_context->prepareForDisplay();
+    m_context->prepareForDisplayWithFinishedSignal([finishedSemaphore = WTFMove(finishedSemaphore)]() mutable { 
+        finishedSemaphore.signal();
+    });
     MachSendRight sendRight;
-    WebCore::IOSurface* displayBuffer = m_context->displayBuffer();
-    if (displayBuffer) {
-        m_context->markDisplayBufferInUse();
-        sendRight = displayBuffer->createSendRight();
-    }
+    if (WebCore::IOSurface* surface = m_context->displayBufferSurface())
+        sendRight = surface->createSendRight();
     completionHandler(WTFMove(sendRight));
 }
 

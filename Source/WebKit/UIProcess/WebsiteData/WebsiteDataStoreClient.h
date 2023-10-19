@@ -28,10 +28,13 @@
 #include "AuthenticationChallengeDisposition.h"
 #include "AuthenticationChallengeProxy.h"
 #include "AuthenticationDecisionListener.h"
+#include "BackgroundFetchChange.h"
+#include <WebCore/NotificationData.h>
 #include <wtf/CompletionHandler.h>
 
 namespace WebCore {
-struct SecurityOriginData;
+struct NotificationData;
+class SecurityOriginData;
 }
 
 namespace WebKit {
@@ -45,6 +48,11 @@ public:
 
     virtual void requestStorageSpace(const WebCore::SecurityOriginData& topOrigin, const WebCore::SecurityOriginData& frameOrigin, uint64_t quota, uint64_t currentSize, uint64_t spaceRequired, CompletionHandler<void(std::optional<uint64_t>)>&& completionHandler)
     {
+        UNUSED_PARAM(topOrigin);
+        UNUSED_PARAM(frameOrigin);
+        UNUSED_PARAM(quota);
+        UNUSED_PARAM(currentSize);
+        UNUSED_PARAM(spaceRequired);
         completionHandler({ });
     }
 
@@ -56,6 +64,41 @@ public:
     virtual void openWindowFromServiceWorker(const String&, const WebCore::SecurityOriginData&, CompletionHandler<void(WebPageProxy*)>&& completionHandler)
     {
         completionHandler(nullptr);
+    }
+    virtual void reportServiceWorkerConsoleMessage(const URL&, const WebCore::SecurityOriginData&, MessageSource, MessageLevel, const String&, unsigned long)
+    {
+    }
+
+    virtual bool showNotification(const WebCore::NotificationData&)
+    {
+        return false;
+    }
+
+    virtual HashMap<WTF::String, bool> notificationPermissions()
+    {
+        return { };
+    }
+
+    virtual bool hasGetDisplayedNotifications() const { return false; }
+
+    virtual void getDisplayedNotifications(const WebCore::SecurityOriginData&, CompletionHandler<void(Vector<WebCore::NotificationData>&&)>&& completionHandler)
+    {
+        completionHandler({ });
+    }
+
+    virtual void workerUpdatedAppBadge(const WebCore::SecurityOriginData&, std::optional<uint64_t>)
+    {
+    }
+    
+    virtual void requestBackgroundFetchPermission(const WebCore::SecurityOriginData& topOrigin, const WebCore::SecurityOriginData& frameOrigin, CompletionHandler<void(bool)>&& completionHandler)
+    {
+        UNUSED_PARAM(topOrigin);
+        UNUSED_PARAM(frameOrigin);
+        completionHandler(false);
+    }
+
+    virtual void notifyBackgroundFetchChange(const String&, BackgroundFetchChange)
+    {
     }
 };
 

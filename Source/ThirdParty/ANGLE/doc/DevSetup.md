@@ -10,6 +10,8 @@ ANGLE uses git for version control. Helpful documentation can be found at [http:
 
 ### Required First Setup (do this first)
 
+Note: If you are building inside a Chromium checkout [see these instructions instead](https://chromium.googlesource.com/angle/angle/+/HEAD/doc/BuildingAngleForChromiumDevelopment.md).
+
 Required on all platforms:
 
  * [Python 3](https://www.python.org/downloads/) must be available in your path.
@@ -53,6 +55,8 @@ On Linux only, you need to install all the necessary dependencies before going f
 ```
 ./build/install-build-deps.sh
 ```
+
+If building for Android (which requires Linux), switch to the [Android steps](https://chromium.googlesource.com/angle/angle.git/+/HEAD/doc/DevSetupAndroid.md) at this point.
 
 After this completes successfully, you are ready to generate the ninja files:
 ```
@@ -116,7 +120,7 @@ use_goma = true
 To generate the Visual Studio solution in `out/Debug/angle-debug.sln`:
 
 ```
-gn gen out/Debug --sln=angle-debug --ide=vs2022
+gn gen out/Debug --sln=angle-debug --ide=vs2022 --ninja-executable="C:\src\angle\third_party\ninja\ninja.exe"
 ```
 
 In Visual Studio:

@@ -89,11 +89,6 @@ public:
         return m_value == other.m_value;
     }
 
-    constexpr bool operator!=(const GenericTimeMixin& other) const
-    {
-        return m_value != other.m_value;
-    }
-
     constexpr bool operator<(const GenericTimeMixin& other) const
     {
         return m_value < other.m_value;
@@ -119,31 +114,11 @@ public:
         return *static_cast<const DerivedTime*>(this);
     }
 
-    template<class Encoder>
-    void encode(Encoder& encoder) const
+    static constexpr DerivedTime timePointFromNow(Seconds relativeTimeFromNow)
     {
-        encoder << m_value;
-    }
-
-    template<class Decoder>
-    static std::optional<DerivedTime> decode(Decoder& decoder)
-    {
-        std::optional<double> time;
-        decoder >> time;
-        if (!time)
-            return std::nullopt;
-        return DerivedTime::fromRawSeconds(*time);
-    }
-
-    template<class Decoder>
-    static WARN_UNUSED_RETURN bool decode(Decoder& decoder, DerivedTime& time)
-    {
-        double value;
-        if (!decoder.decode(value))
-            return false;
-
-        time = DerivedTime::fromRawSeconds(value);
-        return true;
+        if (std::isinf(relativeTimeFromNow))
+            return DerivedTime::fromRawSeconds(relativeTimeFromNow.value());
+        return DerivedTime::now() + relativeTimeFromNow;
     }
 
 protected:

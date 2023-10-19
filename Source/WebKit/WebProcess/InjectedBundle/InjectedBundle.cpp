@@ -58,17 +58,17 @@
 #include <WebCore/CommonVM.h>
 #include <WebCore/DeprecatedGlobalSettings.h>
 #include <WebCore/Document.h>
-#include <WebCore/Frame.h>
 #include <WebCore/FrameLoader.h>
-#include <WebCore/FrameView.h>
 #include <WebCore/GCController.h>
 #include <WebCore/GeolocationClient.h>
 #include <WebCore/GeolocationController.h>
 #include <WebCore/GeolocationPositionData.h>
 #include <WebCore/JSDOMConvertBufferSource.h>
 #include <WebCore/JSDOMExceptionHandling.h>
-#include <WebCore/JSDOMWindow.h>
+#include <WebCore/JSLocalDOMWindow.h>
 #include <WebCore/JSNotification.h>
+#include <WebCore/LocalFrame.h>
+#include <WebCore/LocalFrameView.h>
 #include <WebCore/Page.h>
 #include <WebCore/PageGroup.h>
 #include <WebCore/PrintContext.h>
@@ -138,14 +138,13 @@ void InjectedBundle::postMessage(const String& messageName, API::Object* message
 
 void InjectedBundle::postSynchronousMessage(const String& messageName, API::Object* messageBody, RefPtr<API::Object>& returnData)
 {
-    UserData returnUserData;
-
     auto& webProcess = WebProcess::singleton();
-    if (!webProcess.parentProcessConnection()->sendSync(Messages::WebProcessPool::HandleSynchronousMessage(messageName, UserData(webProcess.transformObjectsToHandles(messageBody))),
-        Messages::WebProcessPool::HandleSynchronousMessage::Reply(returnUserData), 0))
-        returnData = nullptr;
-    else
+    auto sendResult = webProcess.parentProcessConnection()->sendSync(Messages::WebProcessPool::HandleSynchronousMessage(messageName, UserData(webProcess.transformObjectsToHandles(messageBody))), 0);
+    if (sendResult.succeeded()) {
+        auto [returnUserData] = sendResult.takeReply();
         returnData = webProcess.transformHandlesToObjects(returnUserData.object());
+    } else
+        returnData = nullptr;
 }
 
 WebConnection* InjectedBundle::webConnectionToUIProcess() const
@@ -180,7 +179,7 @@ void InjectedBundle::setAsynchronousSpellCheckingEnabled(bool enabled)
 
 int InjectedBundle::numberOfPages(WebFrame* frame, double pageWidthInPixels, double pageHeightInPixels)
 {
-    Frame* coreFrame = frame ? frame->coreFrame() : 0;
+    auto* coreFrame = frame ? frame->coreLocalFrame() : nullptr;
     if (!coreFrame)
         return -1;
     if (!pageWidthInPixels)
@@ -193,11 +192,11 @@ int InjectedBundle::numberOfPages(WebFrame* frame, double pageWidthInPixels, dou
 
 int InjectedBundle::pageNumberForElementById(WebFrame* frame, const String& id, double pageWidthInPixels, double pageHeightInPixels)
 {
-    Frame* coreFrame = frame ? frame->coreFrame() : 0;
+    auto* coreFrame = frame ? frame->coreLocalFrame() : nullptr;
     if (!coreFrame)
         return -1;
 
-    Element* element = coreFrame->document()->getElementById(id);
+    auto* element = coreFrame->document()->getElementById(id);
     if (!element)
         return -1;
 
@@ -211,7 +210,7 @@ int InjectedBundle::pageNumberForElementById(WebFrame* frame, const String& id, 
 
 String InjectedBundle::pageSizeAndMarginsInPixels(WebFrame* frame, int pageIndex, int width, int height, int marginTop, int marginRight, int marginBottom, int marginLeft)
 {
-    Frame* coreFrame = frame ? frame->coreFrame() : 0;
+    auto* coreFrame = frame ? frame->coreLocalFrame() : nullptr;
     if (!coreFrame)
         return String();
 
@@ -220,7 +219,7 @@ String InjectedBundle::pageSizeAndMarginsInPixels(WebFrame* frame, int pageIndex
 
 bool InjectedBundle::isPageBoxVisible(WebFrame* frame, int pageIndex)
 {
-    Frame* coreFrame = frame ? frame->coreFrame() : 0;
+    auto* coreFrame = frame ? frame->coreLocalFrame() : nullptr;
     if (!coreFrame)
         return false;
 
@@ -256,8 +255,8 @@ void InjectedBundle::reportException(JSContextRef context, JSValueRef exception)
     JSC::JSGlobalObject* globalObject = toJS(context);
     JSLockHolder lock(globalObject);
 
-    // Make sure the context has a DOMWindow global object, otherwise this context didn't originate from a Page.
-    if (!globalObject->inherits<JSDOMWindow>())
+    // Make sure the context has a LocalDOMWindow global object, otherwise this context didn't originate from a Page.
+    if (!globalObject->inherits<JSLocalDOMWindow>())
         return;
 
     WebCore::reportException(globalObject, toJS(globalObject, exception));
@@ -310,7 +309,7 @@ void InjectedBundle::removeAllWebNotificationPermissions(WebPage* page)
 #endif
 }
 
-std::optional<UUID> InjectedBundle::webNotificationID(JSContextRef jsContext, JSValueRef jsNotification)
+std::optional<WTF::UUID> InjectedBundle::webNotificationID(JSContextRef jsContext, JSValueRef jsNotification)
 {
 #if ENABLE(NOTIFICATIONS)
     WebCore::Notification* notification = JSNotification::toWrapped(toJS(jsContext)->vm(), toJS(toJS(jsContext), jsNotification));
@@ -343,9 +342,13 @@ InjectedBundle::DocumentIDToURLMap InjectedBundle::liveDocumentURLs(bool exclude
     if (excludeDocumentsInPageGroupPages) {
         Page::forEachPage([&](Page& page) {
             for (auto* frame = &page.mainFrame(); frame; frame = frame->tree().traverseNext()) {
-                if (!frame->document())
+                auto* localFrame = dynamicDowncast<LocalFrame>(frame);
+                if (!localFrame)
                     continue;
-                result.remove(frame->document()->identifier().object());
+                auto* document = localFrame->document();
+                if (!document)
+                    continue;
+                result.remove(document->identifier().object());
             }
         });
     }

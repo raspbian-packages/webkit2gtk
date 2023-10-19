@@ -1,5 +1,5 @@
-/*
- * Copyright (C) 2010-2018 Apple Inc. All rights reserved.
+/**
+ * Copyright (C) 2010-2023 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -25,85 +25,54 @@
 
 #pragma once
 
-#include <wtf/Assertions.h>
-#include "Connection.h"
-#include <wtf/UniqueRef.h>
+#include <wtf/Forward.h>
 
 namespace IPC {
+
+class Connection;
+class Encoder;
+class Timeout;
+enum class SendOption : uint8_t;
+enum class SendSyncOption : uint8_t;
+struct AsyncReplyIDType;
+struct ConnectionAsyncReplyHandler;
+template<typename> struct ConnectionSendSyncResult;
+using AsyncReplyID = AtomicObjectIdentifier<AsyncReplyIDType>;
 
 class MessageSender {
 public:
     virtual ~MessageSender();
 
-    template<typename T> bool send(T&& message, OptionSet<SendOption> sendOptions = { })
-    {
-        return send(WTFMove(message), messageSenderDestinationID(), sendOptions);
-    }
+    template<typename T> inline bool send(T&& message); // Defined in MessageSenderInlines.h.
+    template<typename T> inline bool send(T&& message, OptionSet<SendOption>); // Defined in MessageSenderInlines.h.
+    template<typename T> inline bool send(T&& message, uint64_t destinationID); // Defined in MessageSenderInlines.h.
+    template<typename T> inline bool send(T&& message, uint64_t destinationID, OptionSet<SendOption>); // Defined in MessageSenderInlines.h.
+    template<typename T, typename U, typename V> inline bool send(T&& message, ObjectIdentifierGeneric<U, V> destinationID);
+    template<typename T, typename U, typename V> inline bool send(T&& message, ObjectIdentifierGeneric<U, V> destinationID, OptionSet<SendOption>);
 
-    template<typename T> bool send(T&& message, uint64_t destinationID, OptionSet<SendOption> sendOptions = { })
-    {
-        static_assert(!T::isSync, "Message is sync!");
+    template<typename T> using SendSyncResult = ConnectionSendSyncResult<T>;
+    template<typename T> inline SendSyncResult<T> sendSync(T&& message);
+    template<typename T> inline SendSyncResult<T> sendSync(T&& message, Timeout);
+    template<typename T> inline SendSyncResult<T> sendSync(T&& message, Timeout, OptionSet<SendSyncOption>);
+    template<typename T> inline SendSyncResult<T> sendSync(T&& message, uint64_t destinationID);
+    template<typename T> inline SendSyncResult<T> sendSync(T&& message, uint64_t destinationID, Timeout);
+    template<typename T> inline SendSyncResult<T> sendSync(T&& message, uint64_t destinationID, Timeout, OptionSet<SendSyncOption>);
+    template<typename T, typename U, typename V> inline SendSyncResult<T> sendSync(T&& message, ObjectIdentifierGeneric<U, V> destinationID);
+    template<typename T, typename U, typename V> inline SendSyncResult<T> sendSync(T&& message, ObjectIdentifierGeneric<U, V> destinationID, Timeout);
+    template<typename T, typename U, typename V> inline SendSyncResult<T> sendSync(T&& message, ObjectIdentifierGeneric<U, V> destinationID, Timeout, OptionSet<SendSyncOption>);
 
-        auto encoder = makeUniqueRef<Encoder>(T::name(), destinationID);
-        encoder.get() << message.arguments();
-        return sendMessage(WTFMove(encoder), sendOptions);
-    }
+    using AsyncReplyID = IPC::AsyncReplyID;
+    template<typename T, typename C> inline AsyncReplyID sendWithAsyncReply(T&& message, C&& completionHandler);
+    template<typename T, typename C> inline AsyncReplyID sendWithAsyncReply(T&& message, C&& completionHandler, OptionSet<SendOption>);
+    template<typename T, typename C> inline AsyncReplyID sendWithAsyncReply(T&& message, C&& completionHandler, uint64_t destinationID);
+    template<typename T, typename C> inline AsyncReplyID sendWithAsyncReply(T&& message, C&& completionHandler, uint64_t destinationID, OptionSet<SendOption>);
+    template<typename T, typename C, typename U, typename V> inline AsyncReplyID sendWithAsyncReply(T&& message, C&& completionHandler, ObjectIdentifierGeneric<U, V> destinationID);
+    template<typename T, typename C, typename U, typename V> inline AsyncReplyID sendWithAsyncReply(T&& message, C&& completionHandler, ObjectIdentifierGeneric<U, V> destinationID, OptionSet<SendOption>);
 
-    template<typename T, typename U>
-    bool send(T&& message, ObjectIdentifier<U> destinationID, OptionSet<SendOption> sendOptions = { })
-    {
-        return send(WTFMove(message), destinationID.toUInt64(), sendOptions);
-    }
-    using SendSyncResult = Connection::SendSyncResult;
+    virtual bool sendMessage(UniqueRef<Encoder>&&, OptionSet<SendOption>);
 
-    template<typename T>
-    SendSyncResult sendSync(T&& message, typename T::Reply&& reply, Timeout timeout = Seconds::infinity(), OptionSet<SendSyncOption> sendSyncOptions = { })
-    {
-        static_assert(T::isSync, "Message is not sync!");
-
-        return sendSync(WTFMove(message), WTFMove(reply), messageSenderDestinationID(), timeout, sendSyncOptions);
-    }
-
-    template<typename T>
-    SendSyncResult sendSync(T&& message, typename T::Reply&& reply, uint64_t destinationID, Timeout timeout = Timeout::infinity(), OptionSet<SendSyncOption> sendSyncOptions = { })
-    {
-        if (auto* connection = messageSenderConnection())
-            return connection->sendSync(WTFMove(message), WTFMove(reply), destinationID, timeout, sendSyncOptions);
-
-        return { };
-    }
-
-    template<typename T, typename U>
-    SendSyncResult sendSync(T&& message, typename T::Reply&& reply, ObjectIdentifier<U> destinationID, Timeout timeout = Timeout::infinity(), OptionSet<SendSyncOption> sendSyncOptions = { })
-    {
-        return sendSync(WTFMove(message), WTFMove(reply), destinationID.toUInt64(), timeout, sendSyncOptions);
-    }
-
-    template<typename T, typename C>
-    uint64_t sendWithAsyncReply(T&& message, C&& completionHandler, OptionSet<SendOption> sendOptions = { })
-    {
-        return sendWithAsyncReply(WTFMove(message), WTFMove(completionHandler), messageSenderDestinationID(), sendOptions);
-    }
-
-    template<typename T, typename C>
-    uint64_t sendWithAsyncReply(T&& message, C&& completionHandler, uint64_t destinationID, OptionSet<SendOption> sendOptions = { })
-    {
-        static_assert(!T::isSync, "Async message expected");
-
-        auto encoder = makeUniqueRef<IPC::Encoder>(T::name(), destinationID);
-        uint64_t listenerID = IPC::nextAsyncReplyHandlerID();
-        encoder.get() << listenerID;
-        encoder.get() << WTFMove(message).arguments();
-        sendMessage(WTFMove(encoder), sendOptions, {{ [completionHandler = WTFMove(completionHandler)] (IPC::Decoder* decoder) mutable {
-            if (decoder && decoder->isValid())
-                T::callReply(*decoder, WTFMove(completionHandler));
-            else
-                T::cancelReply(WTFMove(completionHandler));
-        }, listenerID }});
-        return listenerID;
-    }
-
-    virtual bool sendMessage(UniqueRef<Encoder>&&, OptionSet<SendOption>, std::optional<std::pair<CompletionHandler<void(IPC::Decoder*)>, uint64_t>>&& = std::nullopt);
+    using AsyncReplyHandler = ConnectionAsyncReplyHandler;
+    virtual bool sendMessageWithAsyncReply(UniqueRef<Encoder>&&, AsyncReplyHandler, OptionSet<SendOption>);
 
 private:
     virtual Connection* messageSenderConnection() const = 0;

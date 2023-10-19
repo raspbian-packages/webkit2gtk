@@ -28,6 +28,7 @@
 
 #include "APIDebuggableInfo.h"
 #include "APINavigation.h"
+#include "MessageSenderInlines.h"
 #include "RemoteWebInspectorUIMessages.h"
 #include "RemoteWebInspectorUIProxyMessages.h"
 #include "WebInspectorUIProxy.h"
@@ -187,6 +188,14 @@ void RemoteWebInspectorUIProxy::revealFileExternally(const String& path)
 void RemoteWebInspectorUIProxy::showCertificate(const CertificateInfo& certificateInfo)
 {
     platformShowCertificate(certificateInfo);
+}
+
+void RemoteWebInspectorUIProxy::setInspectorPageDeveloperExtrasEnabled(bool enabled)
+{
+    if (!m_inspectorPage)
+        return;
+
+    m_inspectorPage->preferences().setDeveloperExtrasEnabled(enabled);
 }
 
 void RemoteWebInspectorUIProxy::sendMessageToBackend(const String& message)

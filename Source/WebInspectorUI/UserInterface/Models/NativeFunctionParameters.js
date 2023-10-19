@@ -252,8 +252,6 @@ WI.NativePrototypeFunctionParameters = {
         findLast: "callback, [thisArg]",
         findLastIndex: "callback, [thisArg]",
         forEach: "callback, [thisArg]",
-        group: "callback, [thisArg]",
-        groupToMap: "callback, [thisArg]",
         includes: "searchValue, [startIndex=0]",
         indexOf: "searchValue, [startIndex=0]",
         join: "[separator=\",\"]",
@@ -610,9 +608,7 @@ WI.NativePrototypeFunctionParameters = {
     CSSStyleDeclaration: {
         getPropertyCSSValue: "[propertyName]",
         getPropertyPriority: "[propertyName]",
-        getPropertyShorthand: "[propertyName]",
         getPropertyValue: "[propertyName]",
-        isPropertyImplicit: "[propertyName]",
         item: "[index]",
         removeProperty: "[propertyName]",
         setProperty: "[propertyName], [value], [priority]",

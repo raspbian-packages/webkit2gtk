@@ -95,22 +95,10 @@ void NetworkNotificationManager::getOriginsWithPushAndNotificationPermissions(Co
     sendMessageWithReply<WebPushD::MessageType::GetOriginsWithPushAndNotificationPermissions>(WTFMove(replyHandler));
 }
 
-void NetworkNotificationManager::getOriginsWithPushSubscriptions(CompletionHandler<void(const Vector<SecurityOriginData>&)>&& completionHandler)
-{
-    CompletionHandler<void(Vector<String>&&)> replyHandler = [completionHandler = WTFMove(completionHandler)] (Vector<String> originStrings) mutable {
-        auto origins = originStrings.map([](auto& originString) {
-            return SecurityOriginData::fromURL({ { }, originString });
-        });
-        completionHandler(WTFMove(origins));
-    };
-
-    sendMessageWithReply<WebPushD::MessageType::GetOriginsWithPushSubscriptions>(WTFMove(replyHandler));
-}
-
 void NetworkNotificationManager::getPendingPushMessages(CompletionHandler<void(const Vector<WebPushMessage>&)>&& completionHandler)
 {
     CompletionHandler<void(Vector<WebPushMessage>&&)> replyHandler = [completionHandler = WTFMove(completionHandler)] (Vector<WebPushMessage>&& messages) mutable {
-        LOG(Push, "Done getting push messages");
+        LOG(Push, "Done getting %u push messages", (unsigned)messages.size());
         completionHandler(WTFMove(messages));
     };
 
@@ -132,19 +120,19 @@ void NetworkNotificationManager::showNotification(IPC::Connection&, const WebCor
 //    sendMessageWithReply<WebPushD::MessageType::EchoTwice>(WTFMove(completionHandler), String("FIXME: Do useful work here"));
 }
 
-void NetworkNotificationManager::cancelNotification(const UUID&)
+void NetworkNotificationManager::cancelNotification(const WTF::UUID&)
 {
     if (!m_connection)
         return;
 }
 
-void NetworkNotificationManager::clearNotifications(const Vector<UUID>&)
+void NetworkNotificationManager::clearNotifications(const Vector<WTF::UUID>&)
 {
     if (!m_connection)
         return;
 }
 
-void NetworkNotificationManager::didDestroyNotification(const UUID&)
+void NetworkNotificationManager::didDestroyNotification(const WTF::UUID&)
 {
     if (!m_connection)
         return;

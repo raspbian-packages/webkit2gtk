@@ -30,6 +30,7 @@
 
 #include "ApplePayPaymentSetupFeaturesWebKit.h"
 #include "DataReference.h"
+#include "MessageSenderInlines.h"
 #include "PaymentSetupConfigurationWebKit.h"
 #include "WebCoreArgumentCoders.h"
 #include "WebPage.h"
@@ -41,7 +42,7 @@
 #include <WebCore/ApplePayPaymentMethodUpdate.h>
 #include <WebCore/ApplePayShippingContactUpdate.h>
 #include <WebCore/ApplePayShippingMethodUpdate.h>
-#include <WebCore/Frame.h>
+#include <WebCore/LocalFrame.h>
 #include <WebCore/PaymentCoordinator.h>
 #include <wtf/URL.h>
 
@@ -65,7 +66,7 @@ void WebPaymentCoordinator::networkProcessConnectionClosed()
 #endif
 }
 
-std::optional<String> WebPaymentCoordinator::validatedPaymentNetwork(const String& paymentNetwork)
+std::optional<String> WebPaymentCoordinator::validatedPaymentNetwork(const String& paymentNetwork) const
 {
     if (!m_availablePaymentNetworks)
         m_availablePaymentNetworks = platformAvailablePaymentNetworks();
@@ -78,11 +79,17 @@ std::optional<String> WebPaymentCoordinator::validatedPaymentNetwork(const Strin
 
 bool WebPaymentCoordinator::canMakePayments()
 {
-    bool canMakePayments;
-    if (!sendSync(Messages::WebPaymentCoordinatorProxy::CanMakePayments(), Messages::WebPaymentCoordinatorProxy::CanMakePayments::Reply(canMakePayments)))
-        return false;
+    auto now = MonotonicTime::now();
+    if (now - m_timestampOfLastCanMakePaymentsRequest > 1_min || !m_lastCanMakePaymentsResult) {
+        auto sendResult = sendSync(Messages::WebPaymentCoordinatorProxy::CanMakePayments());
+        if (!sendResult.succeeded())
+            return false;
+        auto [canMakePayments] = sendResult.takeReply();
 
-    return canMakePayments;
+        m_timestampOfLastCanMakePaymentsRequest = now;
+        m_lastCanMakePaymentsResult = canMakePayments;
+    }
+    return *m_lastCanMakePaymentsResult;
 }
 
 void WebPaymentCoordinator::canMakePaymentsWithActiveCard(const String& merchantIdentifier, const String& domainName, CompletionHandler<void(bool)>&& completionHandler)
@@ -101,10 +108,8 @@ bool WebPaymentCoordinator::showPaymentUI(const URL& originatingURL, const Vecto
         return linkIconURL.string();
     });
 
-    bool result;
-    if (!sendSync(Messages::WebPaymentCoordinatorProxy::ShowPaymentUI(m_webPage.identifier(), m_webPage.webPageProxyIdentifier(), originatingURL.string(), linkIconURLStrings, paymentRequest), Messages::WebPaymentCoordinatorProxy::ShowPaymentUI::Reply(result)))
-        return false;
-
+    auto sendResult = sendSync(Messages::WebPaymentCoordinatorProxy::ShowPaymentUI(m_webPage.identifier(), m_webPage.webPageProxyIdentifier(), originatingURL.string(), linkIconURLStrings, paymentRequest));
+    auto [result] = sendResult.takeReplyOr(false);
     return result;
 }
 
@@ -150,11 +155,6 @@ void WebPaymentCoordinator::abortPaymentSession()
 void WebPaymentCoordinator::cancelPaymentSession()
 {
     send(Messages::WebPaymentCoordinatorProxy::CancelPaymentSession());
-}
-
-void WebPaymentCoordinator::paymentCoordinatorDestroyed()
-{
-    delete this;
 }
 
 IPC::Connection* WebPaymentCoordinator::messageSenderConnection() const

@@ -29,8 +29,8 @@
 #include "ElementInlines.h"
 #include "Event.h"
 #include "HTMLNames.h"
+#include "MutableStyleProperties.h"
 #include "ScopedEventQueue.h"
-#include "StyleProperties.h"
 #include "StyledElement.h"
 #include "TextNodeTraversal.h"
 #include "XMLNSNames.h"
@@ -103,7 +103,7 @@ void Attr::setValue(const AtomString& value)
 
 void Attr::setNodeValue(const String& value)
 {
-    setValue(AtomString { value });
+    setValue(value.isNull() ? emptyAtom() : AtomString(value));
 }
 
 Ref<Node> Attr::cloneNodeInternal(Document& targetDocument, CloningOperation)

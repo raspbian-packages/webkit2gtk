@@ -25,7 +25,9 @@
 
 #pragma once
 
-#include "WCUpateInfo.h"
+#if USE(GRAPHICS_LAYER_WC)
+
+#include "WCUpdateInfo.h"
 #include <WebCore/GraphicsLayerContentsDisplayDelegate.h>
 #include <wtf/DoublyLinkedList.h>
 
@@ -41,7 +43,7 @@ public:
     struct Observer {
         virtual void graphicsLayerAdded(GraphicsLayerWC&) = 0;
         virtual void graphicsLayerRemoved(GraphicsLayerWC&) = 0;
-        virtual void commitLayerUpateInfo(WCLayerUpateInfo&&) = 0;
+        virtual void commitLayerUpdateInfo(WCLayerUpdateInfo&&) = 0;
         virtual RefPtr<WebCore::ImageBuffer> createImageBuffer(WebCore::FloatSize) = 0;
     };
 
@@ -51,7 +53,7 @@ public:
     void clearObserver() { m_observer = nullptr; }
 
     // GraphicsLayer
-    WebCore::GraphicsLayer::PlatformLayerID primaryLayerID() const override;
+    WebCore::PlatformLayerIdentifier primaryLayerID() const override;
     void setNeedsDisplay() override;
     void setNeedsDisplayInRect(const WebCore::FloatRect&, ShouldClipToLayer) override;
     void setContentsNeedsDisplay() override;
@@ -62,9 +64,9 @@ public:
     void addChildBelow(Ref<GraphicsLayer>&&, GraphicsLayer* sibling) override;
     bool replaceChild(GraphicsLayer* oldChild, Ref<GraphicsLayer>&& newChild) override;
     void removeFromParent() override;
-    void setMaskLayer(RefPtr<GraphicsLayer>&&);
-    void setReplicatedLayer(GraphicsLayer*);
-    void setReplicatedByLayer(RefPtr<GraphicsLayer>&&);
+    void setMaskLayer(RefPtr<GraphicsLayer>&&) override;
+    void setReplicatedLayer(GraphicsLayer*) override;
+    void setReplicatedByLayer(RefPtr<GraphicsLayer>&&) override;
     void setPosition(const WebCore::FloatPoint&) override;
     void setAnchorPoint(const WebCore::FloatPoint3D&) override;
     void setSize(const WebCore::FloatSize&) override;
@@ -83,6 +85,7 @@ public:
     void setBackfaceVisibility(bool) override;
     void setContentsToSolidColor(const WebCore::Color&) override;
     void setContentsToPlatformLayer(PlatformLayer*, ContentsLayerPurpose) override;
+    void setContentsToPlatformLayerHost(WebCore::LayerHostingContextIdentifier) override;
     void setContentsDisplayDelegate(RefPtr<WebCore::GraphicsLayerContentsDisplayDelegate>&&, ContentsLayerPurpose) override;
     bool shouldDirectlyCompositeImage(WebCore::Image*) const override { return false; }
     bool usesContentsLayer() const override;
@@ -116,16 +119,15 @@ private:
     VisibleAndCoverageRects computeVisibleAndCoverageRect(WebCore::TransformState&, bool preserves3D) const;
     void recursiveCommitChanges(const WebCore::TransformState&);
 
-    static GraphicsLayer::PlatformLayerID generateLayerID();
-
     friend class WTF::DoublyLinkedListNode<GraphicsLayerWC>;
 
     GraphicsLayerWC* m_prev;
     GraphicsLayerWC* m_next;
-    WebCore::GraphicsLayer::PlatformLayerID m_layerID { generateLayerID() };
+    WebCore::PlatformLayerIdentifier m_layerID { WebCore::PlatformLayerIdentifier::generate() };
     Observer* m_observer;
     std::unique_ptr<WCTiledBacking> m_tiledBacking;
     PlatformLayer* m_platformLayer { nullptr };
+    Markable<WebCore::LayerHostingContextIdentifier> m_hostIdentifier;
     WebCore::Color m_solidColor;
     WebCore::Color m_debugBorderColor;
     OptionSet<WCLayerChange> m_uncommittedChanges;
@@ -133,3 +135,5 @@ private:
 };
 
 } // namespace WebKit
+
+#endif // USE(GRAPHICS_LAYER_WC)

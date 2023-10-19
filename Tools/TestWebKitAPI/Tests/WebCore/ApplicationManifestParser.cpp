@@ -47,12 +47,36 @@ static inline std::ostream& operator<<(std::ostream& os, const ApplicationManife
         return os << "ApplicationManifest::Display::Fullscreen";
     }
 }
+
+static inline std::ostream& operator<<(std::ostream& os, const ScreenOrientationLockType& orientation)
+{
+    switch (orientation) {
+    case WebCore::ScreenOrientationLockType::Any:
+        return os << "WebCore::ScreenOrientationLockType::Any";
+    case WebCore::ScreenOrientationLockType::Landscape:
+        return os << "WebCore::ScreenOrientationLockType::Landscape";
+    case WebCore::ScreenOrientationLockType::LandscapePrimary:
+        return os << "WebCore::ScreenOrientationLockType::LandscapePrimary";
+    case WebCore::ScreenOrientationLockType::LandscapeSecondary:
+        return os << "WebCore::ScreenOrientationLockType::LandscapeSecondary";
+    case WebCore::ScreenOrientationLockType::Natural:
+        return os << "WebCore::ScreenOrientationLockType::Natural";
+    case WebCore::ScreenOrientationLockType::Portrait:
+        return os << "WebCore::ScreenOrientationLockType::Portrait";
+    case WebCore::ScreenOrientationLockType::PortraitPrimary:
+        return os << "WebCore::ScreenOrientationLockType::PortraitPrimary";
+    case WebCore::ScreenOrientationLockType::PortraitSecondary:
+        return os << "WebCore::ScreenOrientationLockType::PortraitSecondary";
+    }
+}
+
 } // namespace WebCore
 
 class ApplicationManifestParserTest : public testing::Test {
 public:
     URL m_manifestURL;
     URL m_documentURL;
+    URL m_startURL;
 
     virtual void SetUp()
     {
@@ -105,6 +129,13 @@ public:
         EXPECT_EQ(expectedValue, value);
     }
 
+    void testOrientation(const String& rawJSON, std::optional<WebCore::ScreenOrientationLockType> expectedValue)
+    {
+        auto manifest = parseTopLevelProperty("orientation"_s, rawJSON);
+        auto value = manifest.orientation;
+        EXPECT_EQ(expectedValue, value);
+    }
+
     void testName(const String& rawJSON, const String& expectedValue)
     {
         auto manifest = parseTopLevelProperty("name"_s, rawJSON);
@@ -137,6 +168,13 @@ public:
     void testScope(const String& rawJSON, const String& expectedValue)
     {
         testScope(rawJSON, String(), expectedValue);
+    }
+
+    void testBackgroundColor(const String& rawJSON, const Color& expectedValue)
+    {
+        auto manifest = parseTopLevelProperty("background_color"_s, rawJSON);
+        auto value = manifest.backgroundColor;
+        EXPECT_EQ(expectedValue, value);
     }
 
     void testThemeColor(const String& rawJSON, const Color& expectedValue)
@@ -176,6 +214,21 @@ public:
         EXPECT_EQ(expectedValues, value);
     }
 
+    void testId(const String& rawJSON, const URL& expectedValue)
+    {
+        auto manifest = parseTopLevelProperty("id"_s, rawJSON);
+        auto value = manifest.id;
+        EXPECT_STREQ(expectedValue.string().utf8().data(), value.string().utf8().data());
+    }
+
+    void testId(const String& rawJSON, const URL& startURL, const String& expectedValue)
+    {
+        String manifestContent = "{ \"id\" : \"" + rawJSON + "\", \"start_url\" : \"" + startURL.string() + "\" }";
+        auto manifest = parseString(manifestContent);
+        auto value = manifest.id;
+        EXPECT_STREQ(expectedValue.utf8().data(), value.string().utf8().data());
+    }
+
 };
 
 static void assertManifestHasDefaultValues(const URL& manifestURL, const URL& documentURL, const ApplicationManifest& manifest)
@@ -185,6 +238,7 @@ static void assertManifestHasDefaultValues(const URL& manifestURL, const URL& do
     EXPECT_TRUE(manifest.description.isNull());
     EXPECT_STREQ("https://example.com/", manifest.scope.string().utf8().data());
     EXPECT_STREQ(documentURL.string().utf8().data(), manifest.startURL.string().utf8().data());
+    EXPECT_STREQ(manifest.id.string().utf8().data(), manifest.startURL.string().utf8().data());
 }
 
 TEST_F(ApplicationManifestParserTest, DefaultManifest)
@@ -193,6 +247,37 @@ TEST_F(ApplicationManifestParserTest, DefaultManifest)
     assertManifestHasDefaultValues(m_manifestURL, m_documentURL, parseString(""_s));
     assertManifestHasDefaultValues(m_manifestURL, m_documentURL, parseString("{ }"_s));
     assertManifestHasDefaultValues(m_manifestURL, m_documentURL, parseString("This is 100% not JSON."_s));
+}
+
+TEST_F(ApplicationManifestParserTest, Id)
+{
+    m_documentURL = URL { "https://example.com/home"_s };
+    m_manifestURL = URL { "https://example.com/manifest.json"_s };
+
+    testId("123"_s, m_documentURL);
+    testId("null"_s, m_documentURL);
+    testId("true"_s, m_documentURL);
+    testId("{ }"_s, m_documentURL);
+    testId("[ ]"_s, m_documentURL);
+    testId("[ \"http://example.com/somepage\" ]"_s, m_documentURL);
+    testId("\"\""_s, m_documentURL);
+    testId("\"http:?\""_s, m_documentURL);
+
+    testId("\"https://other-domain.com\""_s, m_documentURL);
+    testId("\"https://invalid.com:a\""_s, m_documentURL);
+
+    m_startURL = URL { "https://example.com/my-app/start?query=q#fragment"_s };
+    testId(""_s, m_startURL , m_startURL.string());
+    testId("/"_s, m_startURL, "https://example.com/"_s);
+    testId("foo"_s, m_startURL, "https://example.com/foo"_s);
+    testId("./foo"_s, m_startURL, "https://example.com/foo"_s);
+    testId("foo/"_s, m_startURL, "https://example.com/foo/"_s);
+    testId("../../foo/bar"_s, m_startURL, "https://example.com/foo/bar"_s);
+    testId("../../foo/bar?query=hi#hi"_s, m_startURL, "https://example.com/foo/bar?query=hi#hi"_s);
+
+    testId("https://example.com/foo"_s, m_startURL, "https://example.com/foo"_s);
+    testId("https://anothersite.com/foo"_s, m_startURL, m_startURL.string());
+    testId("https://invalid.com:a"_s, m_startURL, m_startURL.string());
 }
 
 TEST_F(ApplicationManifestParserTest, StartURL)
@@ -255,6 +340,27 @@ TEST_F(ApplicationManifestParserTest, Display)
     testDisplay("\"minimal-ui\""_s, ApplicationManifest::Display::MinimalUI);
     testDisplay("\"fullscreen\""_s, ApplicationManifest::Display::Fullscreen);
     testDisplay("\"\t\nMINIMAL-UI \""_s, ApplicationManifest::Display::MinimalUI);
+}
+
+TEST_F(ApplicationManifestParserTest, Orientation)
+{
+    testOrientation(""_s, std::nullopt);
+    testOrientation("123"_s, std::nullopt);
+    testOrientation("null"_s, std::nullopt);
+    testOrientation("true"_s, std::nullopt);
+    testOrientation("{ }"_s, std::nullopt);
+    testOrientation("[ ]"_s, std::nullopt);
+    testOrientation("\"\""_s, std::nullopt);
+    testOrientation("\"garbage string\""_s, std::nullopt);
+
+    testOrientation("\"any\""_s, WebCore::ScreenOrientationLockType::Any);
+    testOrientation("\"natural\""_s, WebCore::ScreenOrientationLockType::Natural);
+    testOrientation("\"landscape\""_s, WebCore::ScreenOrientationLockType::Landscape);
+    testOrientation("\"landscape-primary\""_s, WebCore::ScreenOrientationLockType::LandscapePrimary);
+    testOrientation("\"landscape-secondary\""_s, WebCore::ScreenOrientationLockType::LandscapeSecondary);
+    testOrientation("\"portrait\""_s, WebCore::ScreenOrientationLockType::Portrait);
+    testOrientation("\"portrait-primary\""_s, WebCore::ScreenOrientationLockType::PortraitPrimary);
+    testOrientation("\"portrait-secondary\""_s, WebCore::ScreenOrientationLockType::PortraitSecondary);
 }
 
 TEST_F(ApplicationManifestParserTest, Name)
@@ -338,6 +444,26 @@ TEST_F(ApplicationManifestParserTest, Scope)
     testScope("\"https://example.com/other\""_s, "https://example.com/other/start-url"_s, "https://example.com/other"_s);
 }
 
+TEST_F(ApplicationManifestParserTest, BackgroundColor)
+{
+    testBackgroundColor("123"_s, Color());
+    testBackgroundColor("null"_s, Color());
+    testBackgroundColor("true"_s, Color());
+    testBackgroundColor("{ }"_s, Color());
+    testBackgroundColor("[ ]"_s, Color());
+    testBackgroundColor("\"\""_s, Color());
+    testBackgroundColor("\"garbage string\""_s, Color());
+
+    testBackgroundColor("\"red\""_s, Color::red);
+    testBackgroundColor("\"#f00\""_s, Color::red);
+    testBackgroundColor("\"#ff0000\""_s, Color::red);
+    testBackgroundColor("\"#ff0000ff\""_s, Color::red);
+    testBackgroundColor("\"rgb(255, 0, 0)\""_s, Color::red);
+    testBackgroundColor("\"rgba(255, 0, 0, 1)\""_s, Color::red);
+    testBackgroundColor("\"hsl(0, 100%, 50%)\""_s, Color::red);
+    testBackgroundColor("\"hsla(0, 100%, 50%, 1)\""_s, Color::red);
+}
+
 TEST_F(ApplicationManifestParserTest, ThemeColor)
 {
     testThemeColor("123"_s, Color());
@@ -392,7 +518,6 @@ TEST_F(ApplicationManifestParserTest, Icons)
     OptionSet<ApplicationManifest::Icon::Purpose> purposeMonochromeAny { ApplicationManifest::Icon::Purpose::Monochrome, ApplicationManifest::Icon::Purpose::Any };
 
     testIconsPurposes("\"monochrome any\""_s, purposeMonochromeAny);
-
 }
 
 #endif

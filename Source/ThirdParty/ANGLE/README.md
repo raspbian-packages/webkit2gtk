@@ -11,22 +11,33 @@ Metal and MacOS, Chrome OS, and Fuchsia support.
 |                |  Direct3D 9   |  Direct3D 11     |   Desktop GL   |    GL ES      |    Vulkan     |    Metal      |
 |----------------|:-------------:|:----------------:|:--------------:|:-------------:|:-------------:|:-------------:|
 | OpenGL ES 2.0  |    complete   |    complete      |    complete    |    complete   |    complete   |    complete   |
-| OpenGL ES 3.0  |               |    complete      |    complete    |    complete   |    complete   |  in progress  |
-| OpenGL ES 3.1  |               | [incomplete](doc/ES31StatusOnD3D11.md) |    complete    |    complete   |    complete   |               |
+| OpenGL ES 3.0  |               |    complete      |    complete    |    complete   |    complete   |    complete   |
+| OpenGL ES 3.1  |        | [incomplete][ES31OnD3D] |    complete    |    complete   |    complete   |               |
 | OpenGL ES 3.2  |               |                  |  in progress   |  in progress  |  in progress  |               |
+
+Additionally, OpenGL ES 1.1 is implemented in the front-end using OpenGL ES 3.0 features.  This
+version of the specification is thus supported on all platforms specified above that support OpenGL
+ES 3.0 with [known issues][ES1].
+
+[ES31OnD3D]: doc/ES31StatusOnD3D11.md
+[ES1]: doc/ES1Status.md
 
 ### Platform support via backing renderers
 
-|              |    Direct3D 9  |   Direct3D 11  |   Desktop GL  |    GL ES    |   Vulkan    |    Metal    |
-|-------------:|:--------------:|:--------------:|:-------------:|:-----------:|:-----------:|:-----------:|
-| Windows      |    complete    |    complete    |   complete    |   complete  |   complete  |             |
-| Linux        |                |                |   complete    |             |   complete  |             |
-| Mac OS X     |                |                |   complete    |             |             | in progress |
-| iOS          |                |                |               |             |             | in progress |
-| Chrome OS    |                |                |               |   complete  |   planned   |             |
-| Android      |                |                |               |   complete  |   complete  |             |
-| GGP (Stadia) |                |                |               |             |   complete  |             |
-| Fuchsia      |                |                |               |             |   complete  |             |
+|              |    Direct3D 9  |   Direct3D 11  |   Desktop GL  |    GL ES    |   Vulkan    |    Metal             |
+|-------------:|:--------------:|:--------------:|:-------------:|:-----------:|:-----------:|:--------------------:|
+| Windows      |    complete    |    complete    |   complete    |   complete  |   complete  |                      |
+| Linux        |                |                |   complete    |             |   complete  |                      |
+| Mac OS X     |                |                |   complete    |             |             | complete [1]         |
+| iOS          |                |                |               |             |             | complete [2]         |
+| Chrome OS    |                |                |               |   complete  |   planned   |                      |
+| Android      |                |                |               |   complete  |   complete  |                      |
+| GGP (Stadia) |                |                |               |             |   complete  |                      |
+| Fuchsia      |                |                |               |             |   complete  |                      |
+
+[1] Metal is supported on macOS 10.14+
+
+[2] Metal is supported on iOS 12+
 
 ANGLE v1.0.772 was certified compliant by passing the OpenGL ES 2.0.3 conformance tests in October 2011.
 

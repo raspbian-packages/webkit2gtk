@@ -99,6 +99,16 @@ public:
     {
     }
 
+    constexpr TransformationMatrix(double tx, double ty)
+        : m_matrix {
+            { 1, 0, 0, 0 },
+            { 0, 1, 0, 0 },
+            { 0, 0, 1, 0 },
+            { tx, ty, 0, 1 },
+        }
+    {
+    }
+
     constexpr TransformationMatrix(
         double m11, double m12, double m13, double m14,
         double m21, double m22, double m23, double m24,
@@ -265,11 +275,11 @@ public:
     TransformationMatrix& rotate3d(double x, double y, double z, double angle);
     
     WEBCORE_EXPORT TransformationMatrix& translate(double tx, double ty);
-    TransformationMatrix& translate3d(double tx, double ty, double tz);
+    WEBCORE_EXPORT TransformationMatrix& translate3d(double tx, double ty, double tz);
 
     // translation added with a post-multiply
     TransformationMatrix& translateRight(double tx, double ty);
-    TransformationMatrix& translateRight3d(double tx, double ty, double tz);
+    WEBCORE_EXPORT TransformationMatrix& translateRight3d(double tx, double ty, double tz);
     
     WEBCORE_EXPORT TransformationMatrix& flipX();
     WEBCORE_EXPORT TransformationMatrix& flipY();
@@ -329,10 +339,10 @@ public:
         }
     };
     
-    bool decompose2(Decomposed2Type&) const;
+    bool decompose2(Decomposed2Type&) const WARN_UNUSED_RETURN;
     void recompose2(const Decomposed2Type&);
 
-    bool decompose4(Decomposed4Type&) const;
+    bool decompose4(Decomposed4Type&) const WARN_UNUSED_RETURN;
     void recompose4(const Decomposed4Type&);
 
     WEBCORE_EXPORT void blend(const TransformationMatrix& from, double progress, CompositeOperation = CompositeOperation::Replace);
@@ -370,8 +380,6 @@ public:
                 m_matrix[3][3] == m2.m_matrix[3][3]);
     }
 
-    bool operator!=(const TransformationMatrix& other) const { return !(*this == other); }
-
     // *this = *this * t
     TransformationMatrix& operator*=(const TransformationMatrix& t)
     {
@@ -396,7 +404,7 @@ public:
 #endif
 
 #if PLATFORM(WIN) || (PLATFORM(GTK) && OS(WINDOWS))
-    operator XFORM() const;
+    WEBCORE_EXPORT operator XFORM() const;
 #endif
 
     bool isIdentityOrTranslation() const

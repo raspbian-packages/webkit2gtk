@@ -26,15 +26,22 @@
 
 namespace WebCore {
 
-class RealtimeIncomingSourceGStreamer : public RealtimeMediaSource {
+class RealtimeIncomingSourceGStreamer : public RealtimeMediaSource, public ThreadSafeRefCountedAndCanMakeThreadSafeWeakPtr<RealtimeIncomingSourceGStreamer> {
 public:
-    GstElement* bin() { return m_bin.get(); }
-    void registerClient();
+    void ref() const final { ThreadSafeRefCountedAndCanMakeThreadSafeWeakPtr<RealtimeIncomingSourceGStreamer>::ref(); }
+    void deref() const final { ThreadSafeRefCountedAndCanMakeThreadSafeWeakPtr<RealtimeIncomingSourceGStreamer>::deref(); }
+    ThreadSafeWeakPtrControlBlock& controlBlock() const final { return ThreadSafeRefCountedAndCanMakeThreadSafeWeakPtr<RealtimeIncomingSourceGStreamer>::controlBlock(); }
 
-    void handleUpstreamEvent(GRefPtr<GstEvent>&&);
+    GstElement* bin() { return m_bin.get(); }
+
+    int registerClient(GRefPtr<GstElement>&&);
+    void unregisterClient(int);
+
+    void handleUpstreamEvent(GRefPtr<GstEvent>&&, int clientId);
+    bool handleUpstreamQuery(GstQuery*, int clientId);
 
 protected:
-    RealtimeIncomingSourceGStreamer(Type, AtomString&& name);
+    RealtimeIncomingSourceGStreamer(const CaptureDevice&);
 
 private:
     // RealtimeMediaSource API
@@ -43,11 +50,12 @@ private:
     const RealtimeMediaSourceCapabilities& capabilities() final;
 
     virtual void dispatchSample(GRefPtr<GstSample>&&) { }
-    void handleDownstreamEvent(GRefPtr<GstEvent>&&);
 
     GRefPtr<GstElement> m_bin;
     GRefPtr<GstElement> m_valve;
     GRefPtr<GstElement> m_tee;
+    GQuark m_clientQuark { 0 };
+    HashMap<int, GRefPtr<GstElement>> m_clients;
 };
 
 } // namespace WebCore

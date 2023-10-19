@@ -32,6 +32,7 @@
 #include "WebCoreArgumentCoders.h"
 #include <WebCore/ResourceRequest.h>
 #include <WebCore/SharedBuffer.h>
+#include <wtf/persistence/PersistentEncoder.h>
 #include <wtf/text/StringBuilder.h>
 
 namespace WebKit {
@@ -95,7 +96,7 @@ Storage::Record Entry::encodeAsStorageRecord() const
     uint8_t privateRelayed = m_privateRelayed == PrivateRelayed::Yes;
     encoder << static_cast<uint8_t>((isRedirect << 0) | (privateRelayed << 1));
     if (isRedirect)
-        m_redirectRequest->encodeWithoutPlatformData(encoder);
+        encoder << m_redirectRequest;
 
     encoder << m_maxAgeCap;
     
@@ -116,10 +117,11 @@ std::unique_ptr<Entry> Entry::decodeStorageRecord(const Storage::Record& storage
     auto entry = makeUnique<Entry>(storageEntry);
 
     WTF::Persistence::Decoder decoder(storageEntry.header.span());
-    WebCore::ResourceResponse response;
-    if (!WebCore::ResourceResponse::decode(decoder, response))
+    std::optional<WebCore::ResourceResponse> response;
+    decoder >> response;
+    if (!response)
         return nullptr;
-    entry->m_response = WTFMove(response);
+    entry->m_response = WTFMove(*response);
     entry->m_response.setSource(WebCore::ResourceResponse::Source::DiskCache);
 
     std::optional<bool> hasVaryingRequestHeaders;
@@ -145,8 +147,11 @@ std::unique_ptr<Entry> Entry::decodeStorageRecord(const Storage::Record& storage
     
     if (isRedirect) {
         entry->m_redirectRequest.emplace();
-        if (!entry->m_redirectRequest->decodeWithoutPlatformData(decoder))
+        std::optional<std::optional<WebCore::ResourceRequest>> resourceRequest;
+        decoder >> resourceRequest;
+        if (!resourceRequest)
             return nullptr;
+        entry->m_redirectRequest = WTFMove(*resourceRequest);
     }
 
     std::optional<std::optional<Seconds>> maxAgeCap;
@@ -163,7 +168,7 @@ std::unique_ptr<Entry> Entry::decodeStorageRecord(const Storage::Record& storage
     return entry;
 }
 
-#if ENABLE(INTELLIGENT_TRACKING_PREVENTION)
+#if ENABLE(TRACKING_PREVENTION)
 bool Entry::hasReachedPrevalentResourceAgeCap() const
 {
     return m_maxAgeCap && WebCore::computeCurrentAge(response(), timeStamp()) > m_maxAgeCap;
@@ -185,7 +190,8 @@ void Entry::initializeShareableResourceHandleFromStorageRecord() const
     auto shareableResource = ShareableResource::create(sharedMemory.releaseNonNull(), 0, m_sourceStorageRecord.body.size());
     if (!shareableResource)
         return;
-    shareableResource->createHandle(m_shareableResourceHandle);
+    if (auto handle = shareableResource->createHandle())
+        m_shareableResourceHandle = WTFMove(*handle);
 }
 #endif
 
@@ -193,7 +199,7 @@ void Entry::initializeBufferFromStorageRecord() const
 {
 #if ENABLE(SHAREABLE_RESOURCE)
     if (!shareableResourceHandle().isNull()) {
-        m_buffer = m_shareableResourceHandle.tryWrapInSharedBuffer();
+        m_buffer = WTFMove(m_shareableResourceHandle).tryWrapInSharedBuffer();
         if (m_buffer)
             return;
     }

@@ -24,7 +24,9 @@
  */
 
 #include "config.h"
-#include "WTFStringUtilities.h"
+
+#include "Test.h"
+#include "WTFTestUtilities.h"
 #include <pal/text/TextEncoding.h>
 #include <wtf/MainThread.h>
 #include <wtf/URLParser.h>
@@ -82,7 +84,7 @@ static ExpectedParts invalidParts(const String& urlStringWithTab)
     return {emptyString(), emptyString(), emptyString(), emptyString(), 0, emptyString(), emptyString(), emptyString(), urlStringWithTab};
 }
 
-enum class TestTabs { No, Yes };
+enum class TestTabs : bool { No, Yes };
 
 // Inserting tabs between surrogate pairs changes the encoded value instead of being skipped by the URLParser.
 const TestTabs testTabsValueForSurrogatePairs = TestTabs::No;

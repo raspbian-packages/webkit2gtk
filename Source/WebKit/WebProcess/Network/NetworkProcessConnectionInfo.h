@@ -31,42 +31,15 @@
 namespace WebKit {
 
 struct NetworkProcessConnectionInfo {
-    IPC::Attachment connection;
+    IPC::Connection::Handle connection;
     WebCore::HTTPCookieAcceptPolicy cookieAcceptPolicy;
 #if HAVE(AUDIT_TOKEN)
     std::optional<audit_token_t> auditToken;
 #endif
 
-    IPC::Connection::Identifier identifier() const
+    void encode(IPC::Encoder& encoder)
     {
-#if USE(UNIX_DOMAIN_SOCKETS)
-        return IPC::Connection::Identifier(connection.fd().value());
-#elif OS(DARWIN)
-        return IPC::Connection::Identifier(connection.sendRight());
-#elif OS(WINDOWS)
-        return IPC::Connection::Identifier(connection.handle());
-#else
-        ASSERT_NOT_REACHED();
-        return IPC::Connection::Identifier();
-#endif
-    }
-
-    IPC::Connection::Identifier releaseIdentifier()
-    {
-#if USE(UNIX_DOMAIN_SOCKETS)
-        auto returnValue = IPC::Connection::Identifier(connection.release().release());
-#elif OS(DARWIN)
-        auto returnValue = IPC::Connection::Identifier(connection.leakSendRight());
-#else
-        auto returnValue = identifier();
-#endif
-        connection = { };
-        return returnValue;
-    }
-
-    void encode(IPC::Encoder& encoder) const
-    {
-        encoder << connection;
+        encoder << WTFMove(connection);
         encoder << cookieAcceptPolicy;
 #if HAVE(AUDIT_TOKEN)
         encoder << auditToken;

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 Apple Inc. All rights reserved.
+ * Copyright (C) 2021-2023 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -27,44 +27,17 @@
 
 #if ENABLE(GPU_PROCESS)
 
+#include <WebCore/WebGPUIntegralTypes.h>
+#include <WebCore/WebGPUVertexFormat.h>
 #include <optional>
-#include <pal/graphics/WebGPU/WebGPUIntegralTypes.h>
-#include <pal/graphics/WebGPU/WebGPUVertexFormat.h>
 
 namespace WebKit::WebGPU {
 
 struct VertexAttribute {
-    PAL::WebGPU::VertexFormat format { PAL::WebGPU::VertexFormat::Uint8x2 };
-    PAL::WebGPU::Size64 offset { 0 };
+    WebCore::WebGPU::VertexFormat format { WebCore::WebGPU::VertexFormat::Uint8x2 };
+    WebCore::WebGPU::Size64 offset { 0 };
 
-    PAL::WebGPU::Index32 shaderLocation { 0 };
-
-    template<class Encoder> void encode(Encoder& encoder) const
-    {
-        encoder << format;
-        encoder << offset;
-        encoder << shaderLocation;
-    }
-
-    template<class Decoder> static std::optional<VertexAttribute> decode(Decoder& decoder)
-    {
-        std::optional<PAL::WebGPU::VertexFormat> format;
-        decoder >> format;
-        if (!format)
-            return std::nullopt;
-
-        std::optional<PAL::WebGPU::Size64> offset;
-        decoder >> offset;
-        if (!offset)
-            return std::nullopt;
-
-        std::optional<PAL::WebGPU::Index32> shaderLocation;
-        decoder >> shaderLocation;
-        if (!shaderLocation)
-            return std::nullopt;
-
-        return { { WTFMove(*format), WTFMove(*offset), WTFMove(*shaderLocation) } };
-    }
+    WebCore::WebGPU::Index32 shaderLocation { 0 };
 };
 
 } // namespace WebKit::WebGPU

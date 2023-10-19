@@ -7,51 +7,53 @@ Uploaders: Gustavo Noronha Silva <kov@debian.org>,
            Alberto Garcia <berto@igalia.com>
 X-Ubuntu-Use-Langpack: no
 Build-Depends: debhelper-compat (= 12),
-               bubblewrap (>= 0.3.1) [!alpha !ia64 !m68k !riscv64 !sh4 !sparc64 !hurd-any !kfreebsd-any],
-               xdg-dbus-proxy [!alpha !ia64 !m68k !riscv64 !sh4 !sparc64 !hurd-any !kfreebsd-any],
-               libseccomp-dev [!alpha !ia64 !m68k !riscv64 !sh4 !sparc64 !hurd-any !kfreebsd-any],
+               bubblewrap [!alpha !ia64 !m68k !sh4 !sparc64 !hurd-any !kfreebsd-any],
+               xdg-dbus-proxy [!alpha !ia64 !m68k !sh4 !sparc64 !hurd-any !kfreebsd-any],
+               libseccomp-dev [!alpha !ia64 !m68k !sh4 !sparc64 !hurd-any !kfreebsd-any],
                clang [amd64],
-               cmake (>= 3.10),
-               jdupes,
-               libglib2.0-dev (>= 2.44.0),
-               libharfbuzz-dev (>= 0.9.18),
-               libcairo2-dev (>= 1.14.0),
+               cmake (>= 3.16),
+               libglib2.0-dev,
+               libharfbuzz-dev,
+               libcairo2-dev,
                libfontconfig-dev,
                libfreetype-dev,
                libicu-dev,
-               libgcrypt20-dev (>= 1.7.0),
+               libgcrypt20-dev,
                libhyphen-dev,
                liblcms2-dev,
                libmanette-0.2-dev (>= 0.2.4) [linux-any],
-               libxslt1-dev (>= 1.1.7),
-               libxml2-dev (>= 2.8),
+               libxslt1-dev,
+               libxml2-dev,
                @EXTRA_BUILD_DEPS@
-               libsqlite3-dev (>= 3.0),
+               libsqlite3-dev,
                libsystemd-dev [linux-any],
                libgudev-1.0-dev [linux-any],
-               libwoff-dev (>= 1.0.2),
+               libwoff-dev,
                libwpebackend-fdo-1.0-dev [linux-any],
                gperf,
                bison,
                flex,
                ruby:native,
+               unifdef,
+               libavif-dev,
                libjpeg-dev,
-               libopenjp2-7-dev (>= 2.2.0),
+               libopenjp2-7-dev,
                libpng-dev,
                libtasn1-6-dev,
                libwebp-dev,
                libxt-dev,
-               libgstreamer1.0-dev (>= 1.14.0),
-               libgstreamer-plugins-base1.0-dev (>= 1.14.0),
+               libgstreamer1.0-dev,
+               libgstreamer-plugins-base1.0-dev,
+               libgstreamer-plugins-bad1.0-dev,
                libenchant-2-dev,
                libsecret-1-dev,
-               gobject-introspection (>= 1.32.0),
-               libgirepository1.0-dev (>= 0.9.12-4),
+               gobject-introspection,
+               libgirepository1.0-dev,
                ninja-build,
                libegl-dev,
                libgl-dev,
                libgles-dev
-Build-Depends-Indep: gi-docgen, libglib2.0-doc, libgtk-3-doc, libsoup2.4-doc
+Build-Depends-Indep: gi-docgen, libglib2.0-doc, libgtk-3-doc, libsoup2.4-doc, jdupes
 Standards-Version: 4.6.2
 Rules-Requires-Root: no
 Vcs-Browser: https://salsa.debian.org/webkit-team/webkit
@@ -92,12 +94,12 @@ Description: Web content engine library for GTK - documentation
  WebKitGTK is a WebKit port designed to be used in GTK applications.
  .
  This package contains the documentation and is valid for versions 4.0,
- 4.1 and 5.0 of the API.
+ 4.1 and 6.0 of the API.
 
 Package: webkit2gtk-driver
 Architecture: any
 Pre-Depends: ${misc:Pre-Depends}
-Depends: libwebkit2gtk-4.0-37 (= ${binary:Version}),
+Depends: @WEBDRIVER_DEP_PKG@ (= ${binary:Version}),
          ${shlibs:Depends},
          ${misc:Depends}
 Description: WebKitGTK WebDriver support

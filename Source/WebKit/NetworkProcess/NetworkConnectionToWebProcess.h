@@ -29,7 +29,6 @@
 #include "Connection.h"
 #include "DownloadID.h"
 #include "NetworkActivityTracker.h"
-#include "NetworkConnectionToWebProcessMessagesReplies.h"
 #include "NetworkMDNSRegister.h"
 #include "NetworkRTCProvider.h"
 #include "NetworkResourceLoadIdentifier.h"
@@ -52,6 +51,7 @@
 #include <WebCore/RTCDataChannelIdentifier.h>
 #include <WebCore/RegistrableDomain.h>
 #include <WebCore/WebSocketIdentifier.h>
+#include <optional>
 #include <wtf/OptionSet.h>
 #include <wtf/RefCounted.h>
 #include <wtf/URLHash.h>
@@ -71,8 +71,12 @@ class BlobRegistryImpl;
 class MockContentFilterSettings;
 class ResourceError;
 class ResourceRequest;
+enum class AdvancedPrivacyProtections : uint16_t;
+enum class ApplyTrackingPrevention : bool;
 enum class StorageAccessScope : bool;
-enum class ShouldAskITP : bool;
+struct ClientOrigin;
+struct Cookie;
+struct CookieStoreGetOptions;
 struct PolicyContainer;
 struct RequestStorageAccessResult;
 struct SameSiteInfo;
@@ -83,18 +87,20 @@ enum class IncludeSecureCookies : bool;
 
 namespace WebKit {
 
+class NetworkOriginAccessPatterns;
 class NetworkSchemeRegistry;
 class NetworkProcess;
 class NetworkResourceLoader;
 class NetworkResourceLoadParameters;
 class NetworkSession;
 class NetworkSocketChannel;
-class NetworkSocketStream;
 class ServiceWorkerFetchTask;
 class WebSWServerConnection;
 class WebSWServerToContextConnection;
 class WebSharedWorkerServerConnection;
 class WebSharedWorkerServerToContextConnection;
+
+struct NetworkProcessConnectionParameters;
 
 enum class PrivateRelayed : bool;
 
@@ -110,11 +116,11 @@ class NetworkConnectionToWebProcess
 #if HAVE(COOKIE_CHANGE_LISTENER_API)
     , public WebCore::CookieChangeObserver
 #endif
-    , IPC::Connection::Client {
+    , public IPC::Connection::Client {
 public:
     using RegistrableDomain = WebCore::RegistrableDomain;
 
-    static Ref<NetworkConnectionToWebProcess> create(NetworkProcess&, WebCore::ProcessIdentifier, PAL::SessionID, IPC::Connection::Identifier);
+    static Ref<NetworkConnectionToWebProcess> create(NetworkProcess&, WebCore::ProcessIdentifier, PAL::SessionID, NetworkProcessConnectionParameters&&, IPC::Connection::Identifier);
     virtual ~NetworkConnectionToWebProcess();
     
     PAL::SessionID sessionID() const { return m_sessionID; }
@@ -131,7 +137,6 @@ public:
 
     RefPtr<WebCore::BlobDataFileReference> getBlobDataFileReferenceForPath(const String& path);
 
-    void cleanupForSuspension(Function<void()>&&);
     void endSuspension();
 
     void getNetworkLoadInformationResponse(WebCore::ResourceLoaderIdentifier identifier, CompletionHandler<void(const WebCore::ResourceResponse&)>&& completionHandler)
@@ -183,8 +188,6 @@ public:
 
     WebCore::ProcessIdentifier webProcessIdentifier() const { return m_webProcessIdentifier; }
 
-    void checkProcessLocalPortForActivity(const WebCore::MessagePortIdentifier&, CompletionHandler<void(WebCore::MessagePortChannelProvider::HasActivity)>&&);
-
 #if ENABLE(SERVICE_WORKER)
     void serviceWorkerServerToContextConnectionNoLongerNeeded();
     WebSWServerConnection* swConnection();
@@ -201,12 +204,24 @@ public:
     void broadcastConsoleMessage(JSC::MessageSource, JSC::MessageLevel, const String& message);
     RefPtr<NetworkResourceLoader> takeNetworkResourceLoader(WebCore::ResourceLoaderIdentifier);
 
-#if ENABLE(CONTENT_FILTERING_IN_NETWORKING_PROCESS)
+    NetworkOriginAccessPatterns& originAccessPatterns() { return m_originAccessPatterns.get(); }
+
+#if ENABLE(CONTENT_FILTERING)
     void installMockContentFilter(WebCore::MockContentFilterSettings&&);
+#endif
+#if ENABLE(LOGD_BLOCKING_IN_WEBCONTENT)
+    void logOnBehalfOfWebContent(IPC::DataReference&& logChannel, IPC::DataReference&& logCategory, IPC::DataReference&& logString, uint8_t logType, int32_t pid);
+#endif
+
+    void addAllowedFirstPartyForCookies(const RegistrableDomain&);
+    void useRedirectionForCurrentNavigation(WebCore::ResourceLoaderIdentifier, WebCore::ResourceResponse&&);
+
+#if ENABLE(WEB_RTC)
+    NetworkMDNSRegister& mdnsRegister() { return m_mdnsRegister; }
 #endif
 
 private:
-    NetworkConnectionToWebProcess(NetworkProcess&, WebCore::ProcessIdentifier, PAL::SessionID, IPC::Connection::Identifier);
+    NetworkConnectionToWebProcess(NetworkProcess&, WebCore::ProcessIdentifier, PAL::SessionID, NetworkProcessConnectionParameters&&, IPC::Connection::Identifier);
 
     void didFinishPreconnection(WebCore::ResourceLoaderIdentifier preconnectionIdentifier, const WebCore::ResourceError&);
     WebCore::NetworkStorageSession* storageSession();
@@ -222,8 +237,8 @@ private:
     bool didReceiveSyncNetworkConnectionToWebProcessMessage(IPC::Connection&, IPC::Decoder&, UniqueRef<IPC::Encoder>&);
 
     void scheduleResourceLoad(NetworkResourceLoadParameters&&, std::optional<NetworkResourceLoadIdentifier> existingLoaderToResume);
-    void performSynchronousLoad(NetworkResourceLoadParameters&&, Messages::NetworkConnectionToWebProcess::PerformSynchronousLoadDelayedReply&&);
-    void testProcessIncomingSyncMessagesWhenWaitingForSyncReply(WebPageProxyIdentifier, Messages::NetworkConnectionToWebProcess::TestProcessIncomingSyncMessagesWhenWaitingForSyncReplyDelayedReply&&);
+    void performSynchronousLoad(NetworkResourceLoadParameters&&, CompletionHandler<void(const WebCore::ResourceError&, const WebCore::ResourceResponse, Vector<uint8_t>&&)>&&);
+    void testProcessIncomingSyncMessagesWhenWaitingForSyncReply(WebPageProxyIdentifier, CompletionHandler<void(bool)>&&);
     void loadPing(NetworkResourceLoadParameters&&);
     void prefetchDNS(const String&);
     void sendH2Ping(NetworkResourceLoadParameters&&, CompletionHandler<void(Expected<WTF::Seconds, WebCore::ResourceError>&&)>&&);
@@ -239,30 +254,31 @@ private:
 
     void registerURLSchemesAsCORSEnabled(Vector<String>&& schemes);
 
-    void cookiesForDOM(const URL& firstParty, const WebCore::SameSiteInfo&, const URL&, WebCore::FrameIdentifier, WebCore::PageIdentifier, WebCore::IncludeSecureCookies, WebCore::ShouldAskITP, WebCore::ShouldRelaxThirdPartyCookieBlocking, CompletionHandler<void(String cookieString, bool secureCookiesAccessed)>&&);
-    void setCookiesFromDOM(const URL& firstParty, const WebCore::SameSiteInfo&, const URL&, WebCore::FrameIdentifier, WebCore::PageIdentifier, WebCore::ShouldAskITP, const String&, WebCore::ShouldRelaxThirdPartyCookieBlocking);
-    void cookieRequestHeaderFieldValue(const URL& firstParty, const WebCore::SameSiteInfo&, const URL&, std::optional<WebCore::FrameIdentifier>, std::optional<WebCore::PageIdentifier>, WebCore::IncludeSecureCookies, WebCore::ShouldAskITP, WebCore::ShouldRelaxThirdPartyCookieBlocking, CompletionHandler<void(String cookieString, bool secureCookiesAccessed)>&&);
-    void getRawCookies(const URL& firstParty, const WebCore::SameSiteInfo&, const URL&, std::optional<WebCore::FrameIdentifier>, std::optional<WebCore::PageIdentifier>, WebCore::ShouldAskITP, WebCore::ShouldRelaxThirdPartyCookieBlocking, CompletionHandler<void(Vector<WebCore::Cookie>&&)>&&);
+    void cookiesForDOM(const URL& firstParty, const WebCore::SameSiteInfo&, const URL&, WebCore::FrameIdentifier, WebCore::PageIdentifier, WebCore::IncludeSecureCookies, WebCore::ApplyTrackingPrevention, WebCore::ShouldRelaxThirdPartyCookieBlocking, CompletionHandler<void(String cookieString, bool secureCookiesAccessed)>&&);
+    void setCookiesFromDOM(const URL& firstParty, const WebCore::SameSiteInfo&, const URL&, WebCore::FrameIdentifier, WebCore::PageIdentifier, WebCore::ApplyTrackingPrevention, const String&, WebCore::ShouldRelaxThirdPartyCookieBlocking);
+    void cookieRequestHeaderFieldValue(const URL& firstParty, const WebCore::SameSiteInfo&, const URL&, std::optional<WebCore::FrameIdentifier>, std::optional<WebCore::PageIdentifier>, WebCore::IncludeSecureCookies, WebCore::ApplyTrackingPrevention, WebCore::ShouldRelaxThirdPartyCookieBlocking, CompletionHandler<void(String cookieString, bool secureCookiesAccessed)>&&);
+    void getRawCookies(const URL& firstParty, const WebCore::SameSiteInfo&, const URL&, std::optional<WebCore::FrameIdentifier>, std::optional<WebCore::PageIdentifier>, WebCore::ApplyTrackingPrevention, WebCore::ShouldRelaxThirdPartyCookieBlocking, CompletionHandler<void(Vector<WebCore::Cookie>&&)>&&);
     void setRawCookie(const WebCore::Cookie&);
     void deleteCookie(const URL&, const String& cookieName, CompletionHandler<void()>&&);
 
-    void registerFileBlobURL(const URL&, const String& path, const String& replacementPath, SandboxExtension::Handle&&, const String& contentType);
-    void registerBlobURL(const URL&, Vector<WebCore::BlobPart>&&, const String& contentType);
-    void registerBlobURLFromURL(const URL&, const URL& srcURL, WebCore::PolicyContainer&&);
-    void registerBlobURLOptionallyFileBacked(const URL&, const URL& srcURL, const String& fileBackedPath, const String& contentType);
-    void registerBlobURLForSlice(const URL&, const URL& srcURL, int64_t start, int64_t end, const String& contentType);
+    void cookiesForDOMAsync(const URL&, const WebCore::SameSiteInfo&, const URL&, WebCore::FrameIdentifier, WebCore::PageIdentifier, WebCore::IncludeSecureCookies, WebCore::ApplyTrackingPrevention, WebCore::ShouldRelaxThirdPartyCookieBlocking, WebCore::CookieStoreGetOptions&&, CompletionHandler<void(std::optional<Vector<WebCore::Cookie>>&&)>&&);
+    void setCookieFromDOMAsync(const URL&, const WebCore::SameSiteInfo&, const URL&, WebCore::FrameIdentifier, WebCore::PageIdentifier, WebCore::ApplyTrackingPrevention, WebCore::ShouldRelaxThirdPartyCookieBlocking, WebCore::Cookie&&, CompletionHandler<void(bool)>&&);
+
+    void registerInternalFileBlobURL(const URL&, const String& path, const String& replacementPath, SandboxExtension::Handle&&, const String& contentType);
+    void registerInternalBlobURL(const URL&, Vector<WebCore::BlobPart>&&, const String& contentType);
+    void registerBlobURL(const URL&, const URL& srcURL, WebCore::PolicyContainer&&, const std::optional<WebCore::SecurityOriginData>& topOrigin);
+    void registerInternalBlobURLOptionallyFileBacked(const URL&, const URL& srcURL, const String& fileBackedPath, const String& contentType);
+    void registerInternalBlobURLForSlice(const URL&, const URL& srcURL, int64_t start, int64_t end, const String& contentType);
     void blobSize(const URL&, CompletionHandler<void(uint64_t)>&&);
-    void unregisterBlobURL(const URL&);
+    void unregisterBlobURL(const URL&, const std::optional<WebCore::SecurityOriginData>& topOrigin);
     void writeBlobsToTemporaryFilesForIndexedDB(const Vector<String>& blobURLs, CompletionHandler<void(Vector<String>&&)>&&);
 
-    void registerBlobURLHandle(const URL&);
-    void unregisterBlobURLHandle(const URL&);
+    void registerBlobURLHandle(const URL&, const std::optional<WebCore::SecurityOriginData>& topOrigin);
+    void unregisterBlobURLHandle(const URL&, const std::optional<WebCore::SecurityOriginData>& topOrigin);
 
     void setCaptureExtraNetworkLoadMetricsEnabled(bool);
 
-    void createSocketStream(URL&&, String cachePartition, WebCore::WebSocketIdentifier);
-
-    void createSocketChannel(const WebCore::ResourceRequest&, const String& protocol, WebCore::WebSocketIdentifier, WebPageProxyIdentifier, const WebCore::ClientOrigin&, bool hadMainFrameMainResourcePrivateRelayed);
+    void createSocketChannel(const WebCore::ResourceRequest&, const String& protocol, WebCore::WebSocketIdentifier, WebPageProxyIdentifier, std::optional<WebCore::FrameIdentifier>, std::optional<WebCore::PageIdentifier>, const WebCore::ClientOrigin&, bool hadMainFrameMainResourcePrivateRelayed, bool allowPrivacyProxy, OptionSet<WebCore::AdvancedPrivacyProtections>, WebCore::ShouldRelaxThirdPartyCookieBlocking, WebCore::StoredCredentialsPolicy);
     void updateQuotaBasedOnSpaceUsageForTesting(WebCore::ClientOrigin&&);
 
     void establishSharedWorkerServerConnection();
@@ -289,7 +305,6 @@ private:
     void messagePortClosed(const WebCore::MessagePortIdentifier&);
     void takeAllMessagesForPort(const WebCore::MessagePortIdentifier&, CompletionHandler<void(Vector<WebCore::MessageWithMessagePorts>&&, uint64_t)>&&);
     void postMessageToRemote(WebCore::MessageWithMessagePorts&&, const WebCore::MessagePortIdentifier&);
-    void checkRemotePortForActivity(const WebCore::MessagePortIdentifier, CompletionHandler<void(bool)>&&);
     void didDeliverMessagePortMessages(uint64_t messageBatchIdentifier);
 
     void setCORSDisablingPatterns(WebCore::PageIdentifier, Vector<String>&&);
@@ -303,16 +318,17 @@ private:
     NetworkRTCProvider& rtcProvider();
 #endif
 #if ENABLE(WEB_RTC)
-    NetworkMDNSRegister& mdnsRegister() { return m_mdnsRegister; }
     void registerToRTCDataChannelProxy();
     void unregisterToRTCDataChannelProxy();
 #endif
+        
+    bool allowTestOnlyIPC() const { return m_allowTestOnlyIPC; }
 
     CacheStorageEngineConnection& cacheStorageConnection();
 
     void clearPageSpecificData(WebCore::PageIdentifier);
 
-#if ENABLE(INTELLIGENT_TRACKING_PREVENTION)
+#if ENABLE(TRACKING_PREVENTION)
     void removeStorageAccessForFrame(WebCore::FrameIdentifier, WebCore::PageIdentifier);
 
     void logUserInteraction(RegistrableDomain&&);
@@ -328,10 +344,11 @@ private:
 
     uint64_t nextMessageBatchIdentifier(CompletionHandler<void()>&&);
 
-    void domCookiesForHost(const String& host, bool subscribeToCookieChangeNotifications, CompletionHandler<void(const Vector<WebCore::Cookie>&)>&&);
+    void domCookiesForHost(const URL& host, CompletionHandler<void(const Vector<WebCore::Cookie>&)>&&);
 
 #if HAVE(COOKIE_CHANGE_LISTENER_API)
-    void unsubscribeFromCookieChangeNotifications(const HashSet<String>& hosts);
+    void subscribeToCookieChangeNotifications(const String& host);
+    void unsubscribeFromCookieChangeNotifications(const String& host);
 
     // WebCore::CookieChangeObserver.
     void cookiesAdded(const String& host, const Vector<WebCore::Cookie>&) final;
@@ -395,7 +412,6 @@ private:
     Ref<NetworkProcess> m_networkProcess;
     PAL::SessionID m_sessionID;
 
-    HashMap<WebCore::WebSocketIdentifier, RefPtr<NetworkSocketStream>> m_networkSocketStreams;
     HashMap<WebCore::WebSocketIdentifier, std::unique_ptr<NetworkSocketChannel>> m_networkSocketChannels;
     NetworkResourceLoadMap m_networkResourceLoaders;
     HashMap<String, RefPtr<WebCore::BlobDataFileReference>> m_blobDataFileReferences;
@@ -437,12 +453,15 @@ private:
     HashSet<WebCore::MessagePortIdentifier> m_processEntangledPorts;
     HashMap<uint64_t, CompletionHandler<void()>> m_messageBatchDeliveryCompletionHandlers;
     Ref<NetworkSchemeRegistry> m_schemeRegistry;
+    UniqueRef<NetworkOriginAccessPatterns> m_originAccessPatterns;
         
-    HashSet<URL> m_blobURLs;
-    HashCountedSet<URL> m_blobURLHandles;
+    using BlobURLKey = std::pair<URL, std::optional<WebCore::SecurityOriginData>>;
+    HashSet<BlobURLKey> m_blobURLs;
+    HashCountedSet<BlobURLKey> m_blobURLHandles;
 #if ENABLE(IPC_TESTING_API)
     IPCTester m_ipcTester;
 #endif
+    bool m_allowTestOnlyIPC { false };
 };
 
 } // namespace WebKit

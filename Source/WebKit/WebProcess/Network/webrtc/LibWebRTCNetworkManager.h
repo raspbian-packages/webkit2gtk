@@ -41,12 +41,18 @@ public:
     static LibWebRTCNetworkManager* getOrCreate(WebCore::ScriptExecutionContextIdentifier);
     ~LibWebRTCNetworkManager();
 
+    void setEnumeratingAllNetworkInterfacesEnabled(bool);
+    void setEnumeratingVisibleNetworkInterfacesEnabled(bool);
+
+    static void signalUsedInterface(WebCore::ScriptExecutionContextIdentifier, String&&);
+
 private:
     explicit LibWebRTCNetworkManager(WebCore::ScriptExecutionContextIdentifier);
 
     // WebCore::RTCNetworkManager
     void setICECandidateFiltering(bool doFiltering) final { m_useMDNSCandidates = doFiltering; }
     void unregisterMDNSNames() final;
+    void close() final;
 
     // webrtc::NetworkManagerBase
     void StartUpdating() final;
@@ -61,9 +67,18 @@ private:
     void networksChanged(const Vector<RTCNetwork>&, const RTCNetwork::IPAddress&, const RTCNetwork::IPAddress&) final;
     void networkProcessCrashed() final;
 
+    void networksChanged(const Vector<RTCNetwork>&, const RTCNetwork::IPAddress&, const RTCNetwork::IPAddress&, bool forceSignaling);
+    void signalUsedInterface(String&&);
+
     WebCore::ScriptExecutionContextIdentifier m_documentIdentifier;
     bool m_useMDNSCandidates { true };
     bool m_receivedNetworkList { false };
+#if ASSERT_ENABLED
+    bool m_isClosed { false };
+#endif
+    bool m_enableEnumeratingAllNetworkInterfaces { false };
+    bool m_enableEnumeratingVisibleNetworkInterfaces { false };
+    HashSet<String> m_allowedInterfaces;
 };
 
 } // namespace WebKit

@@ -84,10 +84,10 @@ private:
     IPC::Connection* messageSenderConnection() const override;
     uint64_t messageSenderDestinationID() const override;
 
-    void willSendRequest(WebCore::ResourceRequest&&, IPC::FormDataReference&& requestBody, WebCore::ResourceResponse&&);
+    void willSendRequest(WebCore::ResourceRequest&&, IPC::FormDataReference&& requestBody, WebCore::ResourceResponse&&, CompletionHandler<void(WebCore::ResourceRequest&&, bool)>&&);
     void didSendData(uint64_t bytesSent, uint64_t totalBytesToBeSent);
     void didReceiveResponse(WebCore::ResourceResponse&&, PrivateRelayed, bool needsContinueDidReceiveResponseMessage, std::optional<WebCore::NetworkLoadMetrics>&&);
-    void didReceiveData(IPC::SharedBufferReference&& data, int64_t encodedDataLength);
+    void didReceiveData(IPC::SharedBufferReference&& data, uint64_t encodedDataLength);
     void didFinishResourceLoad(WebCore::NetworkLoadMetrics&&);
     void didFailResourceLoad(const WebCore::ResourceError&);
     void didFailServiceWorkerLoad(const WebCore::ResourceError&);
@@ -100,10 +100,10 @@ private:
     WebCore::MainFrameMainResource mainFrameMainResource() const;
     
 #if ENABLE(SHAREABLE_RESOURCE)
-    void didReceiveResource(const ShareableResource::Handle&);
+    void didReceiveResource(ShareableResource::Handle&&);
 #endif
 
-#if ENABLE(CONTENT_FILTERING_IN_NETWORKING_PROCESS)
+#if ENABLE(CONTENT_FILTERING)
     void contentFilterDidBlockLoad(const WebCore::ContentFilterUnblockHandler&, String&& unblockRequestDeniedScript, const WebCore::ResourceError&, const URL& blockedPageURL, WebCore::SubstituteData&&);
 #endif
     
