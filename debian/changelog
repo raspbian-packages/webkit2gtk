@@ -4,6 +4,9 @@ webkit2gtk (2.42.1-1~deb11u1+rpi1) bullseye-staging; urgency=medium
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
+  [changes introduced in 2.42.1-1~deb11u1+rpi1 by Peter Michael Green]
+  * Disable webgl support, it fails to build.
+
  -- Peter Michael Green <plugwash@raspbian.org>  Thu, 19 Oct 2023 03:51:56 +0000
 
 webkit2gtk (2.42.1-1~deb11u1) bullseye-security; urgency=medium
