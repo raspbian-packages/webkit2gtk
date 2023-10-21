@@ -36,13 +36,11 @@
 #include <WebCore/GLContext.h>
 #include <WebCore/IntRect.h>
 #include <WebCore/PlatformDisplay.h>
-#include <WebCore/PlatformDisplaySurfaceless.h>
 #include <epoxy/egl.h>
 #include <wtf/glib/GUniquePtr.h>
 
 #if USE(GBM)
 #include <WebCore/DMABufFormat.h>
-#include <WebCore/PlatformDisplayGBM.h>
 #include <gbm.h>
 static constexpr uint64_t s_dmabufInvalidModifier = uint64_t(WebCore::DMABufFormat::Modifier::Invalid);
 #else
@@ -55,36 +53,13 @@ static constexpr uint64_t s_dmabufInvalidModifier = ((1ULL << 56) - 1);
 
 namespace WebKit {
 
-static bool isNVIDIA()
-{
-    const char* forceDMABuf = getenv("WEBKIT_FORCE_DMABUF_RENDERER");
-    if (forceDMABuf && strcmp(forceDMABuf, "0"))
-        return false;
-
-    std::unique_ptr<WebCore::PlatformDisplay> platformDisplay;
-#if USE(GBM)
-    const char* disableGBM = getenv("WEBKIT_DMABUF_RENDERER_DISABLE_GBM");
-    if (!disableGBM || !strcmp(disableGBM, "0")) {
-        if (auto* device = WebCore::PlatformDisplay::sharedDisplay().gbmDevice())
-            platformDisplay = WebCore::PlatformDisplayGBM::create(device);
-    }
-#endif
-    if (!platformDisplay)
-        platformDisplay = WebCore::PlatformDisplaySurfaceless::create();
-
-    WebCore::GLContext::ScopedGLContext glContext(WebCore::GLContext::createOffscreen(platformDisplay ? *platformDisplay : WebCore::PlatformDisplay::sharedDisplay()));
-    if (strstr(reinterpret_cast<const char*>(glGetString(GL_VENDOR)), "NVIDIA"))
-        return true;
-    return false;
-}
-
 OptionSet<DMABufRendererBufferMode> AcceleratedBackingStoreDMABuf::rendererBufferMode()
 {
     static OptionSet<DMABufRendererBufferMode> mode;
     static std::once_flag onceFlag;
     std::call_once(onceFlag, [] {
-        const char* disableDMABuf = getenv("WEBKIT_DISABLE_DMABUF_RENDERER");
-        if (disableDMABuf && strcmp(disableDMABuf, "0"))
+        const char* forceDMABuf = getenv("WEBKIT_FORCE_DMABUF_RENDERER");
+        if (!forceDMABuf || !strcmp(forceDMABuf, "0"))
             return;
 
         const char* platformExtensions = eglQueryString(nullptr, EGL_EXTENSIONS);
@@ -92,9 +67,6 @@ OptionSet<DMABufRendererBufferMode> AcceleratedBackingStoreDMABuf::rendererBuffe
             && !WebCore::GLContext::isExtensionSupported(platformExtensions, "EGL_MESA_platform_surfaceless")) {
             return;
         }
-
-        if (isNVIDIA())
-            return;
 
         mode.add(DMABufRendererBufferMode::SharedMemory);
 
