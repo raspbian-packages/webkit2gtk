@@ -88,7 +88,9 @@ struct SameSizeAsCSSValue {
     uint32_t bitfields;
 };
 
+#if !defined(__m68k__)
 static_assert(sizeof(CSSValue) == sizeof(SameSizeAsCSSValue), "CSS value should stay small");
+#endif
 
 DEFINE_ALLOCATOR_WITH_HEAP_IDENTIFIER(CSSValue);
 
