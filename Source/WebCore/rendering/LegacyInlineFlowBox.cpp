@@ -27,9 +27,12 @@
 #include "HitTestResult.h"
 #include "InlineBoxPainter.h"
 #include "LegacyEllipsisBox.h"
+#include "LegacyInlineFlowBoxInlines.h"
 #include "LegacyInlineTextBox.h"
 #include "LegacyRootInlineBox.h"
 #include "RenderBlock.h"
+#include "RenderBoxInlines.h"
+#include "RenderElementInlines.h"
 #include "RenderInline.h"
 #include "RenderLayer.h"
 #include "RenderLineBreak.h"
@@ -43,6 +46,8 @@
 #include "Settings.h"
 #include "Text.h"
 #include "TextBoxPainter.h"
+#include "TextDecorationThickness.h"
+#include "TextUnderlineOffset.h"
 #include <math.h>
 #include <wtf/IsoMallocInlines.h>
 
@@ -401,9 +406,9 @@ float LegacyInlineFlowBox::placeBoxRangeInInlineDirection(LegacyInlineBox* first
             auto& textBox = downcast<LegacyInlineTextBox>(*child);
             RenderText& renderText = textBox.renderer();
             if (renderText.text().length()) {
-                if (needsWordSpacing && isSpaceOrNewline(renderText.characterAt(textBox.start())))
+                if (needsWordSpacing && deprecatedIsSpaceOrNewline(renderText.characterAt(textBox.start())))
                     logicalLeft += textBox.lineStyle().fontCascade().wordSpacing();
-                needsWordSpacing = !isSpaceOrNewline(renderText.characterAt(textBox.end() - 1));
+                needsWordSpacing = !deprecatedIsSpaceOrNewline(renderText.characterAt(textBox.end() - 1));
             }
             textBox.setLogicalLeft(logicalLeft);
             if (knownToHaveNoOverflow())
@@ -1106,7 +1111,7 @@ bool LegacyInlineFlowBox::nodeAtPoint(const HitTestRequest& request, HitTestResu
 
 void LegacyInlineFlowBox::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset, LayoutUnit lineTop, LayoutUnit lineBottom)
 {
-    if (paintInfo.phase != PaintPhase::Foreground && paintInfo.phase != PaintPhase::Selection && paintInfo.phase != PaintPhase::Outline && paintInfo.phase != PaintPhase::SelfOutline && paintInfo.phase != PaintPhase::ChildOutlines && paintInfo.phase != PaintPhase::TextClip && paintInfo.phase != PaintPhase::Mask && paintInfo.phase != PaintPhase::EventRegion)
+    if (paintInfo.phase != PaintPhase::Foreground && paintInfo.phase != PaintPhase::Selection && paintInfo.phase != PaintPhase::Outline && paintInfo.phase != PaintPhase::SelfOutline && paintInfo.phase != PaintPhase::ChildOutlines && paintInfo.phase != PaintPhase::TextClip && paintInfo.phase != PaintPhase::Mask && paintInfo.phase != PaintPhase::EventRegion && paintInfo.phase != PaintPhase::Accessibility)
         return;
 
     LayoutRect overflowRect(visualOverflowRect(lineTop, lineBottom));
@@ -1215,23 +1220,14 @@ LayoutUnit LegacyInlineFlowBox::computeOverAnnotationAdjustment(LayoutUnit allow
         
         if (child->renderer().isReplacedOrInlineBlock() && is<RenderRubyRun>(child->renderer()) && child->renderer().style().rubyPosition() == RubyPosition::Before) {
             auto& rubyRun = downcast<RenderRubyRun>(child->renderer());
-            RenderRubyText* rubyText = rubyRun.rubyText();
-            if (!rubyText)
-                continue;
-            
-            if (!rubyRun.style().isFlippedLinesWritingMode()) {
-                LayoutUnit topOfFirstRubyTextLine = rubyText->logicalTop() + (rubyText->firstRootBox() ? rubyText->firstRootBox()->lineTop() : 0_lu);
-                if (topOfFirstRubyTextLine >= 0)
-                    continue;
-                topOfFirstRubyTextLine += child->logicalTop();
-                result = std::max(result, allowedPosition - topOfFirstRubyTextLine);
-            } else {
-                LayoutUnit bottomOfLastRubyTextLine = rubyText->logicalTop() + (rubyText->lastRootBox() ? rubyText->lastRootBox()->lineBottom() : rubyText->logicalHeight());
-                if (bottomOfLastRubyTextLine <= child->logicalHeight())
-                    continue;
-                bottomOfLastRubyTextLine += child->logicalTop();
-                result = std::max(result, bottomOfLastRubyTextLine - allowedPosition);
-            }
+
+            auto [above, below] = rubyRun.annotationsAboveAndBelow();
+            auto top = LayoutUnit { child->logicalTop() - above };
+            auto bottom = LayoutUnit { child->logicalBottom() + below };
+            if (!rubyRun.style().isFlippedLinesWritingMode())
+                result = std::max(result, allowedPosition - top);
+            else
+                result = std::max(result, bottom - allowedPosition);
         }
 
         if (is<LegacyInlineTextBox>(*child)) {
@@ -1263,23 +1259,14 @@ LayoutUnit LegacyInlineFlowBox::computeUnderAnnotationAdjustment(LayoutUnit allo
 
         if (child->renderer().isReplacedOrInlineBlock() && is<RenderRubyRun>(child->renderer()) && child->renderer().style().rubyPosition() == RubyPosition::After) {
             auto& rubyRun = downcast<RenderRubyRun>(child->renderer());
-            RenderRubyText* rubyText = rubyRun.rubyText();
-            if (!rubyText)
-                continue;
 
-            if (rubyRun.style().isFlippedLinesWritingMode()) {
-                LayoutUnit topOfFirstRubyTextLine = rubyText->logicalTop() + (rubyText->firstRootBox() ? rubyText->firstRootBox()->lineTop() : 0_lu);
-                if (topOfFirstRubyTextLine >= 0)
-                    continue;
-                topOfFirstRubyTextLine += child->logicalTop();
-                result = std::max(result, allowedPosition - topOfFirstRubyTextLine);
-            } else {
-                LayoutUnit bottomOfLastRubyTextLine = rubyText->logicalTop() + (rubyText->lastRootBox() ? rubyText->lastRootBox()->lineBottom() : rubyText->logicalHeight());
-                if (bottomOfLastRubyTextLine <= child->logicalHeight())
-                    continue;
-                bottomOfLastRubyTextLine += child->logicalTop();
-                result = std::max(result, bottomOfLastRubyTextLine - allowedPosition);
-            }
+            auto [above, below] = rubyRun.annotationsAboveAndBelow();
+            auto top = LayoutUnit { child->logicalTop() - above };
+            auto bottom = LayoutUnit { child->logicalBottom() + below };
+            if (rubyRun.style().isFlippedLinesWritingMode())
+                result = std::max(result, allowedPosition - top);
+            else
+                result = std::max(result, bottom - allowedPosition);
         }
 
         if (is<LegacyInlineTextBox>(*child)) {

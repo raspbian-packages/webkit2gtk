@@ -90,6 +90,7 @@ set(JavaScriptCore_OBJECT_LUT_SOURCES
     runtime/JSONObject.cpp
     runtime/JSPromiseConstructor.cpp
     runtime/JSPromisePrototype.cpp
+    runtime/MapConstructor.cpp
     runtime/MapPrototype.cpp
     runtime/NumberConstructor.cpp
     runtime/NumberPrototype.cpp
@@ -155,14 +156,24 @@ list(APPEND JavaScriptCore_SOURCES
     ${JavaScriptCore_DERIVED_SOURCES_DIR}/JSCBuiltins.cpp
 )
 
-add_custom_command(
-    OUTPUT ${JavaScriptCore_DERIVED_SOURCES_DIR}/JSCBytecodeCacheVersion.cpp
-    MAIN_DEPENDENCY ${JAVASCRIPTCORE_DIR}/runtime/JSCBytecodeCacheVersion.cpp.in
-    COMMAND ${PERL_EXECUTABLE} -pe s/CACHED_TYPES_CKSUM/__TIMESTAMP__/ ${JAVASCRIPTCORE_DIR}/runtime/JSCBytecodeCacheVersion.cpp.in > ${JavaScriptCore_DERIVED_SOURCES_DIR}/JSCBytecodeCacheVersion.cpp
-    COMMAND touch -r ${JAVASCRIPTCORE_DIR}/runtime/JSCBytecodeCacheVersion.cpp.in ${JavaScriptCore_DERIVED_SOURCES_DIR}/JSCBytecodeCacheVersion.cpp
+find_program(TOUCH_EXECUTABLE touch)
+if (TOUCH_EXECUTABLE)
+    add_custom_command(
+        OUTPUT ${JavaScriptCore_DERIVED_SOURCES_DIR}/JSCBytecodeCacheVersion.cpp
+        MAIN_DEPENDENCY ${JAVASCRIPTCORE_DIR}/runtime/JSCBytecodeCacheVersion.cpp.in
+        COMMAND ${PERL_EXECUTABLE} -pe s/CACHED_TYPES_CKSUM/__TIMESTAMP__/ ${JAVASCRIPTCORE_DIR}/runtime/JSCBytecodeCacheVersion.cpp.in > ${JavaScriptCore_DERIVED_SOURCES_DIR}/JSCBytecodeCacheVersion.cpp
+        COMMAND ${TOUCH_EXECUTABLE} -r ${JAVASCRIPTCORE_DIR}/runtime/JSCBytecodeCacheVersion.cpp.in ${JavaScriptCore_DERIVED_SOURCES_DIR}/JSCBytecodeCacheVersion.cpp
             VERBATIM
-)
-
+    )
+else ()
+    message(WARNING "Unable to find touch executable; ${JavaScriptCore_DERIVED_SOURCES_DIR}/JSCBytecodeCacheVersion.cpp is built non-reproducibly from ${JAVASCRIPTCORE_DIR}/runtime/JSCBytecodeCacheVersion.cpp.in")
+    add_custom_command(
+        OUTPUT ${JavaScriptCore_DERIVED_SOURCES_DIR}/JSCBytecodeCacheVersion.cpp
+        MAIN_DEPENDENCY ${JAVASCRIPTCORE_DIR}/runtime/JSCBytecodeCacheVersion.cpp.in
+        COMMAND ${PERL_EXECUTABLE} -pe s/CACHED_TYPES_CKSUM/__TIMESTAMP__/ ${JAVASCRIPTCORE_DIR}/runtime/JSCBytecodeCacheVersion.cpp.in > ${JavaScriptCore_DERIVED_SOURCES_DIR}/JSCBytecodeCacheVersion.cpp
+            VERBATIM
+    )
+endif ()
 
 set(JavaScriptCore_FRAMEWORKS
     WTF
@@ -212,6 +223,7 @@ set(BUILD_VARIANTS
 )
 
 set(LLINT_ASM
+    llint/InPlaceInterpreter.asm
     llint/LowLevelInterpreter.asm
     llint/LowLevelInterpreter32_64.asm
     llint/LowLevelInterpreter64.asm
@@ -362,6 +374,7 @@ set(JavaScriptCore_BUILTINS_SOURCES
     ${JAVASCRIPTCORE_DIR}/builtins/InternalPromiseConstructor.js
     ${JAVASCRIPTCORE_DIR}/builtins/IteratorHelpers.js
     ${JAVASCRIPTCORE_DIR}/builtins/IteratorPrototype.js
+    ${JAVASCRIPTCORE_DIR}/builtins/MapConstructor.js
     ${JAVASCRIPTCORE_DIR}/builtins/MapIteratorPrototype.js
     ${JAVASCRIPTCORE_DIR}/builtins/MapPrototype.js
     ${JAVASCRIPTCORE_DIR}/builtins/ModuleLoader.js
@@ -627,10 +640,6 @@ set(JavaScriptCore_PRIVATE_FRAMEWORK_HEADERS
     b3/B3Type.h
     b3/B3ValueRep.h
 
-    bindings/ScriptFunctionCall.h
-    bindings/ScriptObject.h
-    bindings/ScriptValue.h
-
     builtins/BuiltinNames.h
     builtins/BuiltinUtils.h
 
@@ -839,6 +848,7 @@ set(JavaScriptCore_PRIVATE_FRAMEWORK_HEADERS
     inspector/ScriptCallFrame.h
     inspector/ScriptCallStack.h
     inspector/ScriptCallStackFactory.h
+    inspector/ScriptFunctionCall.h
 
     inspector/agents/InspectorAgent.h
     inspector/agents/InspectorAuditAgent.h
@@ -910,6 +920,7 @@ set(JavaScriptCore_PRIVATE_FRAMEWORK_HEADERS
     jit/Width.h
 
     llint/LLIntOpcode.h
+    llint/LLIntThunks.h
 
     parser/Lexer.h
     parser/ParserArena.h
@@ -931,6 +942,7 @@ set(JavaScriptCore_PRIVATE_FRAMEWORK_HEADERS
     profiler/ProfilerCompilationKind.h
     profiler/ProfilerCompiledBytecode.h
     profiler/ProfilerDatabase.h
+    profiler/ProfilerDumper.h
     profiler/ProfilerEvent.h
     profiler/ProfilerExecutionCounter.h
     profiler/ProfilerJettisonReason.h
@@ -1045,6 +1057,7 @@ set(JavaScriptCore_PRIVATE_FRAMEWORK_HEADERS
     runtime/GetterSetter.h
     runtime/GetVM.h
     runtime/GlobalExecutable.h
+    runtime/GlobalObjectMethodTable.h
     runtime/HashMapImpl.h
     runtime/HashMapImplInlines.h
     runtime/Identifier.h
@@ -1100,6 +1113,7 @@ set(JavaScriptCore_PRIVATE_FRAMEWORK_HEADERS
     runtime/JSGlobalObject.h
     runtime/JSGlobalObjectFunctions.h
     runtime/JSGlobalObjectInlines.h
+    runtime/JSGlobalProxy.h
     runtime/JSImmutableButterfly.h
     runtime/JSInternalFieldObjectImpl.h
     runtime/JSInternalPromise.h
@@ -1119,7 +1133,6 @@ set(JavaScriptCore_PRIVATE_FRAMEWORK_HEADERS
     runtime/JSPromise.h
     runtime/JSPromiseConstructor.h
     runtime/JSPropertyNameEnumerator.h
-    runtime/JSProxy.h
     runtime/JSRemoteFunction.h
     runtime/JSRunLoopTimer.h
     runtime/JSScope.h
@@ -1140,12 +1153,16 @@ set(JavaScriptCore_PRIVATE_FRAMEWORK_HEADERS
     runtime/JSWeakMapInlines.h
     runtime/JSWithScope.h
     runtime/JSWrapperObject.h
+    runtime/KeyAtomStringCache.h
+    runtime/KeyAtomStringCacheInlines.h
     runtime/LazyClassStructure.h
     runtime/LazyProperty.h
     runtime/LeafExecutable.h
     runtime/Lookup.h
+    runtime/MapConstructor.h
     runtime/MatchResult.h
     runtime/MathCommon.h
+    runtime/MegamorphicCache.h
     runtime/MemoryMode.h
     runtime/MemoryStatistics.h
     runtime/Microtask.h
@@ -1201,7 +1218,6 @@ set(JavaScriptCore_PRIVATE_FRAMEWORK_HEADERS
     runtime/ScriptFetcher.h
     runtime/ShadowRealmObject.h
     runtime/SlowPathFunction.h
-    runtime/SlowPathReturnType.h
     runtime/SmallStrings.h
     runtime/SourceOrigin.h
     runtime/SparseArrayValueMap.h
@@ -1209,6 +1225,8 @@ set(JavaScriptCore_PRIVATE_FRAMEWORK_HEADERS
     runtime/StackFrame.h
     runtime/StringObject.h
     runtime/StringPrototype.h
+    runtime/StringReplaceCache.h
+    runtime/StringSplitCache.h
     runtime/Structure.h
     runtime/StructureCache.h
     runtime/StructureChain.h
@@ -1239,12 +1257,14 @@ set(JavaScriptCore_PRIVATE_FRAMEWORK_HEADERS
     runtime/TypedArrayType.h
     runtime/TypedArrays.h
     runtime/TypeofType.h
+    runtime/UGPRPair.h
     runtime/Uint16Array.h
     runtime/Uint32Array.h
     runtime/Uint8Array.h
     runtime/Uint8ClampedArray.h
     runtime/VM.h
     runtime/VMEntryScope.h
+    runtime/VMEntryScopeInlines.h
     runtime/VMInlines.h
     runtime/VMTraps.h
     runtime/VMTrapsInlines.h
@@ -1275,7 +1295,9 @@ set(JavaScriptCore_PRIVATE_FRAMEWORK_HEADERS
     wasm/WasmFaultSignalHandler.h
     wasm/WasmFormat.h
     wasm/WasmFunctionCodeBlockGenerator.h
+    wasm/WasmFunctionIPIntMetadataGenerator.h
     wasm/WasmHandlerInfo.h
+    wasm/WasmIPIntGenerator.h
     wasm/WasmIndexOrName.h
     wasm/WasmJS.h
     wasm/WasmLLIntBuiltin.h
@@ -1548,5 +1570,13 @@ endif ()
 
 add_custom_target(JavaScriptCoreSharedScripts DEPENDS ${JavaScriptCore_SCRIPTS})
 add_dependencies(JavaScriptCore JavaScriptCoreSharedScripts ${JavaScriptCore_EXTRA_DEPENDENCIES})
+
+if (CMAKE_GENERATOR MATCHES "Visual Studio")
+    # JavaScriptCoreSharedScripts and JSCBuiltins targets need to have
+    # a direct or indirect dependency for CMake Visual Studio
+    # generator to eliminate duplicated custom commands. Otherwise,
+    # JavaScriptCore_SCRIPTS will be generated in both projects.
+    add_dependencies(JavaScriptCoreSharedScripts JSCBuiltins)
+endif ()
 
 add_subdirectory(shell)

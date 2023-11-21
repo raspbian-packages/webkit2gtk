@@ -426,6 +426,7 @@ endif ()
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
     set(CMAKE_REQUIRED_FLAGS "--std=c++2a")
+
     set(REMOVE_CVREF_TEST_SOURCE "
         #include <type_traits>
         int main() {
@@ -433,6 +434,7 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
         }
     ")
     check_cxx_source_compiles("${REMOVE_CVREF_TEST_SOURCE}" STD_REMOVE_CVREF_IS_AVAILABLE)
+
     unset(CMAKE_REQUIRED_FLAGS)
 endif ()
 

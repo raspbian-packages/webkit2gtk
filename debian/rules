@@ -26,6 +26,7 @@ EXTRA_CMAKE_ARGUMENTS = -DPORT=GTK \
 	   -DCMAKE_CXX_FLAGS_RELEASE="" \
 	   -DCMAKE_CXX_FLAGS_DEBUG="" \
 	   -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
+	   -DUSE_JPEGXL=OFF \
 	   -DENABLE_MINIBROWSER=ON
 EXTRA_BUILD_ARGUMENTS =
 DH_GENCONTROL_ARGS =
@@ -76,7 +77,7 @@ ifneq (,$(filter $(DEB_HOST_ARCH),armel armhf))
 endif
 
 # Lower memory requirements on architectures with only 2 GB address space
-ifneq (,$(filter $(DEB_HOST_ARCH),m68k mips mipsel sh4))
+ifneq (,$(filter $(DEB_HOST_ARCH),m68k mips mipsel))
 	CFLAGS := $(CFLAGS:-g1=-g0)
 	CFLAGS := $(CFLAGS:-O2=-Os)
 	CPPFLAGS += --param ggc-min-expand=10
@@ -85,7 +86,9 @@ endif
 # See: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=93876
 # and: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=93877
 ifneq (,$(filter $(DEB_HOST_ARCH),sh3 sh4))
+	CFLAGS := $(CFLAGS:-g1=-g0)
 	CFLAGS := $(CFLAGS:-O2=-O1)
+	CPPFLAGS += --param ggc-min-expand=10
 endif
 
 ifneq (,$(filter noopt,$(DEB_BUILD_OPTIONS)))
@@ -134,9 +137,13 @@ else
 	EXTRA_CMAKE_ARGUMENTS += -DUSE_WPE_RENDERER=OFF
 endif
 
-# Lower max parallel jobs on some of Ubuntu's builders
+# Lower max parallel jobs on some builders
 ifeq ($(shell dpkg-vendor --is Ubuntu && echo yes),yes)
 ifneq (,$(filter $(DEB_HOST_ARCH),amd64 arm64))
+	EXTRA_BUILD_ARGUMENTS += --max-parallel=2
+endif
+else ifeq ($(shell dpkg-vendor --is Debian && echo yes),yes)
+ifneq (,$(filter $(DEB_HOST_ARCH),mipsel))
 	EXTRA_BUILD_ARGUMENTS += --max-parallel=2
 endif
 endif
@@ -149,6 +156,11 @@ endif
 # libavif & gst-plugins-bad1.0 are not in Ubuntu main
 ifeq ($(shell dpkg-vendor --derives-from Ubuntu && echo yes),yes)
 	EXTRA_CMAKE_ARGUMENTS += -DUSE_AVIF=OFF -DUSE_GSTREAMER_TRANSCODER=OFF
+endif
+
+# jpegxl is not in Ubuntu main
+ifeq ($(shell dpkg-vendor --derives-from Ubuntu && echo yes),yes)
+	EXTRA_CMAKE_ARGUMENTS += -DUSE_JPEGXL=OFF
 endif
 
 # gstreamer1.0-libav and gstreamer1.0-plugins-bad are not in Ubuntu "main"
@@ -253,7 +265,7 @@ debian/control: debian/control.in debian/control-common.in debian/rules
 		    -e 's/@WEBDRIVER_DEP_PKG@/$(WEBDRIVER_DEP_PKG)/' \
 		>> debian/control
 ifeq ($(USE_PREBUILT_DOCS),YES)
-	sed -i -e 's/^\(Build-Depends-Indep:\)/# \1/' debian/control
+	sed -i -e 's/^\(Build-Depends-Indep:\).*/\1 jdupes/' debian/control
 endif
 	$(SOUP2_BUILD) cat debian/control-common.in | \
 		sed -e 's/@SOUPDEV_PKG@/libsoup2.4-dev/g' \
