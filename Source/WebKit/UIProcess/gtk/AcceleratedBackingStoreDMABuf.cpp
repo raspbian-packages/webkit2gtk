@@ -63,8 +63,8 @@ OptionSet<DMABufRendererBufferMode> AcceleratedBackingStoreDMABuf::rendererBuffe
     static OptionSet<DMABufRendererBufferMode> mode;
     static std::once_flag onceFlag;
     std::call_once(onceFlag, [] {
-        const char* disableDMABuf = getenv("WEBKIT_DISABLE_DMABUF_RENDERER");
-        if (disableDMABuf && strcmp(disableDMABuf, "0"))
+        const char* forceDMABuf = getenv("WEBKIT_FORCE_DMABUF_RENDERER");
+        if (!forceDMABuf || !strcmp(forceDMABuf, "0"))
             return;
 
         const char* platformExtensions = eglQueryString(nullptr, EGL_EXTENSIONS);
