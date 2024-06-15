@@ -35,11 +35,6 @@
 /* ==== CPU() - the target CPU architecture ==== */
 /* CPU(KNOWN) becomes true if we explicitly support a target CPU. */
 
-/* CPU(M68K) - m68k */
-#if defined(__m68k__)
-#define WTF_CPU_BIG_ENDIAN 1
-#endif
-
 /* CPU(MIPS) - MIPS 32-bit and 64-bit */
 #if (defined(mips) || defined(__mips__) || defined(MIPS) || defined(_MIPS_) || defined(__mips64))
 #if defined(_ABI64) && (_MIPS_SIM == _ABI64)
@@ -266,7 +261,7 @@
 #  error "Cannot use both of WTF_CPU_ARM_TRADITIONAL and WTF_CPU_ARM_THUMB2 platforms"
 #endif /* !defined(WTF_CPU_ARM_TRADITIONAL) && !defined(WTF_CPU_ARM_THUMB2) */
 
-#if defined(__ARM_NEON__) && !defined(WTF_CPU_ARM_NEON)
+#if (defined(__ARM_NEON__) || defined(__ARM_NEON)) && !defined(WTF_CPU_ARM_NEON)
 #define WTF_CPU_ARM_NEON 1
 #endif
 
@@ -296,14 +291,6 @@
 #endif
 
 #endif /* ARM */
-
-/* CPU(RISCV64) - RISC-V 64-bit */
-#if    defined(__riscv) \
-    && defined(__riscv_xlen) \
-    && (__riscv_xlen == 64)
-#define WTF_CPU_RISCV64 1
-#define WTF_CPU_KNOWN 1
-#endif
 
 #if !CPU(KNOWN)
 #define WTF_CPU_UNKNOWN 1

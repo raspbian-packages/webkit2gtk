@@ -47,7 +47,7 @@ namespace WebCore {
 
 static WorkletParameters generateWorkletParameters(AudioWorklet& worklet)
 {
-    auto* document = worklet.document();
+    RefPtr document = worklet.document();
     auto jsRuntimeFlags = document->settings().javaScriptRuntimeFlags();
     RELEASE_ASSERT(document->sessionID());
 
@@ -77,6 +77,7 @@ AudioWorkletMessagingProxy::AudioWorkletMessagingProxy(AudioWorklet& worklet)
 AudioWorkletMessagingProxy::~AudioWorkletMessagingProxy()
 {
     m_workletThread->stop();
+    m_workletThread->clearProxies();
 }
 
 bool AudioWorkletMessagingProxy::postTaskForModeToWorkletGlobalScope(ScriptExecutionContext::Task&& task, const String& mode)

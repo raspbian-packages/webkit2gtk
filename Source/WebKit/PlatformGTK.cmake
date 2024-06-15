@@ -53,14 +53,23 @@ list(APPEND WebKit_UNIFIED_SOURCE_LIST_FILES
 list(APPEND WebKit_MESSAGES_IN_FILES
     UIProcess/ViewGestureController
 
-    UIProcess/gtk/AcceleratedBackingStoreDMABuf
+    UIProcess/dmabuf/AcceleratedBackingStoreDMABuf
 
     WebProcess/WebPage/ViewGestureGeometryCollector
 
-    WebProcess/WebPage/gtk/AcceleratedSurfaceDMABuf
+    WebProcess/WebPage/dmabuf/AcceleratedSurfaceDMABuf
 
     WebProcess/gtk/GtkSettingsManagerProxy
 )
+
+list(APPEND WebKit_SERIALIZATION_IN_FILES
+    Shared/glib/DMABufRendererBufferFormat.serialization.in
+    Shared/glib/DMABufRendererBufferMode.serialization.in
+    Shared/glib/InputMethodState.serialization.in
+    Shared/glib/UserMessage.serialization.in
+)
+
+list(APPEND WebCore_SERIALIZATION_IN_FILES SoupNetworkProxySettings.serialization.in)
 
 list(APPEND WebKit_DERIVED_SOURCES
     ${WebKitGTK_DERIVED_SOURCES_DIR}/InspectorGResourceBundle.c
@@ -280,6 +289,7 @@ list(APPEND WebKit_PRIVATE_INCLUDE_DIRECTORIES
     "${WEBKIT_DIR}/UIProcess/Inspector/glib"
     "${WEBKIT_DIR}/UIProcess/Inspector/gtk"
     "${WEBKIT_DIR}/UIProcess/Notifications/glib/"
+    "${WEBKIT_DIR}/UIProcess/cairo"
     "${WEBKIT_DIR}/UIProcess/geoclue"
     "${WEBKIT_DIR}/UIProcess/glib"
     "${WEBKIT_DIR}/UIProcess/gstreamer"
@@ -296,6 +306,7 @@ list(APPEND WebKit_PRIVATE_INCLUDE_DIRECTORIES
     "${WEBKIT_DIR}/WebProcess/WebCoreSupport/soup"
     "${WEBKIT_DIR}/WebProcess/WebPage/CoordinatedGraphics"
     "${WEBKIT_DIR}/WebProcess/WebPage/gtk"
+    "${WEBKIT_DIR}/WebProcess/WebPage/dmabuf"
 )
 
 list(APPEND WebKit_SYSTEM_INCLUDE_DIRECTORIES
@@ -313,15 +324,6 @@ list(APPEND WebKit_INTERFACE_INCLUDE_DIRECTORIES
     ${WebKitGTK_FRAMEWORK_HEADERS_DIR}/webkitgtk-web-process-extension
 )
 
-if (USE_WPE_RENDERER)
-    list(APPEND WebKit_PRIVATE_INCLUDE_DIRECTORIES
-        "${WEBKIT_DIR}/WebProcess/WebPage/libwpe"
-    )
-    list(APPEND WebKit_SYSTEM_INCLUDE_DIRECTORIES
-        ${WPEBACKEND_FDO_INCLUDE_DIRS}
-    )
-endif ()
-
 set(WebKitCommonIncludeDirectories ${WebKit_PRIVATE_INCLUDE_DIRECTORIES})
 set(WebKitCommonSystemIncludeDirectories ${WebKit_SYSTEM_INCLUDE_DIRECTORIES})
 
@@ -336,13 +338,6 @@ list(APPEND NetworkProcess_SOURCES
 list(APPEND GPUProcess_SOURCES
     GPUProcess/EntryPoint/unix/GPUProcessMain.cpp
 )
-
-if (USE_WPE_RENDERER)
-    list(APPEND WebKit_LIBRARIES
-      WPE::libwpe
-      ${WPEBACKEND_FDO_LIBRARIES}
-    )
-endif ()
 
 if (GTK_UNIX_PRINT_FOUND)
     list(APPEND WebKit_LIBRARIES GTK::UnixPrint)
@@ -366,6 +361,12 @@ if (ENABLE_MEDIA_STREAM)
     )
 endif ()
 
+if (GI_VERSION VERSION_GREATER_EQUAL 1.79.2)
+    set(USE_GI_FINISH_FUNC_ANNOTATION 1)
+else ()
+    set(USE_GI_FINISH_FUNC_ANNOTATION 0)
+endif ()
+
 GENERATE_GLIB_API_HEADERS(WebKit WebKitGTK_HEADER_TEMPLATES
     ${WebKitGTK_DERIVED_SOURCES_DIR}/webkit
     WebKitGTK_INSTALLED_HEADERS
@@ -373,7 +374,9 @@ GENERATE_GLIB_API_HEADERS(WebKit WebKitGTK_HEADER_TEMPLATES
     "-DWTF_PLATFORM_WPE=0"
     "-DUSE_GTK4=$<BOOL:${USE_GTK4}>"
     "-DENABLE_2022_GLIB_API=$<BOOL:${ENABLE_2022_GLIB_API}>"
+    "-DUSE_GI_FINISH_FUNC_ANNOTATION=${USE_GI_FINISH_FUNC_ANNOTATION}"
 )
+unset(USE_GI_FINISH_FUNC_ANNOTATION)
 
 GENERATE_GLIB_API_HEADERS(WebKit WebKitWebProcessExtension_HEADER_TEMPLATES
     ${WebKitGTK_DERIVED_SOURCES_DIR}/webkit

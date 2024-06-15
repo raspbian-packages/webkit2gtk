@@ -30,7 +30,6 @@
 
 #include "ArgumentCodersGtk.h"
 #include "MessageSenderInlines.h"
-#include "ShareableBitmap.h"
 #include "WebPage.h"
 #include "WebPageProxyMessages.h"
 #include <WebCore/CairoOperations.h>
@@ -39,6 +38,7 @@
 #include <WebCore/GraphicsContext.h>
 #include <WebCore/Pasteboard.h>
 #include <WebCore/SelectionData.h>
+#include <WebCore/ShareableBitmap.h>
 #include <cairo.h>
 
 namespace WebKit {
@@ -63,23 +63,21 @@ void WebDragClient::didConcludeEditDrag()
 {
 }
 
-void WebDragClient::startDrag(DragItem item, DataTransfer& dataTransfer, LocalFrame&)
+void WebDragClient::startDrag(DragItem dragItem, DataTransfer& dataTransfer, Frame&)
 {
-    auto& dragImage = item.image;
-    RefPtr<ShareableBitmap> bitmap = convertCairoSurfaceToShareableBitmap(dragImage.get().get());
-    ShareableBitmap::Handle handle;
+    auto& dragImage = dragItem.image;
+    auto bitmap = convertCairoSurfaceToShareableBitmap(dragImage.get().get());
+    std::optional<ShareableBitmap::Handle> handle;
 
     if (bitmap) {
-        if (auto imageHandle = bitmap->createHandle())
-            handle = WTFMove(*imageHandle);
-        else {
-            // If we have a bitmap, but cannot create a handle to it, we fail early.
+        handle = bitmap->createHandle();
+
+        // If we have a bitmap, but cannot create a handle to it, we fail early.
+        if (!handle)
             return;
-        }
     }
 
     m_page->willStartDrag();
-
     m_page->send(Messages::WebPageProxy::StartDrag(dataTransfer.pasteboard().selectionData(), dataTransfer.sourceOperationMask(), WTFMove(handle), dataTransfer.dragLocation()));
 }
 

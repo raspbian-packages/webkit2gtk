@@ -1,13 +1,130 @@
-webkit2gtk (2.42.2-1+rpi1) trixie-staging; urgency=medium
+webkit2gtk (2.44.2-1+rpi1) trixie-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
-  [changes introuced in 2.40.0-3+rpi1 by Peter Michael Green]
-  * Disable webgl on armhf.
+ -- Peter Michael Green <plugwash@raspbian.org>  Sat, 15 Jun 2024 23:32:02 +0000
 
- -- Raspbian forward porter <root@raspbian.org>  Thu, 16 Nov 2023 12:11:59 +0000
+webkit2gtk (2.44.2-1) unstable; urgency=high
+
+  * New upstream release.
+  * debian/upstream/signing-key.asc:
+    - Replace Carlos Garcia's DSA key with the new RSA one.
+
+ -- Alberto Garcia <berto@igalia.com>  Thu, 16 May 2024 14:09:54 +0200
+
+webkit2gtk (2.44.1-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Re-enable WebGL on armel.
+    - debian/rules: stop using -DENABLE_WEBGL=OFF on armel, powerpc and
+      sh4.
+  * debian/patches/fix-ftbfs-i386.patch:
+    - Drop this patch, it is included in this release.
+
+ -- Alberto Garcia <berto@igalia.com>  Tue, 09 Apr 2024 14:09:50 +0200
+
+webkit2gtk (2.44.0-2) unstable; urgency=high
+
+  * The WebKitGTK security advisory WSA-2024-0002 lists the following
+    security fixes in the latest versions of WebKitGTK:
+    - CVE-2024-23252, CVE-2024-23254, CVE-2024-23263, CVE-2024-23280,
+      CVE-2024-23284, CVE-2023-42950, CVE-2023-42956, CVE-2023-42843
+      (fixed in 2.44.0).
+  * debian/patches/fix-ftbfs-riscv64.patch:
+    - Treat riscv64 as an unknown CPU to fix a FTBFS in JavaScriptCore
+      (webkit bug #271371).
+
+ -- Alberto Garcia <berto@igalia.com>  Wed, 27 Mar 2024 22:57:51 +0100
+
+webkit2gtk (2.44.0-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Stop building the 4.0 API packages.
+    - debian/rules: Set ENABLE_SOUP2=NO
+    - debian/control.in: Remove build dependency on ccache.
+  * Replace debian/patches/fix-ftbfs-i386.patch with a new patch for this
+    version.
+  * debian/control.in:
+    - Build depend on libsoup-3.0-doc instead of libsoup2.4-doc.
+    - Enable the bubblewrap sandbox only in the architectures where
+      libseccomp is working (Closes: #1067643).
+  * Bring all changes from the 2.43 (experimental) branch.
+  * debian/gbp.conf:
+    - Update upstream branch name.
+  * debian/control.in:
+    - Add build dependency on libdrm-dev.
+    - Replace gobject-introspection with gobject-introspection-bin.
+    - Remove build dependendency on libwpebackend-fdo, upstream no longer
+      uses it.
+    - And missing ${gir:Depends} and ${gir:Provides} to the -dev and
+      gir1.2 packages.
+  * debian/rules:
+    - GTK4 is now the default, pass -DUSE_GTK4=OFF to the GTK3 builds.
+    - Build with -DUSE_LIBDRM=OFF in the Hurd.
+    - Build with -DUSE_LIBBACKTRACE=OFF.
+  * Use the documentation from the 6.0 API build and update path of
+    installed docs, upstream no longer uses the gtk-doc dir (see webkit
+    bug #265133).
+  * Rename libwebkit2gtk-4.0-doc to libwebkitgtk-doc and
+    libjavascriptcoregtk-4.0-bin to libjavascriptcoregtk-bin.
+    - debian/control.in: add the necessary Conflicts / Breaks / Replaces.
+    - debian/control-doc.in: control file for the transitional package.
+    - debian/control-jscbin.in: control file for the transitional package.
+    - Rename debian/libwebkit2gtk-4.0-doc.* -> libwebkitgtk-doc.*
+    - Remove debian/libjavascriptcoregtk-4.0-bin.*
+    - debian/rules: Add the USE_OLD_DOC_PKG and USE_OLD_JSCBIN_PKG
+      variables and the logic to decide which packages to build.
+  * Refresh debian/patches/disable-dmabuf-nvidia.patch.
+  * debian/source/lintian-overrides:
+    - Update source-is-missing overrides.
+  * debian/copyright:
+    - Update copyright information of all files.
+
+ -- Alberto Garcia <berto@igalia.com>  Mon, 25 Mar 2024 11:33:58 +0100
+
+webkit2gtk (2.42.5-2) unstable; urgency=medium
+
+  * debian/rules:
+    - Don't copy CFLAGS to CXXFLAGS: -Werror=implicit-function-declaration
+      (default since dpkg 1.22.6) causes a FTBFS when added to the latter
+      (Closes: #1066411).
+    - Don't use ccache on the gtk4 build since it won't reuse any results
+      from the gtk3 builds.
+
+ -- Alberto Garcia <berto@igalia.com>  Thu, 14 Mar 2024 18:45:04 +0100
+
+webkit2gtk (2.42.5-1) unstable; urgency=high
+
+  * New upstream release.
+  * debian/copyright:
+    - Update copyright information of all files.
+  * debian/rules:
+    - Remove last empty line from debian/control.
+  * debian/patches/fix-ftbfs-i386.patch:
+    - i386 build fix.
+
+ -- Alberto Garcia <berto@igalia.com>  Mon, 05 Feb 2024 11:55:25 +0100
+
+webkit2gtk (2.42.4-1) unstable; urgency=high
+
+  * New upstream release.
+
+ -- Alberto Garcia <berto@igalia.com>  Fri, 15 Dec 2023 10:58:35 +0100
+
+webkit2gtk (2.42.3-1) unstable; urgency=high
+
+  * New upstream release.
+  * Drop tweaks for some arches that are unsupported or haven't worked in
+    a long time: ia64, m68k, kfreebsd, mips and mipsel.
+  * Refresh all patches.
+  * debian/control.in:
+    - Set the debhelper compatibility level to 13.
+  * debian/rules:
+    - Stop overriding dh_missing, no longer needed with dh compat 13.
+
+ -- Alberto Garcia <berto@igalia.com>  Tue, 05 Dec 2023 14:28:29 +0100
 
 webkit2gtk (2.42.2-1) unstable; urgency=high
 

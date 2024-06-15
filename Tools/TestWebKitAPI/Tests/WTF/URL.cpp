@@ -653,4 +653,23 @@ TEST_F(WTF_URL, IsolatedCopy)
     EXPECT_EQ(url2Copy.string().impl(), originalStringImpl); // Should have adopted the StringImpl of url2.
 }
 
+TEST_F(WTF_URL, MoveInvalidatesURL)
+{
+    URL url1 { "http://www.apple.com"_str };
+    EXPECT_TRUE(url1.isValid());
+    URL url2 { WTFMove(url1) };
+    EXPECT_TRUE(url2.isValid());
+    IGNORE_CLANG_STATIC_ANALYZER_USE_AFTER_MOVE_ATTRIBUTE
+    EXPECT_FALSE(url1.isValid());
+
+    URL url3 { "http://www.webkit.org"_str };
+    url3 = WTFMove(url2);
+    EXPECT_TRUE(url3.isValid());
+    IGNORE_CLANG_STATIC_ANALYZER_USE_AFTER_MOVE_ATTRIBUTE
+    EXPECT_FALSE(url2.isValid());
+
+    url3 = { };
+    EXPECT_FALSE(url3.isValid());
+}
+
 } // namespace TestWebKitAPI

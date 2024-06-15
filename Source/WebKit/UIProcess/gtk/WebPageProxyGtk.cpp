@@ -39,6 +39,7 @@
 #include <WebCore/PlatformDisplay.h>
 #include <WebCore/PlatformEvent.h>
 #include <wtf/NeverDestroyed.h>
+#include <wtf/glib/Sandbox.h>
 
 namespace WebKit {
 
@@ -54,8 +55,9 @@ GtkWidget* WebPageProxy::viewWidget()
 void WebPageProxy::bindAccessibilityTree(const String& plugID)
 {
 #if USE(GTK4)
-    // FIXME: We need a way to override accessible interface of WebView and send the atspi reference to the web process.
-    ASSERT_NOT_IMPLEMENTED_YET();
+    // FIXME(273245): Make a11y work under Flatpak.
+    if (!isInsideFlatpak())
+        webkitWebViewBaseSetPlugID(WEBKIT_WEB_VIEW_BASE(viewWidget()), plugID);
 #else
     auto* accessible = gtk_widget_get_accessible(viewWidget());
     atk_socket_embed(ATK_SOCKET(accessible), const_cast<char*>(plugID.utf8().data()));
@@ -75,11 +77,6 @@ void WebPageProxy::didUpdateEditorState(const EditorState&, const EditorState& n
 void WebPageProxy::setInputMethodState(std::optional<InputMethodState>&& state)
 {
     webkitWebViewBaseSetInputMethodState(WEBKIT_WEB_VIEW_BASE(viewWidget()), WTFMove(state));
-}
-
-bool WebPageProxy::makeGLContextCurrent()
-{
-    return webkitWebViewBaseMakeGLContextCurrent(WEBKIT_WEB_VIEW_BASE(viewWidget()));
 }
 
 void WebPageProxy::showEmojiPicker(const WebCore::IntRect& caretRect, CompletionHandler<void(String)>&& completionHandler)
@@ -142,6 +139,16 @@ OptionSet<WebCore::PlatformEvent::Modifier> WebPageProxy::currentStateOfModifier
     if (capsLockActive)
         modifiers.add(WebCore::PlatformEvent::Modifier::CapsLockKey);
     return modifiers;
+}
+
+void WebPageProxy::callAfterNextPresentationUpdate(CompletionHandler<void()>&& callback)
+{
+    if (!hasRunningProcess() || !m_drawingArea) {
+        callback();
+        return;
+    }
+
+    webkitWebViewBaseCallAfterNextPresentationUpdate(WEBKIT_WEB_VIEW_BASE(viewWidget()), WTFMove(callback));
 }
 
 } // namespace WebKit

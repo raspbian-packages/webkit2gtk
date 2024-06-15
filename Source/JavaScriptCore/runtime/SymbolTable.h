@@ -469,10 +469,7 @@ public:
     static constexpr bool needsDestruction = true;
     static void destroy(JSCell*);
 
-    static Structure* createStructure(VM& vm, JSGlobalObject* globalObject, JSValue prototype)
-    {
-        return Structure::create(vm, globalObject, prototype, TypeInfo(CellType, StructureFlags), info());
-    }
+    inline static Structure* createStructure(VM&, JSGlobalObject*, JSValue);
 
     // You must hold the lock until after you're done with the iterator.
     Map::iterator find(const ConcurrentJSLocker&, UniquedStringImpl* key)
@@ -680,6 +677,7 @@ public:
                 return false;
             m_arguments.set(vm, this, table);
         }
+
         return true;
     }
 
@@ -699,6 +697,16 @@ public:
         return true;
     }
     
+    void prepareToWatchScopedArgument(SymbolTableEntry& entry, uint32_t i)
+    {
+        entry.prepareToWatch();
+        if (!m_arguments)
+            return;
+
+        WatchpointSet* watchpoints = entry.watchpointSet();
+        m_arguments->trySetWatchpointSet(i, watchpoints);
+    }
+
     ScopedArgumentsTable* arguments() const
     {
         if (!m_arguments)
@@ -749,6 +757,10 @@ public:
     DECLARE_VISIT_CHILDREN;
 
     DECLARE_EXPORT_INFO;
+
+#if ASSERT_ENABLED
+    bool hasScopedWatchpointSet(WatchpointSet*);
+#endif
 
     void finalizeUnconditionally(VM&, CollectionScope);
     void dump(PrintStream&) const;

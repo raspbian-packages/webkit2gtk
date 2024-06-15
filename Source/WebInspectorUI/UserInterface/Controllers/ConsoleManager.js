@@ -44,6 +44,8 @@ WI.ConsoleManager = class ConsoleManager extends WI.Object
         this._snippets = new Set;
         this._restoringSnippets = false;
 
+        this._failedSourceMapConsoleMessages = new Set;
+
         WI.ConsoleSnippet.addEventListener(WI.SourceCode.Event.ContentDidChange, this._handleSnippetContentChanged, this);
 
         WI.Frame.addEventListener(WI.Frame.Event.MainResourceDidChange, this._mainResourceDidChange, this);
@@ -88,6 +90,7 @@ WI.ConsoleManager = class ConsoleManager extends WI.Object
     get errorCount() { return this._errorCount; }
     get snippets() { return this._snippets; }
     get customLoggingChannels() { return this._customLoggingChannels; }
+    get failedSourceMapConsoleMessages() { return this._failedSourceMapConsoleMessages; }
 
     issuesForSourceCode(sourceCode)
     {
@@ -163,6 +166,8 @@ WI.ConsoleManager = class ConsoleManager extends WI.Object
             this._issues.push(issue);
 
             this.dispatchEventToListeners(WI.ConsoleManager.Event.IssueAdded, {issue});
+
+            this._collectFailedSourceMapConsoleMessage(message);
         }
     }
 
@@ -175,6 +180,7 @@ WI.ConsoleManager = class ConsoleManager extends WI.Object
         }
 
         WI.ConsoleCommandResultMessage.clearMaximumSavedResultIndex();
+        WI.javaScriptRuntimeCompletionProvider.clearCachedPropertyNames();
 
         // COMPATIBILITY (iOS 16.4, macOS 13.3): `Console.ClearReason` did not exist.
         if (!reason) {
@@ -270,6 +276,18 @@ WI.ConsoleManager = class ConsoleManager extends WI.Object
         this._lastMessageLevel = null;
 
         this.dispatchEventToListeners(WI.ConsoleManager.Event.Cleared);
+    }
+    
+    _collectFailedSourceMapConsoleMessage(message)
+    {
+        if (!WI.settings.experimentalGroupSourceMapErrors.value)
+            return;
+    
+        if (message.source !== WI.ConsoleMessage.MessageSource.Network && message.level !== WI.ConsoleMessage.MessageLevel.Error)
+            return;
+    
+        if (WI.networkManager.isSourceMapURL(message.url))
+            this._failedSourceMapConsoleMessages.add(message);
     }
 
     _delayedMessagesCleared()

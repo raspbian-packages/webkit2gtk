@@ -7,21 +7,23 @@ Index: webkitgtk/Source/WebKit/UIProcess/gtk/AcceleratedBackingStoreDMABuf.cpp
 ===================================================================
 --- webkitgtk.orig/Source/WebKit/UIProcess/gtk/AcceleratedBackingStoreDMABuf.cpp
 +++ webkitgtk/Source/WebKit/UIProcess/gtk/AcceleratedBackingStoreDMABuf.cpp
-@@ -38,11 +38,13 @@
+@@ -37,6 +37,7 @@
  #include <WebCore/GLContext.h>
  #include <WebCore/IntRect.h>
  #include <WebCore/PlatformDisplay.h>
 +#include <WebCore/PlatformDisplaySurfaceless.h>
+ #include <WebCore/ShareableBitmap.h>
+ #include <WebCore/SharedMemory.h>
  #include <epoxy/egl.h>
- #include <wtf/glib/GUniquePtr.h>
+@@ -44,6 +45,7 @@
+ #include <wtf/glib/WTFGType.h>
  
  #if USE(GBM)
- #include <WebCore/DMABufFormat.h>
 +#include <WebCore/PlatformDisplayGBM.h>
+ #include <drm_fourcc.h>
  #include <gbm.h>
- static constexpr uint64_t s_dmabufInvalidModifier = uint64_t(WebCore::DMABufFormat::Modifier::Invalid);
- #else
-@@ -55,6 +57,29 @@ static constexpr uint64_t s_dmabufInvali
+ 
+@@ -58,6 +60,29 @@ static constexpr uint64_t s_dmabufInvali
  
  namespace WebKit {
  
@@ -51,7 +53,7 @@ Index: webkitgtk/Source/WebKit/UIProcess/gtk/AcceleratedBackingStoreDMABuf.cpp
  OptionSet<DMABufRendererBufferMode> AcceleratedBackingStoreDMABuf::rendererBufferMode()
  {
      static OptionSet<DMABufRendererBufferMode> mode;
-@@ -70,6 +95,9 @@ OptionSet<DMABufRendererBufferMode> Acce
+@@ -73,6 +98,9 @@ OptionSet<DMABufRendererBufferMode> Acce
              return;
          }
  
@@ -60,4 +62,4 @@ Index: webkitgtk/Source/WebKit/UIProcess/gtk/AcceleratedBackingStoreDMABuf.cpp
 +
          mode.add(DMABufRendererBufferMode::SharedMemory);
  
-         const auto& eglExtensions = WebCore::PlatformDisplay::sharedDisplay().eglExtensions();
+         const char* forceSHM = getenv("WEBKIT_DMABUF_RENDERER_FORCE_SHM");

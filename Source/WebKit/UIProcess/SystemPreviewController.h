@@ -31,6 +31,7 @@
 #include <WebCore/FrameLoaderTypes.h>
 #include <WebCore/IntRect.h>
 #include <WebCore/ResourceError.h>
+#include <wtf/BlockPtr.h>
 #include <wtf/RetainPtr.h>
 #include <wtf/URL.h>
 #include <wtf/WeakPtr.h>
@@ -44,6 +45,10 @@ OBJC_CLASS _WKPreviewControllerDelegate;
 OBJC_CLASS _WKSystemPreviewDataTaskDelegate;
 #endif
 
+namespace WebCore {
+class SecurityOriginData;
+}
+
 namespace WebKit {
 
 class WebPageProxy;
@@ -55,7 +60,7 @@ public:
 
     bool canPreview(const String& mimeType) const;
 
-    void begin(const URL&, const WebCore::SystemPreviewInfo&, CompletionHandler<void()>&&);
+    void begin(const URL&, const WebCore::SecurityOriginData& topOrigin, const WebCore::SystemPreviewInfo&, CompletionHandler<void()>&&);
     void updateProgress(float);
     void loadStarted(const URL& localFileURL);
     void loadCompleted(const URL& localFileURL);
@@ -80,9 +85,7 @@ private:
         Initial,
         Began,
         Loading,
-        Failed,
-        Succeeded,
-        Ended
+        Viewing
     };
 
     State m_state { State::Initial };
@@ -101,6 +104,8 @@ private:
 
     std::unique_ptr<ProcessThrottler::BackgroundActivity> m_activity;
     CompletionHandler<void(bool)> m_testingCallback;
+    BlockPtr<void(bool)> m_allowPreviewCallback;
+    double m_showPreviewDelay { 0 };
 
 };
 

@@ -33,13 +33,14 @@
 #include "WebProcess.h"
 #include <WebCore/Document.h>
 #include <WebCore/LibWebRTCUtils.h>
+#include <wtf/EnumTraits.h>
 
 namespace WebKit {
 using namespace WebCore;
 
 LibWebRTCNetworkManager* LibWebRTCNetworkManager::getOrCreate(WebCore::ScriptExecutionContextIdentifier identifier)
 {
-    auto* document = Document::allDocumentsMap().get(identifier);
+    RefPtr document = Document::allDocumentsMap().get(identifier);
     if (!document)
         return nullptr;
 
@@ -123,7 +124,11 @@ void LibWebRTCNetworkManager::StopUpdating()
 
 webrtc::MdnsResponderInterface* LibWebRTCNetworkManager::GetMdnsResponder() const
 {
+#if PLATFORM(GTK) || PLATFORM(WPE)
+    return nullptr;
+#else
     return m_useMDNSCandidates ? const_cast<LibWebRTCNetworkManager*>(this) : nullptr;
+#endif
 }
 
 void LibWebRTCNetworkManager::networksChanged(const Vector<RTCNetwork>& networks, const RTCNetwork::IPAddress& ipv4, const RTCNetwork::IPAddress& ipv6)
@@ -142,7 +147,7 @@ void LibWebRTCNetworkManager::networksChanged(const Vector<RTCNetwork>& networks
         filteredNetworks = networks;
     else {
         for (auto& network : networks) {
-            if (WTF::anyOf(network.ips, [&](const auto& ip) { return ipv4.value == ip || ipv6.value == ip; }) || (!m_useMDNSCandidates && m_enableEnumeratingVisibleNetworkInterfaces && m_allowedInterfaces.contains(String::fromUTF8(network.name.c_str()))))
+            if (WTF::anyOf(network.ips, [&](const auto& ip) { return ipv4.rtcAddress() == ip.rtcAddress() || ipv6.rtcAddress() == ip.rtcAddress(); }) || (!m_useMDNSCandidates && m_enableEnumeratingVisibleNetworkInterfaces && m_allowedInterfaces.contains(String::fromUTF8(network.name.data(), network.name.size()))))
                 filteredNetworks.append(network);
         }
     }
@@ -153,7 +158,7 @@ void LibWebRTCNetworkManager::networksChanged(const Vector<RTCNetwork>& networks
             networkList[index] = std::make_unique<rtc::Network>(networks[index].value());
 
         bool hasChanged;
-        set_default_local_addresses(ipv4.value, ipv6.value);
+        set_default_local_addresses(ipv4.rtcAddress(), ipv6.rtcAddress());
         MergeNetworkList(WTFMove(networkList), &hasChanged);
         if (hasChanged || forceSignaling)
             SignalNetworksChanged();
@@ -192,7 +197,7 @@ void LibWebRTCNetworkManager::CreateNameForAddress(const rtc::IPAddress& address
 
         WebProcess::singleton().libWebRTCNetwork().mdnsRegister().registerMDNSName(weakThis->m_documentIdentifier, fromStdString(address.ToString()), [address, callback = std::move(callback)](auto name, auto error) mutable {
             WebCore::LibWebRTCProvider::callOnWebRTCNetworkThread([address, callback = std::move(callback), name = WTFMove(name).isolatedCopy(), error] {
-                RELEASE_LOG_ERROR_IF(error, WebRTC, "MDNS registration of a host candidate failed with error %d", *error);
+                RELEASE_LOG_ERROR_IF(error, WebRTC, "MDNS registration of a host candidate failed with error %hhu", enumToUnderlyingType(*error));
                 // In case of error, we provide the name to let gathering complete.
                 callback(address, name.utf8().data());
             });
