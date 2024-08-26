@@ -50,6 +50,10 @@
 #include <glib.h>
 #endif
 
+#if OS(HURD)
+#define PATH_MAX 4096
+#endif
+
 namespace WTF {
 
 namespace FileSystemImpl {
