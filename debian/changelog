@@ -1,10 +1,31 @@
-webkit2gtk (2.44.2-1+rpi1) trixie-staging; urgency=medium
+webkit2gtk (2.44.3-1+rpi1) trixie-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
- -- Peter Michael Green <plugwash@raspbian.org>  Sat, 15 Jun 2024 23:32:02 +0000
+ -- Raspbian forward porter <root@raspbian.org>  Sat, 07 Sep 2024 01:54:41 +0000
+
+webkit2gtk (2.44.3-1) unstable; urgency=high
+
+  * New upstream release.
+  * The WebKitGTK security advisory WSA-2024-0004 lists the following
+    security fixes in the latest versions of WebKitGTK:
+    - CVE-2024-40776, CVE-2024-40779, CVE-2024-40780, CVE-2024-40782,
+      CVE-2024-40785, CVE-2024-40789, CVE-2024-40794, CVE-2024-4558
+      (fixed in 2.44.3).
+  * debian/patches/fix-clang-build.patch,
+    debian/patches/fix-webasm-crash.patch:
+    - Patches recommended by upstream after 2.44.3 was released.
+  * debian/libwebkit2gtk-4.0-37.symbols:
+    - Update symbols.
+  * debian/control.in:
+    - Update Standards-Version to 4.7.0 (no changes).
+    - Replace gobject-introspection-bin with gobject-introspection. This
+      fixes a lintian error: missing-build-dependency-for-dh-addon gir
+      (does not satisfy gobject-introspection:any | dh-sequence-gir:any)
+
+ -- Alberto Garcia <berto@igalia.com>  Mon, 26 Aug 2024 15:24:02 +0200
 
 webkit2gtk (2.44.2-1) unstable; urgency=high
 
