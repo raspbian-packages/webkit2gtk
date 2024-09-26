@@ -1,10 +1,69 @@
-webkit2gtk (2.44.3-1+rpi1) trixie-staging; urgency=medium
+webkit2gtk (2.46.0-2+rpi1) trixie-staging; urgency=medium
 
   [changes brought forward from 2.6.2+dfsg1-3+rpi1 by Peter Michael Green <plugwash@raspbian.org> at Sun, 25 Jan 2015 02:14:50 +0000]
   * Disable javascript JIT as it doesn't appear to be armv6 compatible
     (at least I assume that is the cause of the assembler errors)
 
- -- Raspbian forward porter <root@raspbian.org>  Sat, 07 Sep 2024 01:54:41 +0000
+ -- Raspbian forward porter <root@raspbian.org>  Thu, 26 Sep 2024 22:26:33 +0000
+
+webkit2gtk (2.46.0-2) unstable; urgency=medium
+
+  * debian/rules:
+    - Use -DUSE_SYSPROF_CAPTURE=OFF in unsupported arches.
+    - Enable bmalloc on armhf, using the system malloc is crashing the web
+      process (Closes: #1082148)
+  * debian/patches/fix-epiphany-ftbfs.patch:
+    - Disable webkit_settings_set_enable_2d_canvas_acceleration on
+      non-Skia builds. This fixes a FTBFS in epiphany-browser
+      (Closes: #1082149).
+  * debian/patches/disable-dmabuf-nvidia.patch:
+    - Bring back this patch (Closes: #1082139), see also #1039720.
+  * debian/patches/fix-bmalloc-armhf.patch:
+    - Fix the armhf build if bmalloc is enabled.
+
+ -- Alberto Garcia <berto@igalia.com>  Thu, 19 Sep 2024 19:11:43 +0200
+
+webkit2gtk (2.46.0-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Bring all changes from the 2.45 (experimental) branch.
+  * Enable sysprof profiling integration on available architectures.
+  * Rename webkit2gtk-driver to webkitgtk-webdriver.
+    - debian/control.in: add the necessary Conflicts / Breaks / Replaces.
+    - debian/control-webdriver.in: control file for the transitional
+      package.
+    - debian/rules: Add USE_OLD_WEBDRIVER_PKG and the logic to decide
+      which packages to build.
+  * debian/rules:
+    - Disable bmalloc in armhf (WebKit bug #278858).
+    - Stop limiting parallel builds on Ubuntu.
+  * debian/copyright:
+    - Update copyright information of all files.
+  * debian/gbp.conf:
+    - Update upstream branch name.
+  * debian/libwebkit2gtk-4.0-37.symbols:
+    - Update symbols.
+  * debian/patches/dont-detect-sse2.patch:
+    - Update this patch.
+  * Remove the following patches:
+    - disable-dmabuf-nvidia.patch: all Nvidia-related bugs are supposed to
+      be fixed upstream.
+    - prefer-pthread.patch: this should not be needed anymore.
+    - reduce-memory-overheads.patch: Override LDFLAGS instead.
+  * debian/source/lintian-overrides:
+    - Update source-is-missing overrides.
+
+ -- Alberto Garcia <berto@igalia.com>  Tue, 17 Sep 2024 15:42:38 +0200
+
+webkit2gtk (2.44.4-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Drop fix-clang-build.patch and fix-webasm-crash.patch.
+  * debian/rules:
+    - Disable dh_dwz, it breaks the build in at least i386 and amd64
+      (see #1081000).
+
+ -- Alberto Garcia <berto@igalia.com>  Mon, 09 Sep 2024 14:22:28 +0200
 
 webkit2gtk (2.44.3-1) unstable; urgency=high
 

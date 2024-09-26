@@ -1,10 +1,8 @@
+fix-ftbfs-riscv64.patch
 fix-ftbfs-sparc64.patch
 fix-ftbfs-x32.patch
-prefer-pthread.patch
 dont-detect-sse2.patch
-reduce-memory-overheads.patch
 fix-ftbfs-hurd.patch
-disable-dmabuf-nvidia.patch
-fix-ftbfs-riscv64.patch
-fix-webasm-crash.patch
-fix-clang-build.patch
+fix-epiphany-ftbfs.patch
+disable-nvidia-dmabuf.patch
+fix-bmalloc-armhf.patch
