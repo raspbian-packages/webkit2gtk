@@ -118,9 +118,11 @@
 /* CPU(X86_64) - AMD64 / Intel64 / x86_64 64-bit */
 #if   defined(__x86_64__) \
     || defined(_M_X64)
+#if !defined(__ILP32__)
 #define WTF_CPU_X86_64 1
 #define WTF_CPU_X86_SSE2 1
 #define WTF_CPU_KNOWN 1
+#endif
 #endif
 
 /* CPU(ARM64) */
