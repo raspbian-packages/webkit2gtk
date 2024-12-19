@@ -550,7 +550,7 @@ inline R roundToNearest(T input)
 {
     static_assert(std::is_floating_point<T>::value);
     static_assert(std::numeric_limits<R>::is_integer);
-#if defined(__aarch64__) || defined(_M_ARM64)
+#if defined(__aarch64__) || defined(_M_ARM64) || defined(__i386__)
     // On armv8, this expression is compiled to a dedicated round-to-nearest instruction
     return static_cast<R>(std::round(input));
 #else
