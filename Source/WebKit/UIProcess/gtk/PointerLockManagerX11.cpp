@@ -29,10 +29,10 @@
 #if PLATFORM(X11)
 
 #include "WebPageProxy.h"
-#include <X11/Xlib.h>
 #include <gtk/gtk.h>
 #include <wtf/TZoneMallocInlines.h>
 #include <wtf/glib/GRefPtr.h>
+#include <X11/Xlib.h>
 
 #if USE(GTK4)
 #include <gdk/x11/gdkx.h>
