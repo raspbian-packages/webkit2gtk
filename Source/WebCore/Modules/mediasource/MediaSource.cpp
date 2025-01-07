@@ -537,6 +537,11 @@ bool MediaSource::isBuffered(const PlatformTimeRanges& ranges) const
 
 void MediaSource::monitorSourceBuffers()
 {
+    if (isClosed())
+        return;
+
+    ASSERT(m_private);
+
     // 2.4.4 SourceBuffer Monitoring
     // https://rawgit.com/w3c/media-source/45627646344eea0170dd1cbc5a3d508ca751abb8/media-source-respec.html#buffer-monitoring
 
@@ -1153,6 +1158,14 @@ bool MediaSource::isClosed() const
 bool MediaSource::isEnded() const
 {
     return readyState() == ReadyState::Ended;
+}
+
+void MediaSource::elementIsShuttingDown()
+{
+    ALWAYS_LOG(LOGIDENTIFIER);
+    m_mediaElement = nullptr;
+    m_sourceopenPending = false;
+    detachFromElement();
 }
 
 void MediaSource::detachFromElement()

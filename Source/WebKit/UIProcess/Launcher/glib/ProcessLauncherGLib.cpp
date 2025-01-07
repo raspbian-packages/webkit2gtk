@@ -55,6 +55,16 @@
 
 namespace WebKit {
 
+void ProcessLauncher::platformDestroy()
+{
+#if OS(LINUX)
+    if (m_pidServerSocket != -1) {
+        close(m_pidServerSocket);
+        m_pidServerSocket = -1;
+    }
+#endif
+}
+
 #if OS(LINUX)
 static bool isFlatpakSpawnUsable()
 {
@@ -225,7 +235,7 @@ void ProcessLauncher::launchProcess()
     // You cannot use bubblewrap within Flatpak or some containers so lets ensure it never happens.
     // Snap can allow it but has its own limitations that require workarounds.
     else if (sandboxEnabled && shouldUseBubblewrap())
-        process = bubblewrapSpawn(launcher.get(), m_launchOptions, argv, &error.outPtr());
+        process = bubblewrapSpawn(launcher.get(), m_launchOptions, m_dbusProxy, argv, &error.outPtr());
 #endif // ENABLE(BUBBLEWRAP_SANDBOX)
     else
 #endif // OS(LINUX)
@@ -242,7 +252,8 @@ void ProcessLauncher::launchProcess()
     // We need to get the pid of the actual WebKit auxiliary process, not the bwrap or flatpak-spawn
     // intermediate process. And do it without blocking, because process launching is slow.
     g_socket_set_blocking(pidSocket.get(), FALSE);
-    m_socketMonitor.start(pidSocket.get(), G_IO_IN, RunLoop::main(), [protectedThis = Ref { *this }, this, pidSocket, serverSocket = webkitSocketPair.server](GIOCondition condition) -> gboolean {
+    m_pidServerSocket = webkitSocketPair.server;
+    m_socketMonitor.start(pidSocket.get(), G_IO_IN, RunLoop::main(), [protectedThis = Ref { *this }, this, pidSocket](GIOCondition condition) -> gboolean {
         if (!(condition & G_IO_IN))
             g_error("Failed to read pid from child process");
 
@@ -251,7 +262,9 @@ void ProcessLauncher::launchProcess()
 
         m_socketMonitor.stop();
 
-        didFinishLaunchingProcess(m_processID, IPC::Connection::Identifier { serverSocket });
+        didFinishLaunchingProcess(m_processID, IPC::Connection::Identifier { m_pidServerSocket });
+        m_pidServerSocket = -1;
+
         return G_SOURCE_REMOVE;
     });
 #else

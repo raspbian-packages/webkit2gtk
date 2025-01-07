@@ -2340,7 +2340,14 @@ void SpeculativeJIT::compileContiguousPutByVal(Node* node)
     StorageOperand storage(this, m_graph.varArgChild(node, 3));
     GPRReg storageReg = storage.gpr();
 
+    ArrayMode arrayMode = node->arrayMode();
     if (node->op() == PutByValAlias) {
+        ASSERT(arrayMode.isInBounds());
+#if ASSERT_ENABLED
+        Jump inBounds = branch32(Below, propertyReg, Address(storageReg, Butterfly::offsetOfPublicLength()));
+        breakpoint();
+        inBounds.link(this);
+#endif
         // Store the value to the array.
         GPRReg propertyReg = property.gpr();
         storeValue(valueRegs, BaseIndex(storageReg, propertyReg, TimesEight));
@@ -2353,7 +2360,6 @@ void SpeculativeJIT::compileContiguousPutByVal(Node* node)
 
     Jump slowCase;
 
-    ArrayMode arrayMode = node->arrayMode();
     if (arrayMode.isInBounds()) {
         speculationCheck(
             OutOfBounds, JSValueRegs(), nullptr,
@@ -2414,6 +2420,13 @@ void SpeculativeJIT::compileDoublePutByVal(Node* node)
     GPRReg storageReg = storage.gpr();
 
     if (node->op() == PutByValAlias) {
+        ASSERT(arrayMode.isInBounds());
+#if ASSERT_ENABLED
+        Jump inBounds = branch32(Below, propertyReg, Address(storageReg, Butterfly::offsetOfPublicLength()));
+        breakpoint();
+        inBounds.link(this);
+#endif
+
         // Store the value to the array.
         GPRReg propertyReg = property.gpr();
         FPRReg valueReg = value.fpr();
@@ -3155,9 +3168,27 @@ static void compileClampDoubleToByte(JITCompiler& jit, GPRReg result, FPRReg sou
 
 JITCompiler::Jump SpeculativeJIT::jumpForTypedArrayOutOfBounds(Node* node, GPRReg baseGPR, GPRReg indexGPR, GPRReg scratchGPR, GPRReg scratch2GPR)
 {
-    if (node->op() == PutByValAlias)
-        return Jump();
     Edge& edge = m_graph.child(node, 0);
+    if (node->op() == PutByValAlias) {
+        ASSERT(node->arrayMode().isInBounds());
+        ASSERT(!node->arrayMode().mayBeResizableOrGrowableSharedTypedArray());
+        ASSERT(m_graph.isNeverResizableOrGrowableSharedTypedArrayIncludingDataView(m_state.forNode(edge)));
+#if ASSERT_ENABLED
+#if USE(LARGE_TYPED_ARRAYS)
+        signExtend32ToPtr(indexGPR, scratchGPR);
+        Jump inBounds = branch64(
+            Below, scratchGPR,
+            Address(baseGPR, JSArrayBufferView::offsetOfLength()));
+#else
+        Jump inBounds = branch32(
+            Below, indexGPR,
+            Address(baseGPR, JSArrayBufferView::offsetOfLength()));
+#endif
+        breakpoint();
+        inBounds.link(this);
+#endif
+        return Jump();
+    }
     JSArrayBufferView* view = m_graph.tryGetFoldableView(m_state.forNode(edge).m_value, node->arrayMode());
     if (view && !view->isResizableOrGrowableShared()) {
         size_t length = view->length();
@@ -3528,6 +3559,14 @@ void SpeculativeJIT::compilePutByValForIntTypedArray(Node* node, TypedArrayType 
         }
     }
 
+    GPRReg scratch2GPR = InvalidGPRReg;
+#if USE(JSVALUE64)
+    if (node->arrayMode().mayBeResizableOrGrowableSharedTypedArray()) {
+        scratch2.emplace(this);
+        scratch2GPR = scratch2->gpr();
+    }
+#endif
+
     bool result = getIntTypedArrayStoreOperand(
         value, propertyReg,
 #if USE(JSVALUE32_64)
@@ -3538,14 +3577,6 @@ void SpeculativeJIT::compilePutByValForIntTypedArray(Node* node, TypedArrayType 
         noResult(node);
         return;
     }
-
-    GPRReg scratch2GPR = InvalidGPRReg;
-#if USE(JSVALUE64)
-    if (node->arrayMode().mayBeResizableOrGrowableSharedTypedArray()) {
-        scratch2.emplace(this);
-        scratch2GPR = scratch2->gpr();
-    }
-#endif
 
     GPRReg valueGPR = value.gpr();
     GPRReg scratchGPR = scratch.gpr();
@@ -13586,6 +13617,7 @@ void SpeculativeJIT::compileEnumeratorNextUpdateIndexAndMode(Node* node)
 
         Label incrementLoop;
         Jump done;
+        constexpr bool preserveIndexReg = true;
         compileHasIndexedProperty(node, operationHasEnumerableIndexedProperty, scopedLambda<std::tuple<GPRReg, GPRReg>()>([&] {
             GPRReg newIndexGPR = newIndex.gpr();
             GPRReg scratchGPR = scratch.gpr();
@@ -13600,7 +13632,7 @@ void SpeculativeJIT::compileEnumeratorNextUpdateIndexAndMode(Node* node)
             initMode.link(this);
             done = branch32(AboveOrEqual, newIndexGPR, Address(enumeratorGPR, JSPropertyNameEnumerator::indexedLengthOffset()));
             return std::make_pair(newIndexGPR, scratchGPR);
-        }));
+        }), preserveIndexReg);
         branchTest32(Zero, scratch.gpr()).linkTo(incrementLoop, this);
 
         done.link(this);
@@ -15350,7 +15382,7 @@ void SpeculativeJIT::compileAllocateNewArrayWithSize(Node* node, GPRReg resultGP
         sizeGPR, storageGPR));
 }
 
-void SpeculativeJIT::compileHasIndexedProperty(Node* node, S_JITOperation_GCZ slowPathOperation, const ScopedLambda<std::tuple<GPRReg, GPRReg>()>& prefix)
+void SpeculativeJIT::compileHasIndexedProperty(Node* node, S_JITOperation_GCZ slowPathOperation, const ScopedLambda<std::tuple<GPRReg, GPRReg>()>& prefix, bool preserveIndexReg)
 {
     auto baseEdge = m_graph.varArgChild(node, 0);
     SpeculateCellOperand base(this, baseEdge);
@@ -15477,7 +15509,34 @@ void SpeculativeJIT::compileHasIndexedProperty(Node* node, S_JITOperation_GCZ sl
     }
     }
 
-    addSlowPathGenerator(slowPathCall(slowCases, this, slowPathOperation, resultGPR, LinkableConstant::globalObject(*this, node), baseGPR, indexGPR));
+    Vector<SilentRegisterSavePlan> savePlans;
+    silentSpillAllRegistersImpl(false, savePlans, resultGPR);
+    Label doneOperationCall = label();
+    addSlowPathGeneratorLambda([=, this, savePlans = WTFMove(savePlans), slowCases = WTFMove(slowCases)]() {
+        slowCases.link(this);
+
+        if (preserveIndexReg)
+            pushToSave(indexGPR);
+        silentSpill(savePlans);
+
+        setupArguments<S_JITOperation_GCZ>(LinkableConstant::globalObject(*this, node), baseGPR, indexGPR);
+        appendCall(slowPathOperation);
+        std::optional<GPRReg> exceptionReg;
+        if (preserveIndexReg)
+            exceptionReg = tryHandleOrGetExceptionUnderSilentSpill<S_JITOperation_GCZ>(savePlans, resultGPR, indexGPR);
+        else
+            exceptionReg = tryHandleOrGetExceptionUnderSilentSpill<S_JITOperation_GCZ>(savePlans, resultGPR);
+        setupResults(resultGPR);
+
+        silentFill(savePlans);
+        if (preserveIndexReg)
+            popToRestore(indexGPR);
+
+        if (exceptionReg)
+            exceptionCheck(*exceptionReg);
+
+        jump().linkTo(doneOperationCall, this);
+    });
 }
 
 void SpeculativeJIT::compileExtractCatchLocal(Node* node)

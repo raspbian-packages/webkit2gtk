@@ -740,7 +740,6 @@ Document::~Document()
     if (RefPtr window = m_domWindow)
         window->resetUnlessSuspendedForDocumentSuspension();
 
-    m_scriptRunner = nullptr;
     m_moduleLoader = nullptr;
 
     removeAllEventListeners();
@@ -1014,7 +1013,7 @@ DocumentFontLoader& Document::ensureFontLoader()
 {
     ASSERT(m_constructionDidFinish);
     ASSERT(!m_fontLoader);
-    m_fontLoader = makeUnique<DocumentFontLoader>(*this);
+    m_fontLoader = makeUniqueWithoutRefCountedCheck<DocumentFontLoader>(*this);
     return *m_fontLoader;
 }
 
@@ -3223,11 +3222,11 @@ void Document::willBeRemovedFromFrame()
     commonTeardown();
 
 #if ENABLE(TOUCH_EVENTS)
-    if (m_touchEventTargets && m_touchEventTargets->computeSize() && parentDocument())
+    if (m_touchEventTargets && m_touchEventTargets->size() && parentDocument())
         protectedParentDocument()->didRemoveEventTargetNode(*this);
 #endif
 
-    if (m_wheelEventTargets && m_wheelEventTargets->computeSize() && parentDocument())
+    if (m_wheelEventTargets && m_wheelEventTargets->size() && parentDocument())
         protectedParentDocument()->didRemoveEventTargetNode(*this);
 
     if (RefPtr mediaQueryMatcher = m_mediaQueryMatcher)
@@ -7232,7 +7231,7 @@ bool Document::isTopDocument() const
 ScriptRunner& Document::ensureScriptRunner()
 {
     ASSERT(!m_scriptRunner);
-    m_scriptRunner = makeUnique<ScriptRunner>(*this);
+    m_scriptRunner = makeUniqueWithoutRefCountedCheck<ScriptRunner>(*this);
     return *m_scriptRunner;
 }
 
@@ -7243,7 +7242,7 @@ ScriptModuleLoader& Document::ensureModuleLoader()
     return *m_moduleLoader;
 }
 
-CheckedRef<ScriptRunner> Document::checkedScriptRunner()
+Ref<ScriptRunner> Document::protectedScriptRunner()
 {
     return scriptRunner();
 }
@@ -7357,7 +7356,7 @@ void Document::finishedParsing()
 
     Ref protectedThis { *this };
 
-    if (CheckedPtr scriptRunner = m_scriptRunner.get())
+    if (RefPtr scriptRunner = m_scriptRunner.get())
         scriptRunner->documentFinishedParsing();
 
     if (!m_eventTiming.domContentLoadedEventStart) {
@@ -7932,7 +7931,7 @@ void Document::suspendScheduledTasks(ReasonForSuspension reason)
 
     suspendScriptedAnimationControllerCallbacks();
     suspendActiveDOMObjects(reason);
-    if (CheckedPtr scriptRunner = m_scriptRunner.get())
+    if (RefPtr scriptRunner = m_scriptRunner.get())
         scriptRunner->suspend();
     m_pendingTasksTimer.stop();
 
@@ -7967,7 +7966,7 @@ void Document::resumeScheduledTasks(ReasonForSuspension reason)
 
     if (!m_pendingTasks.isEmpty())
         m_pendingTasksTimer.startOneShot(0_s);
-    if (CheckedPtr scriptRunner = m_scriptRunner.get())
+    if (RefPtr scriptRunner = m_scriptRunner.get())
         scriptRunner->resume();
     resumeActiveDOMObjects(reason);
     resumeScriptedAnimationControllerCallbacks();
@@ -8405,7 +8404,7 @@ void Document::wheelEventHandlersChanged(Node* node)
     UNUSED_PARAM(node);
 #endif
 
-    bool haveHandlers = m_wheelEventTargets && !m_wheelEventTargets->isEmptyIgnoringNullReferences();
+    bool haveHandlers = m_wheelEventTargets && !m_wheelEventTargets->isEmpty();
     page->chrome().client().wheelEventHandlersChanged(haveHandlers);
 }
 
@@ -8414,7 +8413,7 @@ void Document::didAddWheelEventHandler(Node& node)
     if (!m_wheelEventTargets)
         m_wheelEventTargets = makeUnique<EventTargetSet>();
 
-    m_wheelEventTargets->add(node);
+    m_wheelEventTargets->add(&node);
     wheelEventHandlersChanged(&node);
 
     if (RefPtr frame = this->frame())
@@ -8425,9 +8424,9 @@ static bool removeHandlerFromSet(EventTargetSet& handlerSet, Node& node, EventHa
 {
     switch (removal) {
     case EventHandlerRemoval::One:
-        return handlerSet.remove(node);
+        return handlerSet.remove(&node);
     case EventHandlerRemoval::All:
-        return handlerSet.removeAll(node);
+        return handlerSet.removeAll(&node);
     }
     return false;
 }
@@ -8464,7 +8463,7 @@ void Document::didAddTouchEventHandler(Node& handler)
     if (!m_touchEventTargets)
         m_touchEventTargets = makeUnique<EventTargetSet>();
 
-    m_touchEventTargets->add(handler);
+    m_touchEventTargets->add(&handler);
 
     if (RefPtr parent = parentDocument()) {
         parent->didAddTouchEventHandler(*this);
@@ -8495,15 +8494,15 @@ void Document::didRemoveEventTargetNode(Node& handler)
 {
 #if ENABLE(TOUCH_EVENTS)
     if (m_touchEventTargets) {
-        m_touchEventTargets->removeAll(handler);
-        if ((&handler == this || m_touchEventTargets->isEmptyIgnoringNullReferences()) && parentDocument())
+        m_touchEventTargets->removeAll(&handler);
+        if ((&handler == this || m_touchEventTargets->isEmpty()) && parentDocument())
             protectedParentDocument()->didRemoveEventTargetNode(*this);
     }
 #endif
 
     if (m_wheelEventTargets) {
-        m_wheelEventTargets->removeAll(handler);
-        if ((&handler == this || m_wheelEventTargets->isEmptyIgnoringNullReferences()) && parentDocument())
+        m_wheelEventTargets->removeAll(&handler);
+        if ((&handler == this || m_wheelEventTargets->isEmpty()) && parentDocument())
             protectedParentDocument()->didRemoveEventTargetNode(*this);
     }
 }
@@ -8588,7 +8587,7 @@ Document::RegionFixedPair Document::absoluteRegionForEventTargets(const EventTar
     bool insideFixedPosition = false;
 
     for (auto keyValuePair : *targets) {
-        Ref node = keyValuePair.key;
+        Ref node = *keyValuePair.key;
         auto targetRegionFixedPair = absoluteEventRegionForNode(node);
         targetRegion.unite(targetRegionFixedPair.first);
         insideFixedPosition |= targetRegionFixedPair.second;
@@ -8692,8 +8691,10 @@ Element* eventTargetElementForDocument(Document* document)
     if (!document)
         return nullptr;
 #if ENABLE(FULLSCREEN_API)
+#if ENABLE(VIDEO)
     if (CheckedPtr fullscreenManager = document->fullscreenManagerIfExists(); fullscreenManager && fullscreenManager->isFullscreen() && is<HTMLVideoElement>(fullscreenManager->currentFullscreenElement()))
         return fullscreenManager->currentFullscreenElement();
+#endif
 #endif
     Element* element = document->focusedElement();
     if (!element) {

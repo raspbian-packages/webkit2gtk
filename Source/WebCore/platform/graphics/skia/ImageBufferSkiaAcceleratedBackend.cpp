@@ -139,31 +139,91 @@ void ImageBufferSkiaAcceleratedBackend::getPixelBuffer(const IntRect& srcRect, P
     if (!PlatformDisplay::sharedDisplay().skiaGLContext()->makeContextCurrent())
         return;
 
-    auto info = m_surface->imageInfo();
-    auto data = SkData::MakeUninitialized(info.computeMinByteSize());
-    auto* pixels = static_cast<uint8_t*>(data->writable_data());
-    size_t rowBytes = static_cast<size_t>(info.minRowBytes64());
+    const IntRect backendRect { { }, size() };
+    const auto sourceRectClipped = intersection(backendRect, srcRect);
+    IntRect destinationRect { IntPoint::zero(), sourceRectClipped.size() };
 
-    // Create a SkImageInfo so the readPixels call will convert the RGBA pixels from the surface into BGRA.
-    SkImageInfo imageInfo = SkImageInfo::Make(info.width(), info.height(), SkColorType::kBGRA_8888_SkColorType, SkAlphaType::kPremul_SkAlphaType, colorSpace().platformColorSpace());
-    if (m_surface->readPixels(imageInfo, pixels, rowBytes, 0, 0))
-        ImageBufferBackend::getPixelBuffer(srcRect, pixels, destination);
+    if (srcRect.x() < 0)
+        destinationRect.setX(destinationRect.x() - srcRect.x());
+    if (srcRect.y() < 0)
+        destinationRect.setY(destinationRect.y() - srcRect.y());
+
+    if (destination.size() != sourceRectClipped.size())
+        destination.zeroFill();
+
+    const auto destinationColorType = (destination.format().pixelFormat == PixelFormat::RGBA8)
+        ? SkColorType::kRGBA_8888_SkColorType : SkColorType::kBGRA_8888_SkColorType;
+
+    const auto destinationAlphaType = (destination.format().alphaFormat == AlphaPremultiplication::Premultiplied)
+        ? SkAlphaType::kPremul_SkAlphaType : SkAlphaType::kUnpremul_SkAlphaType;
+
+    auto destinationInfo = SkImageInfo::Make(destination.size().width(), destination.size().height(),
+        destinationColorType, destinationAlphaType, destination.format().colorSpace.platformColorSpace());
+    SkPixmap pixmap(destinationInfo, destination.bytes().data(), destination.size().width() * 4);
+
+    SkPixmap dstPixmap;
+    if (UNLIKELY(!pixmap.extractSubset(&dstPixmap, destinationRect)))
+        return;
+
+    m_surface->readPixels(dstPixmap, sourceRectClipped.x(), sourceRectClipped.y());
 }
 
 void ImageBufferSkiaAcceleratedBackend::putPixelBuffer(const PixelBuffer& pixelBuffer, const IntRect& srcRect, const IntPoint& destPoint, AlphaPremultiplication destFormat)
 {
+    UNUSED_PARAM(destFormat);
+
     if (!PlatformDisplay::sharedDisplay().skiaGLContext()->makeContextCurrent())
         return;
 
-    auto info = m_surface->imageInfo();
-    auto data = SkData::MakeUninitialized(info.computeMinByteSize());
-    auto* pixels = static_cast<uint8_t*>(data->writable_data());
-    ImageBufferBackend::putPixelBuffer(pixelBuffer, srcRect, destPoint, destFormat, pixels);
+    ASSERT(IntRect({ 0, 0 }, pixelBuffer.size()).contains(srcRect));
+    ASSERT(pixelBuffer.format().pixelFormat == PixelFormat::RGBA8 || pixelBuffer.format().pixelFormat == PixelFormat::BGRA8);
+    ASSERT(pixelBuffer.format().alphaFormat == AlphaPremultiplication::Premultiplied || pixelBuffer.format().alphaFormat == AlphaPremultiplication::Unpremultiplied);
 
-    // Create a SkImageInfo so the writePixels call will transform the pixels from BGRA to RGBA when painting.
-    SkImageInfo imageInfo = SkImageInfo::Make(info.width(), info.height(), SkColorType::kBGRA_8888_SkColorType, SkAlphaType::kPremul_SkAlphaType, colorSpace().platformColorSpace());
-    SkPixmap pixmap(imageInfo, pixels, info.minRowBytes64());
-    m_surface->writePixels(pixmap, 0, 0);
+    const auto colorType = (pixelBuffer.format().pixelFormat == PixelFormat::RGBA8)
+        ? SkColorType::kRGBA_8888_SkColorType : SkColorType::kBGRA_8888_SkColorType;
+
+    const auto alphaType = (pixelBuffer.format().alphaFormat == AlphaPremultiplication::Premultiplied)
+        ? SkAlphaType::kPremul_SkAlphaType : SkAlphaType::kUnpremul_SkAlphaType;
+
+    const IntRect backendRect { { }, size() };
+    auto sourceRectClipped = intersection({ IntPoint::zero(), pixelBuffer.size() }, srcRect);
+    auto destinationRect = sourceRectClipped;
+    destinationRect.moveBy(destPoint);
+
+    if (srcRect.x() < 0)
+        destinationRect.setX(destinationRect.x() - srcRect.x());
+    if (srcRect.y() < 0)
+        destinationRect.setY(destinationRect.y() - srcRect.y());
+
+    destinationRect.intersect(backendRect);
+    sourceRectClipped.setSize(destinationRect.size());
+
+    auto pixelBufferInfo = SkImageInfo::Make(pixelBuffer.size().width(), pixelBuffer.size().height(),
+        colorType, alphaType, pixelBuffer.format().colorSpace.platformColorSpace());
+    SkPixmap pixmap(pixelBufferInfo, pixelBuffer.bytes().data(), pixelBuffer.size().width() * 4);
+
+    SkPixmap srcPixmap;
+    if (UNLIKELY(!pixmap.extractSubset(&srcPixmap, sourceRectClipped)))
+        return;
+
+    const auto destAlphaType = (destFormat == AlphaPremultiplication::Premultiplied)
+        ? SkAlphaType::kPremul_SkAlphaType : SkAlphaType::kUnpremul_SkAlphaType;
+
+    // If all the pixels in the source rectangle are opaque, it does not matter which kind
+    // of alpha is involved: the destination pixels will be replaced by the source ones.
+    if (m_surface->imageInfo().alphaType() == destAlphaType || srcPixmap.computeIsOpaque()) {
+        m_surface->writePixels(srcPixmap, destinationRect.x(), destinationRect.y());
+        return;
+    }
+
+    // Fall back to converting, but only the part covered by sourceRectClipped/srcPixmap.
+    auto data = SkData::MakeUninitialized(srcPixmap.computeByteSize());
+    ImageBufferBackend::putPixelBuffer(pixelBuffer, sourceRectClipped, IntPoint::zero(), destFormat,
+        static_cast<uint8_t*>(data->writable_data()));
+    auto convertedSrcInfo = SkImageInfo::Make(srcPixmap.dimensions(), SkColorType::kBGRA_8888_SkColorType,
+        SkAlphaType::kPremul_SkAlphaType, colorSpace().platformColorSpace());
+    SkPixmap convertedSrcPixmap(convertedSrcInfo, data->writable_data(), convertedSrcInfo.minRowBytes64());
+    m_surface->writePixels(convertedSrcPixmap, destinationRect.x(), destinationRect.y());
 }
 
 #if USE(NICOSIA)

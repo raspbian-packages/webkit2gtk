@@ -137,12 +137,15 @@ if (DEVELOPER_MODE AND DEVELOPER_MODE_FATAL_WARNINGS)
 endif ()
 
 if (COMPILER_IS_GCC_OR_CLANG)
-    WEBKIT_APPEND_GLOBAL_COMPILER_FLAGS(-fno-strict-aliasing)
+    if (COMPILER_IS_CLANG OR DEVELOPER_MODE)
+        # Split debug information in ".debug_types" / ".debug_info" sections - this leads
+        # to a smaller overall size of the debug information, and avoids linker relocation
+        # errors on e.g. aarch64 (relocation R_AARCH64_ABS32 out of range: 4312197985 is not in [-2147483648, 4294967295])
+        # But when using GCC this breaks Linux distro debuginfo generation, so limit to DEVELOPER_MODE.
+        WEBKIT_PREPEND_GLOBAL_COMPILER_FLAGS(-fdebug-types-section)
+    endif ()
 
-    # Split debug information in ".debug_types" / ".debug_info" sections - this leads
-    # to a smaller overall size of the debug information, and avoids linker relocation
-    # errors on e.g. aarch64 (relocation R_AARCH64_ABS32 out of range: 4312197985 is not in [-2147483648, 4294967295])
-    WEBKIT_PREPEND_GLOBAL_COMPILER_FLAGS(-fdebug-types-section)
+    WEBKIT_APPEND_GLOBAL_COMPILER_FLAGS(-fno-strict-aliasing)
 
     # clang-cl.exe impersonates cl.exe so some clang arguments like -fno-rtti are
     # represented using cl.exe's options and should not be passed as flags, so
@@ -476,10 +479,6 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "GNU" AND WTF_CPU_MIPS)
     # processor. This is a workaround and does not cover all cases
     # (see comment #28 in the link above).
     WEBKIT_PREPEND_GLOBAL_COMPILER_FLAGS(-mno-lxc1-sxc1)
-endif ()
-
-if (COMPILER_IS_GCC_OR_CLANG)
-    set(COMPILE_C_AS_CXX "-xc++;-std=c++2b")
 endif ()
 
 # FIXME: Enable pre-compiled headers for all ports <https://webkit.org/b/139438>

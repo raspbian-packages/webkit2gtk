@@ -27,10 +27,17 @@
 
 #if ENABLE(MEDIA_STREAM) && ENABLE(WEB_CODECS)
 
+#include "CSSStyleImageValue.h"
 #include "ContextDestructionObserverInlines.h"
+#include "HTMLCanvasElement.h"
+#include "HTMLImageElement.h"
+#include "HTMLVideoElement.h"
+#include "ImageBitmap.h"
 #include "JSWebCodecsVideoFrame.h"
 #include "Logging.h"
+#include "OffscreenCanvas.h"
 #include "ReadableStream.h"
+#include "SVGImageElement.h"
 #include <wtf/Seconds.h>
 #include <wtf/TZoneMallocInlines.h>
 

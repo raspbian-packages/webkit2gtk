@@ -24,58 +24,24 @@
  */
 
 #include "config.h"
+#include "IntRect.h"
 
-#include <algorithm>
-#include <wtf/Assertions.h>
-#include <wtf/FastMalloc.h>
-#include "../../../ThirdParty/skia/include/private/base/SkMalloc.h"
+#if USE(SKIA)
+#include <skia/core/SkRect.h>
 
-void sk_abort_no_print()
+namespace WebCore {
+
+IntRect::IntRect(const SkIRect& r)
+    : m_location(r.left(), r.top())
+    , m_size(r.width(), r.height())
 {
-    CRASH();
 }
 
-void sk_out_of_memory(void)
+IntRect::operator SkIRect() const
 {
-    RELEASE_ASSERT_NOT_REACHED_WITH_MESSAGE("sk_out_of_memory");
+    return { x(), y(), maxX(), maxY() };
 }
 
-void sk_free(void* p)
-{
-    WTF::fastFree(p);
-}
+} // namespace WebCore
 
-void* sk_realloc_throw(void* addr, size_t size)
-{
-    return WTF::fastRealloc(addr, size);
-}
-
-void* sk_malloc_flags(size_t size, unsigned flags)
-{
-    if (flags & SK_MALLOC_ZERO_INITIALIZE) {
-        if (flags & SK_MALLOC_THROW)
-            return WTF::fastZeroedMalloc(size);
-
-        auto result = WTF::tryFastZeroedMalloc(size);
-        void* ptr;
-        if (result.getValue(ptr))
-            return ptr;
-        return nullptr;
-    }
-
-    if (flags & SK_MALLOC_THROW)
-        return WTF::fastMalloc(size);
-
-    auto result = WTF::tryFastMalloc(size);
-    void* ptr;
-    if (result.getValue(ptr))
-        return ptr;
-    return nullptr;
-}
-
-size_t sk_malloc_size(void *ptr, size_t size)
-{
-    // bmalloc/fastMalloc may be disabled either at build time or run
-    // time, and in both cases WTF::fastMallocSize() will return 1.
-    return std::max(WTF::fastMallocSize(ptr), size);
-}
+#endif // USE(SKIA)

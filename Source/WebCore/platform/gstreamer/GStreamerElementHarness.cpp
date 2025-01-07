@@ -111,7 +111,7 @@ GStreamerElementHarness::GStreamerElementHarness(GRefPtr<GstElement>&& element, 
 
     if (hasSometimesSrcPad) {
         GST_DEBUG_OBJECT(m_element.get(), "Expecting output buffers on sometimes src pad(s).");
-        g_signal_connect(m_element.get(), "pad-added", reinterpret_cast<GCallback>(+[](GstElement* element, GstPad* pad, gpointer userData) {
+        g_signal_connect(m_element.get(), "pad-added", reinterpret_cast<GCallback>(+[]([[maybe_unused]] GstElement* element, GstPad* pad, gpointer userData) {
             GST_DEBUG_OBJECT(element, "Pad added: %" GST_PTR_FORMAT, pad);
             auto& harness = *reinterpret_cast<GStreamerElementHarness*>(userData);
             RefPtr<GStreamerElementHarness> downstreamHarness;
@@ -128,7 +128,7 @@ GStreamerElementHarness::GStreamerElementHarness(GRefPtr<GstElement>&& element, 
             harness.dumpGraph("pad-added"_s);
         }), this);
 
-        g_signal_connect(m_element.get(), "pad-removed", reinterpret_cast<GCallback>(+[](GstElement* element, GstPad* pad, gpointer userData) {
+        g_signal_connect(m_element.get(), "pad-removed", reinterpret_cast<GCallback>(+[]([[maybe_unused]] GstElement* element, GstPad* pad, gpointer userData) {
             GST_DEBUG_OBJECT(element, "Pad removed: %" GST_PTR_FORMAT, pad);
             auto& harness = *reinterpret_cast<GStreamerElementHarness*>(userData);
             harness.m_outputStreams.removeAllMatching([pad = GRefPtr<GstPad>(pad)](auto& item) -> bool {
@@ -652,19 +652,18 @@ String MermaidBuilder::describeCaps(const GRefPtr<GstCaps>& caps)
             builder.append('(', WTF::span(serializedFeature.get()), ')');
         }
 
-        gst_structure_foreach(structure, [](GQuark field, const GValue* value, gpointer builderPointer) -> gboolean {
-            auto* builder = reinterpret_cast<StringBuilder*>(builderPointer);
-            builder->append(WTF::span(g_quark_to_string(field)), ": "_s);
+        gstStructureForeach(structure, [&](auto id, const auto value) -> bool {
+            builder.append(gstIdToString(id), ": "_s);
 
             GUniquePtr<char> serializedValue(gst_value_serialize(value));
             String valueString = WTF::span(serializedValue.get());
             if (valueString.length() > 25)
-                builder->append(valueString.substring(0, 25), WTF::span("…"));
+                builder.append(valueString.substring(0, 25), WTF::span("…"));
             else
-                builder->append(valueString);
-            builder->append("<br/>"_s);
+                builder.append(valueString);
+            builder.append("<br/>"_s);
             return TRUE;
-        }, &builder);
+        });
     }
     return builder.toString();
 }

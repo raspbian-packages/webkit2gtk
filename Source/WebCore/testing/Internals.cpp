@@ -5157,6 +5157,11 @@ ExceptionOr<RefPtr<VTTCue>> Internals::mediaElementCurrentlySpokenCue(HTMLMediaE
 }
 #endif
 
+bool Internals::elementIsActiveNowPlayingSession(HTMLMediaElement& element) const
+{
+    return element.isActiveNowPlayingSession();
+}
+
 #endif // ENABLE(VIDEO)
 
 #if ENABLE(WIRELESS_PLAYBACK_TARGET)
@@ -7275,7 +7280,7 @@ String Internals::treeOrder(Node& a, Node& b, TreeType type)
 
 String Internals::treeOrderBoundaryPoints(Node& containerA, unsigned offsetA, Node& containerB, unsigned offsetB, TreeType type)
 {
-    return string(treeOrderForTesting(convertType(type), { containerA, offsetA }, { containerB, offsetB }));
+    return string(treeOrderForTesting(convertType(type), BoundaryPoint( containerA, offsetA ), BoundaryPoint(containerB, offsetB)));
 }
 
 bool Internals::rangeContainsNode(const AbstractRange& range, Node& node, TreeType type)
@@ -7550,10 +7555,12 @@ const String& Internals::defaultSpatialTrackingLabel() const
     return nullString();
 }
 
+#if ENABLE(VIDEO)
 bool Internals::isEffectivelyMuted(const HTMLMediaElement& element)
 {
     return element.effectiveMuted();
 }
+#endif
 
 std::optional<RenderingMode> Internals::getEffectiveRenderingModeOfNewlyCreatedAcceleratedImageBuffer()
 {
