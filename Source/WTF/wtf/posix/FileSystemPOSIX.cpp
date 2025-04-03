@@ -41,18 +41,16 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <wtf/EnumTraits.h>
+#include <wtf/MallocSpan.h>
 #include <wtf/SafeStrerror.h>
 #include <wtf/text/CString.h>
 #include <wtf/text/MakeString.h>
+#include <wtf/text/ParsingUtilities.h>
 #include <wtf/text/StringBuilder.h>
 #include <wtf/text/WTFString.h>
 
 #if USE(GLIB)
 #include <glib.h>
-#endif
-
-#if OS(HURD)
-#define PATH_MAX 4096
 #endif
 
 namespace WTF {
@@ -267,19 +265,21 @@ static const char* temporaryFileDirectory()
 std::pair<String, PlatformFileHandle> openTemporaryFile(StringView prefix, StringView suffix)
 {
     PlatformFileHandle handle = invalidPlatformFileHandle;
-    // Suffix is not supported because that's incompatible with mkstemp.
+    // Suffix is not supported because that's incompatible with mkostemp, mkostemps would be needed for that.
     // This is OK for now since the code using it is built on macOS only.
     ASSERT_UNUSED(suffix, suffix.isEmpty());
 
-    char buffer[PATH_MAX];
-    if (snprintf(buffer, PATH_MAX, "%s/%sXXXXXX", temporaryFileDirectory(), prefix.utf8().data()) >= PATH_MAX)
-        goto end;
+    const char* directory = temporaryFileDirectory();
+    CString prefixUTF8 = prefix.utf8();
+    size_t length = strlen(directory) + 1 + prefixUTF8.length() + 1 + 6 + 1;
+    auto buffer = MallocSpan<char>::malloc(length);
+    snprintf(buffer.mutableSpan().data(), length, "%s/%s-XXXXXX", directory, prefixUTF8.data());
 
-    handle = mkostemp(buffer, O_CLOEXEC);
+    handle = mkostemp(buffer.mutableSpan().data(), O_CLOEXEC);
     if (handle < 0)
         goto end;
 
-    return { String::fromUTF8(buffer), handle };
+    return { String::fromUTF8(buffer.span().data()), handle };
 
 end:
     handle = invalidPlatformFileHandle;
@@ -329,17 +329,17 @@ bool makeAllDirectories(const String& path)
     if (!access(fullPath.data(), F_OK))
         return true;
 
-    char* p = fullPath.mutableData() + 1;
+    auto p = fullPath.mutableSpanIncludingNullTerminator().subspan(1);
     if (p[length - 1] == '/')
         p[length - 1] = '\0';
-    for (; *p; ++p) {
-        if (*p == '/') {
-            *p = '\0';
+    for (; p[0]; skip(p, 1)) {
+        if (p[0] == '/') {
+            p[0] = '\0';
             if (access(fullPath.data(), F_OK)) {
                 if (mkdir(fullPath.data(), S_IRWXU))
                     return false;
             }
-            *p = '/';
+            p[0] = '/';
         }
     }
     if (access(fullPath.data(), F_OK)) {
