@@ -91,7 +91,7 @@ DenormalDisabler::~DenormalDisabler()
     }
 }
 #else
-DenormalDisabler::DenormalDisabler() = default
+DenormalDisabler::DenormalDisabler() = default;
 DenormalDisabler::~DenormalDisabler() = default;
 #endif
 
