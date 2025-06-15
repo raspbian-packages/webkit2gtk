@@ -1,0 +1,1268 @@
+Reverts: https://github.com/WebKit/WebKit/commit/95d71be25d5b838b1171e6b9b2cd526190118fba
+Also reverts: https://github.com/WebKit/WebKit/commit/31a358087be7e5e70c7a03bdfcf89de35628a2a2
+While also applying this migration: https://github.com/WebKit/WebKit/commit/6ef08d1467e4bcf9277ac53a4d84df74906c510e
+
+diff --git a/Source/cmake/OptionsGTK.cmake b/Source/cmake/OptionsGTK.cmake
+index 60b385861a..c0c9cc7baf 100644
+--- a/Source/cmake/OptionsGTK.cmake
++++ b/Source/cmake/OptionsGTK.cmake
+@@ -12,10 +12,10 @@ find_package(Cairo 1.16.0 REQUIRED)
+ find_package(LibGcrypt 1.7.0 REQUIRED)
+ find_package(Libtasn1 REQUIRED)
+ find_package(HarfBuzz 2.7.4 REQUIRED COMPONENTS ICU)
+-find_package(ICU 70.1 REQUIRED COMPONENTS data i18n uc)
++find_package(ICU 67.1 REQUIRED COMPONENTS data i18n uc)
+ find_package(JPEG REQUIRED)
+ find_package(Epoxy 1.5.4 REQUIRED)
+-find_package(LibXml2 2.9.13 REQUIRED)
++find_package(LibXml2 2.9.10 REQUIRED)
+ find_package(PNG REQUIRED)
+ find_package(SQLite3 REQUIRED)
+ find_package(Threads REQUIRED)
+diff --git a/Source/JavaScriptCore/runtime/IntlDateTimeFormat.cpp b/Source/JavaScriptCore/runtime/IntlDateTimeFormat.cpp
+index e3e7671fcf..2f23716496 100644
+--- a/Source/JavaScriptCore/runtime/IntlDateTimeFormat.cpp
++++ b/Source/JavaScriptCore/runtime/IntlDateTimeFormat.cpp
+@@ -42,12 +42,16 @@
+ #include <wtf/unicode/CharacterNames.h>
+ #include <wtf/unicode/icu/ICUHelpers.h>
+ 
++#if HAVE(ICU_U_DATE_INTERVAL_FORMAT_FORMAT_RANGE_TO_PARTS)
+ #include <unicode/uformattedvalue.h>
+ #ifdef U_HIDE_DRAFT_API
+ #undef U_HIDE_DRAFT_API
+ #endif
++#endif // HAVE(ICU_U_DATE_INTERVAL_FORMAT_FORMAT_RANGE_TO_PARTS)
+ #include <unicode/udateintervalformat.h>
++#if HAVE(ICU_U_DATE_INTERVAL_FORMAT_FORMAT_RANGE_TO_PARTS)
+ #define U_HIDE_DRAFT_API 1
++#endif // HAVE(ICU_U_DATE_INTERVAL_FORMAT_FORMAT_RANGE_TO_PARTS)
+ 
+ WTF_ALLOW_UNSAFE_BUFFER_USAGE_BEGIN
+ 
+@@ -1446,6 +1450,8 @@ UDateIntervalFormat* IntlDateTimeFormat::createDateIntervalFormatIfNecessary(JSG
+     return m_dateIntervalFormat.get();
+ }
+ 
++#if HAVE(ICU_U_DATE_INTERVAL_FORMAT_FORMAT_RANGE_TO_PARTS)
++
+ static std::unique_ptr<UFormattedDateInterval, ICUDeleter<udtitvfmt_closeResult>> formattedValueFromDateRange(UDateIntervalFormat& dateIntervalFormat, UDateFormat& dateFormat, double startDate, double endDate, UErrorCode& status)
+ {
+     auto result = std::unique_ptr<UFormattedDateInterval, ICUDeleter<udtitvfmt_closeResult>>(udtitvfmt_openResult(&status));
+@@ -1524,6 +1530,8 @@ static bool dateFieldsPracticallyEqual(const UFormattedValue* formattedValue, UE
+     return !hasSpan;
+ }
+ 
++#endif // HAVE(ICU_U_DATE_INTERVAL_FORMAT_FORMAT_RANGE_TO_PARTS)
++
+ JSValue IntlDateTimeFormat::formatRange(JSGlobalObject* globalObject, double startDate, double endDate)
+ {
+     ASSERT(m_dateFormat);
+@@ -1542,6 +1550,7 @@ JSValue IntlDateTimeFormat::formatRange(JSGlobalObject* globalObject, double sta
+     auto* dateIntervalFormat = createDateIntervalFormatIfNecessary(globalObject);
+     RETURN_IF_EXCEPTION(scope, { });
+ 
++#if HAVE(ICU_U_DATE_INTERVAL_FORMAT_FORMAT_RANGE_TO_PARTS)
+     UErrorCode status = U_ZERO_ERROR;
+     auto result = formattedValueFromDateRange(*dateIntervalFormat, *m_dateFormat, startDate, endDate, status);
+     if (U_FAILURE(status)) {
+@@ -1579,6 +1588,17 @@ JSValue IntlDateTimeFormat::formatRange(JSGlobalObject* globalObject, double sta
+     replaceNarrowNoBreakSpaceOrThinSpaceWithNormalSpace(buffer);
+ 
+     return jsString(vm, String(WTFMove(buffer)));
++#else
++    Vector<UChar, 32> buffer;
++    auto status = callBufferProducingFunction(udtitvfmt_format, dateIntervalFormat, startDate, endDate, buffer, nullptr);
++    if (U_FAILURE(status)) {
++        throwTypeError(globalObject, scope, "Failed to format date interval"_s);
++        return { };
++    }
++    replaceNarrowNoBreakSpaceOrThinSpaceWithNormalSpace(buffer);
++
++    return jsString(vm, String(WTFMove(buffer)));
++#endif
+ }
+ 
+ JSValue IntlDateTimeFormat::formatRangeToParts(JSGlobalObject* globalObject, double startDate, double endDate)
+@@ -1588,6 +1608,7 @@ JSValue IntlDateTimeFormat::formatRangeToParts(JSGlobalObject* globalObject, dou
+     VM& vm = globalObject->vm();
+     auto scope = DECLARE_THROW_SCOPE(vm);
+ 
++#if HAVE(ICU_U_DATE_INTERVAL_FORMAT_FORMAT_RANGE_TO_PARTS)
+     // http://tc39.es/proposal-intl-DateTimeFormat-formatRange/#sec-partitiondatetimerangepattern
+     startDate = timeClip(startDate);
+     endDate = timeClip(endDate);
+@@ -1791,6 +1812,12 @@ JSValue IntlDateTimeFormat::formatRangeToParts(JSGlobalObject* globalObject, dou
+     }
+ 
+     return parts;
++#else
++    UNUSED_PARAM(startDate);
++    UNUSED_PARAM(endDate);
++    throwTypeError(globalObject, scope, "Failed to format date interval"_s);
++    return { };
++#endif
+ }
+ 
+ 
+diff --git a/Source/JavaScriptCore/runtime/IntlDateTimeFormat.h b/Source/JavaScriptCore/runtime/IntlDateTimeFormat.h
+index 121417aab9..14c476c72f 100644
+--- a/Source/JavaScriptCore/runtime/IntlDateTimeFormat.h
++++ b/Source/JavaScriptCore/runtime/IntlDateTimeFormat.h
+@@ -32,6 +32,12 @@
+ 
+ struct UDateIntervalFormat;
+ 
++#if !defined(HAVE_ICU_U_DATE_INTERVAL_FORMAT_FORMAT_RANGE_TO_PARTS)
++#if U_ICU_VERSION_MAJOR_NUM >= 64
++#define HAVE_ICU_U_DATE_INTERVAL_FORMAT_FORMAT_RANGE_TO_PARTS 1
++#endif
++#endif
++
+ namespace JSC {
+ 
+ enum class RelevantExtensionKey : uint8_t;
+diff --git a/Source/JavaScriptCore/runtime/IntlDateTimeFormatPrototype.cpp b/Source/JavaScriptCore/runtime/IntlDateTimeFormatPrototype.cpp
+index b7ef4bab86..694ab7afea 100644
+--- a/Source/JavaScriptCore/runtime/IntlDateTimeFormatPrototype.cpp
++++ b/Source/JavaScriptCore/runtime/IntlDateTimeFormatPrototype.cpp
+@@ -56,7 +56,6 @@ const ClassInfo IntlDateTimeFormatPrototype::s_info = { "Intl.DateTimeFormat"_s,
+ @begin dateTimeFormatPrototypeTable
+   format                intlDateTimeFormatPrototypeGetterFormat              DontEnum|ReadOnly|CustomAccessor
+   formatRange           intlDateTimeFormatPrototypeFuncFormatRange           DontEnum|Function 2
+-  formatRangeToParts    intlDateTimeFormatPrototypeFuncFormatRangeToParts    DontEnum|Function 2
+   formatToParts         intlDateTimeFormatPrototypeFuncFormatToParts         DontEnum|Function 1
+   resolvedOptions       intlDateTimeFormatPrototypeFuncResolvedOptions       DontEnum|Function 0
+ @end
+@@ -83,7 +82,12 @@ void IntlDateTimeFormatPrototype::finishCreation(VM& vm, JSGlobalObject* globalO
+ {
+     Base::finishCreation(vm);
+     ASSERT(inherits(info()));
++#if HAVE(ICU_U_DATE_INTERVAL_FORMAT_FORMAT_RANGE_TO_PARTS)
++    JSC_NATIVE_FUNCTION_WITHOUT_TRANSITION("formatRangeToParts"_s, intlDateTimeFormatPrototypeFuncFormatRangeToParts, static_cast<unsigned>(PropertyAttribute::DontEnum), 2, ImplementationVisibility::Public);
++#else
+     UNUSED_PARAM(globalObject);
++    UNUSED_PARAM(&intlDateTimeFormatPrototypeFuncFormatRangeToParts);
++#endif
+     JSC_TO_STRING_TAG_WITHOUT_TRANSITION();
+ }
+ 
+diff --git a/Source/JavaScriptCore/runtime/IntlDurationFormat.cpp b/Source/JavaScriptCore/runtime/IntlDurationFormat.cpp
+index 61264bfe23..6fb2f54c52 100644
+--- a/Source/JavaScriptCore/runtime/IntlDurationFormat.cpp
++++ b/Source/JavaScriptCore/runtime/IntlDurationFormat.cpp
+@@ -36,14 +36,21 @@
+ // While UListFormatter APIs are draft in ICU 67, they are stable in ICU 68 with the same function signatures.
+ // So we can assume that these signatures of draft APIs are stable.
+ // If UListFormatter is available, UNumberFormatter is also available.
++#if HAVE(ICU_U_LIST_FORMATTER)
+ #ifdef U_HIDE_DRAFT_API
+ #undef U_HIDE_DRAFT_API
+ #endif
++#endif
+ #include <unicode/ulistformatter.h>
+ #include <unicode/unumberformatter.h>
+ #include <unicode/ures.h>
++#if HAVE(ICU_U_LIST_FORMATTER)
+ #define U_HIDE_DRAFT_API 1
++#endif
++
++#if HAVE(ICU_U_LIST_FORMATTER)
+ #include <unicode/uformattedvalue.h>
++#endif
+ 
+ WTF_ALLOW_UNSAFE_BUFFER_USAGE_BEGIN
+ 
+@@ -240,6 +247,7 @@ void IntlDurationFormat::initializeDurationFormat(JSGlobalObject* globalObject,
+     m_fractionalDigits = intlNumberOption(globalObject, options, vm.propertyNames->fractionalDigits, 0, 9, fractionalDigitsUndefinedValue);
+     RETURN_IF_EXCEPTION(scope, void());
+ 
++#if HAVE(ICU_U_LIST_FORMATTER)
+     {
+         auto toUListFormatterWidth = [](Style style) {
+             // 6. Let listStyle be durationFormat.[[Style]].
+@@ -266,8 +274,15 @@ void IntlDurationFormat::initializeDurationFormat(JSGlobalObject* globalObject,
+             return;
+         }
+     }
++#else
++    UNUSED_PARAM(IntlDurationFormatInternal::verbose);
++    throwTypeError(globalObject, scope, "Failed to initialize Intl.DurationFormat since this feature is not supported in the linked ICU version"_s);
++    return;
++#endif
+ }
+ 
++#if HAVE(ICU_U_LIST_FORMATTER)
++
+ static String retrieveSeparator(const CString& locale, const String& numberingSystem)
+ {
+     ASCIILiteral fallbackTimeSeparator = ":"_s;
+@@ -635,12 +650,15 @@ static Vector<Element> collectElements(JSGlobalObject* globalObject, const IntlD
+     return elements;
+ }
+ 
++#endif
++
+ // https://tc39.es/proposal-intl-duration-format/#sec-Intl.DurationFormat.prototype.format
+ JSValue IntlDurationFormat::format(JSGlobalObject* globalObject, ISO8601::Duration duration) const
+ {
+     VM& vm = globalObject->vm();
+     auto scope = DECLARE_THROW_SCOPE(vm);
+ 
++#if HAVE(ICU_U_LIST_FORMATTER)
+     auto elements = collectElements(globalObject, this, WTFMove(duration));
+     RETURN_IF_EXCEPTION(scope, { });
+ 
+@@ -676,6 +694,10 @@ JSValue IntlDurationFormat::format(JSGlobalObject* globalObject, ISO8601::Durati
+         return throwTypeError(globalObject, scope, "failed to format list of strings"_s);
+ 
+     return jsString(vm, String(WTFMove(result)));
++#else
++    UNUSED_PARAM(duration);
++    return throwTypeError(globalObject, scope, "failed to format list of strings"_s);
++#endif
+ }
+ 
+ // https://tc39.es/proposal-intl-duration-format/#sec-Intl.DurationFormat.prototype.formatToParts
+@@ -684,6 +706,7 @@ JSValue IntlDurationFormat::formatToParts(JSGlobalObject* globalObject, ISO8601:
+     VM& vm = globalObject->vm();
+     auto scope = DECLARE_THROW_SCOPE(vm);
+ 
++#if HAVE(ICU_U_LIST_FORMATTER)
+     auto elements = collectElements(globalObject, this, WTFMove(duration));
+     RETURN_IF_EXCEPTION(scope, { });
+ 
+@@ -836,6 +859,10 @@ JSValue IntlDurationFormat::formatToParts(JSGlobalObject* globalObject, ISO8601:
+     }
+ 
+     return parts;
++#else
++    UNUSED_PARAM(duration);
++    return throwTypeError(globalObject, scope, "failed to format list of strings"_s);
++#endif
+ }
+ 
+ // https://tc39.es/proposal-intl-duration-format/#sec-Intl.DurationFormat.prototype.resolvedOptions
+diff --git a/Source/JavaScriptCore/runtime/IntlDurationFormat.h b/Source/JavaScriptCore/runtime/IntlDurationFormat.h
+index 69e64f9c83..b3f781a54a 100644
+--- a/Source/JavaScriptCore/runtime/IntlDurationFormat.h
++++ b/Source/JavaScriptCore/runtime/IntlDurationFormat.h
+@@ -101,7 +101,9 @@ private:
+     static ASCIILiteral unitStyleString(UnitStyle);
+     static ASCIILiteral displayString(Display);
+ 
++#if HAVE(ICU_U_LIST_FORMATTER)
+     std::unique_ptr<UListFormatter, UListFormatterDeleter> m_listFormat;
++#endif
+     String m_locale;
+     String m_numberingSystem;
+     CString m_dataLocaleWithExtensions;
+diff --git a/Source/JavaScriptCore/runtime/IntlListFormat.cpp b/Source/JavaScriptCore/runtime/IntlListFormat.cpp
+index 8fb342027a..c25cc5f9e9 100644
+--- a/Source/JavaScriptCore/runtime/IntlListFormat.cpp
++++ b/Source/JavaScriptCore/runtime/IntlListFormat.cpp
+@@ -33,12 +33,19 @@
+ 
+ // While UListFormatter APIs are draft in ICU 67, they are stable in ICU 68 with the same function signatures.
+ // So we can assume that these signatures of draft APIs are stable.
++#if HAVE(ICU_U_LIST_FORMATTER)
+ #ifdef U_HIDE_DRAFT_API
+ #undef U_HIDE_DRAFT_API
+ #endif
++#endif
+ #include <unicode/ulistformatter.h>
++#if HAVE(ICU_U_LIST_FORMATTER)
+ #define U_HIDE_DRAFT_API 1
++#endif
++
++#if HAVE(ICU_U_LIST_FORMATTER)
+ #include <unicode/uformattedvalue.h>
++#endif
+ 
+ WTF_ALLOW_UNSAFE_BUFFER_USAGE_BEGIN
+ 
+@@ -107,6 +114,7 @@ void IntlListFormat::initializeListFormat(JSGlobalObject* globalObject, JSValue
+     m_style = intlOption<Style>(globalObject, options, vm.propertyNames->style, { { "long"_s, Style::Long }, { "short"_s, Style::Short }, { "narrow"_s, Style::Narrow } }, "style must be either \"long\", \"short\", or \"narrow\""_s, Style::Long);
+     RETURN_IF_EXCEPTION(scope, void());
+ 
++#if HAVE(ICU_U_LIST_FORMATTER)
+     auto toUListFormatterType = [](Type type) {
+         switch (type) {
+         case Type::Conjunction:
+@@ -137,8 +145,13 @@ void IntlListFormat::initializeListFormat(JSGlobalObject* globalObject, JSValue
+         throwTypeError(globalObject, scope, "failed to initialize ListFormat"_s);
+         return;
+     }
++#else
++    throwTypeError(globalObject, scope, "Failed to initialize Intl.ListFormat since this feature is not supported in the linked ICU version"_s);
++    return;
++#endif
+ }
+ 
++#if HAVE(ICU_U_LIST_FORMATTER)
+ static Vector<String, 4> stringListFromIterable(JSGlobalObject* globalObject, JSValue iterable)
+ {
+     Vector<String, 4> result;
+@@ -158,6 +171,7 @@ static Vector<String, 4> stringListFromIterable(JSGlobalObject* globalObject, JS
+     });
+     return result;
+ }
++#endif
+ 
+ // https://tc39.es/proposal-intl-list-format/#sec-Intl.ListFormat.prototype.format
+ JSValue IntlListFormat::format(JSGlobalObject* globalObject, JSValue list) const
+@@ -165,6 +179,7 @@ JSValue IntlListFormat::format(JSGlobalObject* globalObject, JSValue list) const
+     VM& vm = globalObject->vm();
+     auto scope = DECLARE_THROW_SCOPE(vm);
+ 
++#if HAVE(ICU_U_LIST_FORMATTER)
+     auto stringList = stringListFromIterable(globalObject, list);
+     RETURN_IF_EXCEPTION(scope, { });
+ 
+@@ -176,6 +191,10 @@ JSValue IntlListFormat::format(JSGlobalObject* globalObject, JSValue list) const
+         return throwTypeError(globalObject, scope, "failed to format list of strings"_s);
+ 
+     return jsString(vm, String(WTFMove(result)));
++#else
++    UNUSED_PARAM(list);
++    return throwTypeError(globalObject, scope, "failed to format list of strings"_s);
++#endif
+ }
+ 
+ // https://tc39.es/proposal-intl-list-format/#sec-Intl.ListFormat.prototype.formatToParts
+@@ -184,6 +203,7 @@ JSValue IntlListFormat::formatToParts(JSGlobalObject* globalObject, JSValue list
+     VM& vm = globalObject->vm();
+     auto scope = DECLARE_THROW_SCOPE(vm);
+ 
++#if HAVE(ICU_U_LIST_FORMATTER)
+     auto stringList = stringListFromIterable(globalObject, list);
+     RETURN_IF_EXCEPTION(scope, { });
+ 
+@@ -269,6 +289,10 @@ JSValue IntlListFormat::formatToParts(JSGlobalObject* globalObject, JSValue list
+     }
+ 
+     return parts;
++#else
++    UNUSED_PARAM(list);
++    return throwTypeError(globalObject, scope, "failed to format list of strings"_s);
++#endif
+ }
+ 
+ // https://tc39.es/proposal-intl-list-format/#sec-Intl.ListFormat.prototype.resolvedOptions
+diff --git a/Source/JavaScriptCore/runtime/IntlListFormat.h b/Source/JavaScriptCore/runtime/IntlListFormat.h
+index 2d071949e0..af6f2c2e7b 100644
+--- a/Source/JavaScriptCore/runtime/IntlListFormat.h
++++ b/Source/JavaScriptCore/runtime/IntlListFormat.h
+@@ -28,6 +28,12 @@
+ #include "JSObject.h"
+ #include <wtf/unicode/icu/ICUHelpers.h>
+ 
++#if !defined(HAVE_ICU_U_LIST_FORMATTER)
++#if U_ICU_VERSION_MAJOR_NUM >= 67 || (U_ICU_VERSION_MAJOR_NUM >= 66 && USE(APPLE_INTERNAL_SDK))
++#define HAVE_ICU_U_LIST_FORMATTER 1
++#endif
++#endif
++
+ struct UListFormatter;
+ 
+ namespace JSC {
+diff --git a/Source/JavaScriptCore/runtime/IntlNumberFormat.cpp b/Source/JavaScriptCore/runtime/IntlNumberFormat.cpp
+index 67708f1d8d..3e00eeb460 100644
+--- a/Source/JavaScriptCore/runtime/IntlNumberFormat.cpp
++++ b/Source/JavaScriptCore/runtime/IntlNumberFormat.cpp
+@@ -43,8 +43,12 @@
+ #ifdef U_HIDE_DRAFT_API
+ #undef U_HIDE_DRAFT_API
+ #endif
++#if HAVE(ICU_U_NUMBER_FORMATTER)
+ #include <unicode/unumberformatter.h>
++#endif
++#if HAVE(ICU_U_NUMBER_RANGE_FORMATTER)
+ #include <unicode/unumberrangeformatter.h>
++#endif
+ #define U_HIDE_DRAFT_API 1
+ 
+ WTF_ALLOW_UNSAFE_BUFFER_USAGE_BEGIN
+@@ -57,17 +61,21 @@ namespace IntlNumberFormatInternal {
+ static constexpr bool verbose = false;
+ }
+ 
++#if HAVE(ICU_U_NUMBER_FORMATTER)
+ void UNumberFormatterDeleter::operator()(UNumberFormatter* formatter)
+ {
+     if (formatter)
+         unumf_close(formatter);
+ }
++#endif
+ 
++#if HAVE(ICU_U_NUMBER_RANGE_FORMATTER)
+ void UNumberRangeFormatterDeleter::operator()(UNumberRangeFormatter* formatter)
+ {
+     if (formatter)
+         unumrf_close(formatter);
+ }
++#endif
+ 
+ IntlNumberFormat* IntlNumberFormat::create(VM& vm, Structure* structure)
+ {
+@@ -226,10 +234,12 @@ static std::optional<WellFormedUnit> wellFormedUnitIdentifier(StringView unitIde
+     return WellFormedUnit(numeratorUnit.value(), denominatorUnit.value());
+ }
+ 
++#if HAVE(ICU_U_NUMBER_FORMATTER)
+ // We intentionally avoid using ICU's UNUM_APPROXIMATELY_SIGN_FIELD and define the same value here.
+ // UNUM_APPROXIMATELY_SIGN_FIELD can be defined in the header after ICU 71. But dylib ICU can be newer while ICU header version is old.
+ // We can define UNUM_APPROXIMATELY_SIGN_FIELD here so that we can support old ICU header + newer ICU library combination.
+ static constexpr UNumberFormatFields UNUM_APPROXIMATELY_SIGN_FIELD = static_cast<UNumberFormatFields>(UNUM_COMPACT_FIELD + 1);
++#endif
+ 
+ static ASCIILiteral partTypeString(UNumberFormatFields field, IntlNumberFormat::Style style, bool sign, IntlMathematicalValue::NumberType type)
+ {
+@@ -265,6 +275,7 @@ static ASCIILiteral partTypeString(UNumberFormatFields field, IntlNumberFormat::
+         return (style == IntlNumberFormat::Style::Unit) ? "unit"_s : "percentSign"_s;
+     case UNUM_SIGN_FIELD:
+         return sign ? "minusSign"_s : "plusSign"_s;
++#if HAVE(ICU_U_NUMBER_FORMATTER)
+     case UNUM_MEASURE_UNIT_FIELD:
+         return "unit"_s;
+     case UNUM_COMPACT_FIELD:
+@@ -273,6 +284,7 @@ IGNORE_GCC_WARNINGS_BEGIN("switch")
+     case UNUM_APPROXIMATELY_SIGN_FIELD:
+         return "approximatelySign"_s;
+ IGNORE_GCC_WARNINGS_END
++#endif
+     // These should not show up because there is no way to specify them in NumberFormat options.
+     // If they do, they don't fit well into any of known part types, so consider it an "unknown".
+     case UNUM_PERMILL_FIELD:
+@@ -399,6 +411,7 @@ void IntlNumberFormat::initializeNumberFormat(JSGlobalObject* globalObject, JSVa
+ 
+     // Options are obtained. Configure formatter here.
+ 
++#if HAVE(ICU_U_NUMBER_FORMATTER)
+     // Constructing ICU Number Skeletons to configure UNumberFormatter.
+     // https://github.com/unicode-org/icu/blob/master/docs/userguide/format_parse/numbers/skeletons.md
+ 
+@@ -553,11 +566,120 @@ void IntlNumberFormat::initializeNumberFormat(JSGlobalObject* globalObject, JSVa
+         return;
+     }
+ 
++#if HAVE(ICU_U_NUMBER_RANGE_FORMATTER)
+     m_numberRangeFormatter = std::unique_ptr<UNumberRangeFormatter, UNumberRangeFormatterDeleter>(unumrf_openForSkeletonWithCollapseAndIdentityFallback(upconverted.get(), skeletonView.length(), UNUM_RANGE_COLLAPSE_AUTO, UNUM_IDENTITY_FALLBACK_APPROXIMATELY, dataLocaleWithExtensions.data(), nullptr, &status));
+     if (U_FAILURE(status)) {
+         throwTypeError(globalObject, scope, "failed to initialize NumberFormat"_s);
+         return;
+     }
++#endif
++#else
++    UNumberFormatStyle style = UNUM_DEFAULT;
++    switch (m_style) {
++    case Style::Decimal:
++        style = UNUM_DECIMAL;
++        break;
++    case Style::Percent:
++        style = UNUM_PERCENT;
++        break;
++    case Style::Currency:
++        switch (m_currencyDisplay) {
++        case CurrencyDisplay::Code:
++            style = UNUM_CURRENCY_ISO;
++            break;
++        case CurrencyDisplay::Symbol:
++            style = UNUM_CURRENCY;
++            break;
++        case CurrencyDisplay::NarrowSymbol:
++            style = UNUM_CURRENCY; // Use the same option to "symbol" since linked-ICU does not support it.
++            break;
++        case CurrencyDisplay::Name:
++            style = UNUM_CURRENCY_PLURAL;
++            break;
++        }
++        switch (m_currencySign) {
++        case CurrencySign::Standard:
++            break;
++        case CurrencySign::Accounting:
++            // Ignore this case since linked ICU does not support it.
++            break;
++        }
++        break;
++    case Style::Unit:
++        // Ignore this case since linked ICU does not support it.
++        break;
++    }
++
++    switch (m_notation) {
++    case IntlNotation::Standard:
++        break;
++    case IntlNotation::Scientific:
++    case IntlNotation::Engineering:
++    case IntlNotation::Compact:
++        // Ignore this case since linked ICU does not support it.
++        break;
++    }
++
++    switch (m_signDisplay) {
++    case SignDisplay::Auto:
++        break;
++    case SignDisplay::Never:
++    case SignDisplay::Always:
++    case SignDisplay::ExceptZero:
++    case SignDisplay::Negative:
++        // Ignore this case since linked ICU does not support it.
++        break;
++    }
++
++    UErrorCode status = U_ZERO_ERROR;
++    m_numberFormat = std::unique_ptr<UNumberFormat, ICUDeleter<unum_close>>(unum_open(style, nullptr, 0, dataLocaleWithExtensions.data(), nullptr, &status));
++    if (U_FAILURE(status)) {
++        throwTypeError(globalObject, scope, "failed to initialize NumberFormat"_s);
++        return;
++    }
++
++    if (m_style == Style::Currency) {
++        unum_setTextAttribute(m_numberFormat.get(), UNUM_CURRENCY_CODE, StringView(m_currency).upconvertedCharacters(), m_currency.length(), &status);
++        if (U_FAILURE(status)) {
++            throwTypeError(globalObject, scope, "failed to initialize NumberFormat"_s);
++            return;
++        }
++    }
++
++    switch (m_roundingType) {
++    case IntlRoundingType::FractionDigits:
++        unum_setAttribute(m_numberFormat.get(), UNUM_MIN_INTEGER_DIGITS, m_minimumIntegerDigits);
++        unum_setAttribute(m_numberFormat.get(), UNUM_MIN_FRACTION_DIGITS, m_minimumFractionDigits);
++        unum_setAttribute(m_numberFormat.get(), UNUM_MAX_FRACTION_DIGITS, m_maximumFractionDigits);
++        break;
++    case IntlRoundingType::SignificantDigits:
++        unum_setAttribute(m_numberFormat.get(), UNUM_SIGNIFICANT_DIGITS_USED, true);
++        unum_setAttribute(m_numberFormat.get(), UNUM_MIN_SIGNIFICANT_DIGITS, m_minimumSignificantDigits);
++        unum_setAttribute(m_numberFormat.get(), UNUM_MAX_SIGNIFICANT_DIGITS, m_maximumSignificantDigits);
++        break;
++    case IntlRoundingType::MorePrecision:
++        // Ignore this case since linked ICU does not support it.
++        break;
++    case IntlRoundingType::LessPrecision:
++        // Ignore this case since linked ICU does not support it.
++        break;
++    }
++
++    switch (m_useGrouping) {
++    case UseGrouping::False:
++        unum_setAttribute(m_numberFormat.get(), UNUM_GROUPING_USED, false);
++        break;
++    case UseGrouping::Min2:
++        // Ignore this case since linked ICU does not support it.
++        break;
++    case UseGrouping::Auto:
++        break;
++    case UseGrouping::Always:
++        unum_setAttribute(m_numberFormat.get(), UNUM_GROUPING_USED, true);
++        break;
++    }
++    unum_setAttribute(m_numberFormat.get(), UNUM_ROUNDING_MODE, UNUM_ROUND_HALFUP);
++#endif
+ }
+ 
+ // https://tc39.es/ecma402/#sec-formatnumber
+@@ -569,6 +691,7 @@ JSValue IntlNumberFormat::format(JSGlobalObject* globalObject, double value) con
+     value = purifyNaN(value);
+ 
+     Vector<UChar, 32> buffer;
++#if HAVE(ICU_U_NUMBER_FORMATTER)
+     ASSERT(m_numberFormatter);
+     UErrorCode status = U_ZERO_ERROR;
+     auto formattedNumber = std::unique_ptr<UFormattedNumber, ICUDeleter<unumf_closeResult>>(unumf_openResult(&status));
+@@ -580,6 +703,12 @@ JSValue IntlNumberFormat::format(JSGlobalObject* globalObject, double value) con
+     status = callBufferProducingFunction(unumf_resultToString, formattedNumber.get(), buffer);
+     if (U_FAILURE(status))
+         return throwTypeError(globalObject, scope, "Failed to format a number."_s);
++#else
++    ASSERT(m_numberFormat);
++    auto status = callBufferProducingFunction(unum_formatDouble, m_numberFormat.get(), value, buffer, nullptr);
++    if (U_FAILURE(status))
++        return throwTypeError(globalObject, scope, "Failed to format a number."_s);
++#endif
+     return jsString(vm, String(WTFMove(buffer)));
+ }
+ 
+@@ -593,6 +722,7 @@ JSValue IntlNumberFormat::format(JSGlobalObject* globalObject, IntlMathematicalV
+     const auto& string = value.getString();
+ 
+     Vector<UChar, 32> buffer;
++#if HAVE(ICU_U_NUMBER_FORMATTER)
+     ASSERT(m_numberFormatter);
+     UErrorCode status = U_ZERO_ERROR;
+     auto formattedNumber = std::unique_ptr<UFormattedNumber, ICUDeleter<unumf_closeResult>>(unumf_openResult(&status));
+@@ -604,9 +734,16 @@ JSValue IntlNumberFormat::format(JSGlobalObject* globalObject, IntlMathematicalV
+     status = callBufferProducingFunction(unumf_resultToString, formattedNumber.get(), buffer);
+     if (U_FAILURE(status))
+         return throwTypeError(globalObject, scope, "Failed to format a BigInt."_s);
++#else
++    ASSERT(m_numberFormat);
++    auto status = callBufferProducingFunction(unum_formatDecimal, m_numberFormat.get(), string.data(), string.length(), buffer, nullptr);
++    if (U_FAILURE(status))
++        return throwTypeError(globalObject, scope, "Failed to format a BigInt."_s);
++#endif
+     return jsString(vm, String(WTFMove(buffer)));
+ }
+ 
++#if HAVE(ICU_U_NUMBER_RANGE_FORMATTER)
+ JSValue IntlNumberFormat::formatRange(JSGlobalObject* globalObject, double start, double end) const
+ {
+     VM& vm = globalObject->vm();
+@@ -674,6 +811,7 @@ JSValue IntlNumberFormat::formatRange(JSGlobalObject* globalObject, IntlMathemat
+ 
+     return jsString(vm, String({ string, static_cast<size_t>(length) }));
+ }
++#endif
+ 
+ static constexpr int32_t literalField = -1;
+ struct IntlNumberFormatField {
+@@ -786,6 +924,7 @@ static Vector<IntlNumberFormatField> flattenFields(Vector<IntlNumberFormatField>
+     return flatten;
+ }
+ 
++#if HAVE(ICU_U_NUMBER_RANGE_FORMATTER_FORMAT_RANGE_TO_PARTS)
+ static bool numberFieldsPracticallyEqual(const UFormattedValue* formattedValue, UErrorCode& status)
+ {
+     auto iterator = std::unique_ptr<UConstrainedFieldPosition, ICUDeleter<ucfpos_close>>(ucfpos_open(&status));
+@@ -1027,6 +1166,7 @@ JSValue IntlNumberFormat::formatRangeToParts(JSGlobalObject* globalObject, IntlM
+ 
+     return parts;
+ }
++#endif
+ 
+ ASCIILiteral IntlNumberFormat::styleString(Style style)
+ {
+@@ -1324,6 +1464,7 @@ JSValue IntlNumberFormat::formatToParts(JSGlobalObject* globalObject, double val
+         return throwTypeError(globalObject, scope, "failed to open field position iterator"_s);
+ 
+     Vector<UChar, 32> result;
++#if HAVE(ICU_U_NUMBER_FORMATTER)
+     ASSERT(m_numberFormatter);
+     auto formattedNumber = std::unique_ptr<UFormattedNumber, ICUDeleter<unumf_closeResult>>(unumf_openResult(&status));
+     if (U_FAILURE(status))
+@@ -1338,6 +1479,13 @@ JSValue IntlNumberFormat::formatToParts(JSGlobalObject* globalObject, double val
+     if (U_FAILURE(status))
+         return throwTypeError(globalObject, scope, "Failed to format a number."_s);
+     IntlFieldIterator iterator(*fieldItr.get());
++#else
++    ASSERT(m_numberFormat);
++    status = callBufferProducingFunction(unum_formatDoubleForFields, m_numberFormat.get(), value, result, fieldItr.get());
++    if (U_FAILURE(status))
++        return throwTypeError(globalObject, scope, "failed to format a number."_s);
++    IntlFieldIterator iterator(*fieldItr.get());
++#endif
+ 
+     auto resultString = String(WTFMove(result));
+ 
+@@ -1351,6 +1499,7 @@ JSValue IntlNumberFormat::formatToParts(JSGlobalObject* globalObject, double val
+     return parts;
+ }
+ 
++#if HAVE(ICU_U_NUMBER_FORMATTER)
+ JSValue IntlNumberFormat::formatToParts(JSGlobalObject* globalObject, IntlMathematicalValue&& value, JSString* sourceType) const
+ {
+     VM& vm = globalObject->vm();
+@@ -1395,6 +1544,7 @@ JSValue IntlNumberFormat::formatToParts(JSGlobalObject* globalObject, IntlMathem
+ 
+     return parts;
+ }
++#endif
+ 
+ IntlMathematicalValue IntlMathematicalValue::parseString(JSGlobalObject* globalObject, StringView view)
+ {
+diff --git a/Source/JavaScriptCore/runtime/IntlNumberFormat.h b/Source/JavaScriptCore/runtime/IntlNumberFormat.h
+index 1bd75559a1..4928e5cc4d 100644
+--- a/Source/JavaScriptCore/runtime/IntlNumberFormat.h
++++ b/Source/JavaScriptCore/runtime/IntlNumberFormat.h
+@@ -34,6 +34,25 @@
+ #include <wtf/TZoneMalloc.h>
+ #include <wtf/unicode/icu/ICUHelpers.h>
+ 
++#if !defined(HAVE_ICU_U_NUMBER_FORMATTER)
++// UNUM_COMPACT_FIELD and UNUM_MEASURE_UNIT_FIELD are available after ICU 64.
++#if U_ICU_VERSION_MAJOR_NUM >= 64
++#define HAVE_ICU_U_NUMBER_FORMATTER 1
++#endif
++#endif
++
++#if !defined(HAVE_ICU_U_NUMBER_RANGE_FORMATTER)
++#if U_ICU_VERSION_MAJOR_NUM >= 68
++#define HAVE_ICU_U_NUMBER_RANGE_FORMATTER 1
++#endif
++#endif
++
++#if !defined(HAVE_ICU_U_NUMBER_RANGE_FORMATTER_FORMAT_RANGE_TO_PARTS)
++#if U_ICU_VERSION_MAJOR_NUM >= 69
++#define HAVE_ICU_U_NUMBER_RANGE_FORMATTER_FORMAT_RANGE_TO_PARTS 1
++#endif
++#endif
++
+ struct UFormattedValue;
+ struct UNumberFormatter;
+ struct UNumberRangeFormatter;
+@@ -51,13 +70,17 @@ enum class IntlNotation : uint8_t { Standard, Scientific, Engineering, Compact }
+ template<typename IntlType> void setNumberFormatDigitOptions(JSGlobalObject*, IntlType*, JSObject*, unsigned minimumFractionDigitsDefault, unsigned maximumFractionDigitsDefault, IntlNotation);
+ template<typename IntlType> void appendNumberFormatDigitOptionsToSkeleton(IntlType*, StringBuilder&);
+ 
++#if HAVE(ICU_U_NUMBER_FORMATTER)
+ struct UNumberFormatterDeleter {
+     JS_EXPORT_PRIVATE void operator()(UNumberFormatter*);
+ };
++#endif
+ 
++#if HAVE(ICU_U_NUMBER_RANGE_FORMATTER)
+ struct UNumberRangeFormatterDeleter {
+     JS_EXPORT_PRIVATE void operator()(UNumberRangeFormatter*);
+ };
++#endif
+ 
+ class IntlMathematicalValue {
+     WTF_MAKE_TZONE_ALLOCATED(IntlMathematicalValue);
+@@ -159,14 +182,20 @@ public:
+     JSValue format(JSGlobalObject*, double) const;
+     JSValue format(JSGlobalObject*, IntlMathematicalValue&&) const;
+     JSValue formatToParts(JSGlobalObject*, double, JSString* sourceType = nullptr) const;
++#if HAVE(ICU_U_NUMBER_FORMATTER)
+     JSValue formatToParts(JSGlobalObject*, IntlMathematicalValue&&, JSString* sourceType = nullptr) const;
++#endif
+     JSObject* resolvedOptions(JSGlobalObject*) const;
+ 
++#if HAVE(ICU_U_NUMBER_RANGE_FORMATTER)
+     JSValue formatRange(JSGlobalObject*, double, double) const;
+     JSValue formatRange(JSGlobalObject*, IntlMathematicalValue&&, IntlMathematicalValue&&) const;
++#endif
+ 
++#if HAVE(ICU_U_NUMBER_RANGE_FORMATTER_FORMAT_RANGE_TO_PARTS)
+     JSValue formatRangeToParts(JSGlobalObject*, double, double) const;
+     JSValue formatRangeToParts(JSGlobalObject*, IntlMathematicalValue&&, IntlMathematicalValue&&) const;
++#endif
+ 
+     JSBoundFunction* boundFormat() const { return m_boundFormat.get(); }
+     void setBoundFormat(VM&, JSBoundFunction*);
+@@ -212,8 +241,14 @@ private:
+     static JSValue useGroupingValue(VM&, UseGrouping);
+ 
+     WriteBarrier<JSBoundFunction> m_boundFormat;
++#if HAVE(ICU_U_NUMBER_FORMATTER)
+     std::unique_ptr<UNumberFormatter, UNumberFormatterDeleter> m_numberFormatter;
++#if HAVE(ICU_U_NUMBER_RANGE_FORMATTER)
+     std::unique_ptr<UNumberRangeFormatter, UNumberRangeFormatterDeleter> m_numberRangeFormatter;
++#endif
++#else
++    std::unique_ptr<UNumberFormat, ICUDeleter<unum_close>> m_numberFormat;
++#endif
+ 
+     String m_locale;
+     String m_numberingSystem;
+diff --git a/Source/JavaScriptCore/runtime/IntlNumberFormatPrototype.cpp b/Source/JavaScriptCore/runtime/IntlNumberFormatPrototype.cpp
+index 6459273641..026b426965 100644
+--- a/Source/JavaScriptCore/runtime/IntlNumberFormatPrototype.cpp
++++ b/Source/JavaScriptCore/runtime/IntlNumberFormatPrototype.cpp
+@@ -35,12 +35,18 @@
+ namespace JSC {
+ 
+ static JSC_DECLARE_CUSTOM_GETTER(intlNumberFormatPrototypeGetterFormat);
+-static JSC_DECLARE_HOST_FUNCTION(intlNumberFormatPrototypeFuncFormatRange);
+-static JSC_DECLARE_HOST_FUNCTION(intlNumberFormatPrototypeFuncFormatRangeToParts);
+ static JSC_DECLARE_HOST_FUNCTION(intlNumberFormatPrototypeFuncFormatToParts);
+ static JSC_DECLARE_HOST_FUNCTION(intlNumberFormatPrototypeFuncResolvedOptions);
+ static JSC_DECLARE_HOST_FUNCTION(intlNumberFormatFuncFormat);
+ 
++#if HAVE(ICU_U_NUMBER_RANGE_FORMATTER)
++static JSC_DECLARE_HOST_FUNCTION(intlNumberFormatPrototypeFuncFormatRange);
++#endif
++
++#if HAVE(ICU_U_NUMBER_RANGE_FORMATTER_FORMAT_RANGE_TO_PARTS)
++static JSC_DECLARE_HOST_FUNCTION(intlNumberFormatPrototypeFuncFormatRangeToParts);
++#endif
++
+ }
+ 
+ #include "IntlNumberFormatPrototype.lut.h"
+@@ -51,11 +57,9 @@ const ClassInfo IntlNumberFormatPrototype::s_info = { "Intl.NumberFormat"_s, &Ba
+ 
+ /* Source for IntlNumberFormatPrototype.lut.h
+ @begin numberFormatPrototypeTable
+-  format              intlNumberFormatPrototypeGetterFormat            DontEnum|ReadOnly|CustomAccessor
+-  formatRange         intlNumberFormatPrototypeFuncFormatRange         DontEnum|Function 2
+-  formatRangeToParts  intlNumberFormatPrototypeFuncFormatRangeToParts  DontEnum|Function 2
+-  formatToParts       intlNumberFormatPrototypeFuncFormatToParts       DontEnum|Function 1
+-  resolvedOptions     intlNumberFormatPrototypeFuncResolvedOptions     DontEnum|Function 0
++  format           intlNumberFormatPrototypeGetterFormat         DontEnum|ReadOnly|CustomAccessor
++  formatToParts    intlNumberFormatPrototypeFuncFormatToParts    DontEnum|Function 1
++  resolvedOptions  intlNumberFormatPrototypeFuncResolvedOptions  DontEnum|Function 0
+ @end
+ */
+ 
+@@ -82,6 +86,12 @@ void IntlNumberFormatPrototype::finishCreation(VM& vm, JSGlobalObject* globalObj
+     ASSERT(inherits(info()));
+     JSC_TO_STRING_TAG_WITHOUT_TRANSITION();
+     UNUSED_PARAM(globalObject);
++#if HAVE(ICU_U_NUMBER_RANGE_FORMATTER)
++    JSC_NATIVE_FUNCTION_WITHOUT_TRANSITION("formatRange"_s, intlNumberFormatPrototypeFuncFormatRange, static_cast<unsigned>(PropertyAttribute::DontEnum), 2, ImplementationVisibility::Public);
++#endif
++#if HAVE(ICU_U_NUMBER_RANGE_FORMATTER_FORMAT_RANGE_TO_PARTS)
++    JSC_NATIVE_FUNCTION_WITHOUT_TRANSITION("formatRangeToParts"_s, intlNumberFormatPrototypeFuncFormatRangeToParts, static_cast<unsigned>(PropertyAttribute::DontEnum), 2, ImplementationVisibility::Public);
++#endif
+ }
+ 
+ // https://tc39.es/ecma402/#sec-number-format-functions
+@@ -134,6 +144,7 @@ JSC_DEFINE_CUSTOM_GETTER(intlNumberFormatPrototypeGetterFormat, (JSGlobalObject*
+     return JSValue::encode(boundFormat);
+ }
+ 
++#if HAVE(ICU_U_NUMBER_RANGE_FORMATTER)
+ JSC_DEFINE_HOST_FUNCTION(intlNumberFormatPrototypeFuncFormatRange, (JSGlobalObject* globalObject, CallFrame* callFrame))
+ {
+     VM& vm = globalObject->vm();
+@@ -163,6 +174,7 @@ JSC_DEFINE_HOST_FUNCTION(intlNumberFormatPrototypeFuncFormatRange, (JSGlobalObje
+ 
+     RELEASE_AND_RETURN(scope, JSValue::encode(numberFormat->formatRange(globalObject, WTFMove(start), WTFMove(end))));
+ }
++#endif
+ 
+ JSC_DEFINE_HOST_FUNCTION(intlNumberFormatPrototypeFuncFormatToParts, (JSGlobalObject* globalObject, CallFrame* callFrame))
+ {
+@@ -177,6 +189,7 @@ JSC_DEFINE_HOST_FUNCTION(intlNumberFormatPrototypeFuncFormatToParts, (JSGlobalOb
+     if (UNLIKELY(!numberFormat))
+         return JSValue::encode(throwTypeError(globalObject, scope, "Intl.NumberFormat.prototype.formatToParts called on value that's not a NumberFormat"_s));
+ 
++#if HAVE(ICU_U_NUMBER_FORMATTER)
+     auto value = toIntlMathematicalValue(globalObject, callFrame->argument(0));
+     RETURN_IF_EXCEPTION(scope, { });
+ 
+@@ -184,8 +197,15 @@ JSC_DEFINE_HOST_FUNCTION(intlNumberFormatPrototypeFuncFormatToParts, (JSGlobalOb
+         RELEASE_AND_RETURN(scope, JSValue::encode(numberFormat->formatToParts(globalObject, number.value())));
+ 
+     RELEASE_AND_RETURN(scope, JSValue::encode(numberFormat->formatToParts(globalObject, WTFMove(value))));
++#else
++    double value = callFrame->argument(0).toNumber(globalObject);
++    RETURN_IF_EXCEPTION(scope, { });
++
++    RELEASE_AND_RETURN(scope, JSValue::encode(numberFormat->formatToParts(globalObject, value)));
++#endif
+ }
+ 
++#if HAVE(ICU_U_NUMBER_RANGE_FORMATTER_FORMAT_RANGE_TO_PARTS)
+ JSC_DEFINE_HOST_FUNCTION(intlNumberFormatPrototypeFuncFormatRangeToParts, (JSGlobalObject* globalObject, CallFrame* callFrame))
+ {
+     VM& vm = globalObject->vm();
+@@ -215,6 +235,7 @@ JSC_DEFINE_HOST_FUNCTION(intlNumberFormatPrototypeFuncFormatRangeToParts, (JSGlo
+ 
+     RELEASE_AND_RETURN(scope, JSValue::encode(numberFormat->formatRangeToParts(globalObject, WTFMove(start), WTFMove(end))));
+ }
++#endif
+ 
+ JSC_DEFINE_HOST_FUNCTION(intlNumberFormatPrototypeFuncResolvedOptions, (JSGlobalObject* globalObject, CallFrame* callFrame))
+ {
+diff --git a/Source/JavaScriptCore/runtime/IntlObject.cpp b/Source/JavaScriptCore/runtime/IntlObject.cpp
+index dab995d4c2..51dbe4447d 100644
+--- a/Source/JavaScriptCore/runtime/IntlObject.cpp
++++ b/Source/JavaScriptCore/runtime/IntlObject.cpp
+@@ -169,8 +169,6 @@ namespace JSC {
+   Collator              createCollatorConstructor                    DontEnum|PropertyCallback
+   DateTimeFormat        createDateTimeFormatConstructor              DontEnum|PropertyCallback
+   DisplayNames          createDisplayNamesConstructor                DontEnum|PropertyCallback
+-  DurationFormat        createDurationFormatConstructor              DontEnum|PropertyCallback
+-  ListFormat            createListFormatConstructor                  DontEnum|PropertyCallback
+   Locale                createLocaleConstructor                      DontEnum|PropertyCallback
+   NumberFormat          createNumberFormatConstructor                DontEnum|PropertyCallback
+   PluralRules           createPluralRulesConstructor                 DontEnum|PropertyCallback
+@@ -258,6 +256,13 @@ void IntlObject::finishCreation(VM& vm, JSGlobalObject*)
+     Base::finishCreation(vm);
+     ASSERT(inherits(info()));
+     JSC_TO_STRING_TAG_WITHOUT_TRANSITION();
++#if HAVE(ICU_U_LIST_FORMATTER)
++    putDirectWithoutTransition(vm, vm.propertyNames->DurationFormat, createDurationFormatConstructor(vm, this), static_cast<unsigned>(PropertyAttribute::DontEnum));
++    putDirectWithoutTransition(vm, vm.propertyNames->ListFormat, createListFormatConstructor(vm, this), static_cast<unsigned>(PropertyAttribute::DontEnum));
++#else
++    UNUSED_PARAM(&createDurationFormatConstructor);
++    UNUSED_PARAM(&createListFormatConstructor);
++#endif
+ }
+ 
+ Structure* IntlObject::createStructure(VM& vm, JSGlobalObject* globalObject, JSValue prototype)
+diff --git a/Source/JavaScriptCore/runtime/IntlPluralRules.cpp b/Source/JavaScriptCore/runtime/IntlPluralRules.cpp
+index 584c6ff2c4..af58373c78 100644
+--- a/Source/JavaScriptCore/runtime/IntlPluralRules.cpp
++++ b/Source/JavaScriptCore/runtime/IntlPluralRules.cpp
+@@ -36,8 +36,12 @@
+ #undef U_HIDE_DRAFT_API
+ #endif
+ #include <unicode/upluralrules.h>
++#if HAVE(ICU_U_NUMBER_FORMATTER)
+ #include <unicode/unumberformatter.h>
++#endif
++#if HAVE(ICU_U_NUMBER_RANGE_FORMATTER)
+ #include <unicode/unumberrangeformatter.h>
++#endif
+ #define U_HIDE_DRAFT_API 1
+ 
+ namespace JSC {
+@@ -118,6 +122,7 @@ void IntlPluralRules::initializePluralRules(JSGlobalObject* globalObject, JSValu
+     auto locale = m_locale.utf8();
+     UErrorCode status = U_ZERO_ERROR;
+ 
++#if HAVE(ICU_U_NUMBER_FORMATTER)
+     StringBuilder skeletonBuilder;
+ 
+     appendNumberFormatDigitOptionsToSkeleton(this, skeletonBuilder);
+@@ -132,11 +137,36 @@ void IntlPluralRules::initializePluralRules(JSGlobalObject* globalObject, JSValu
+         return;
+     }
+ 
++#if HAVE(ICU_U_NUMBER_RANGE_FORMATTER)
+     m_numberRangeFormatter = std::unique_ptr<UNumberRangeFormatter, UNumberRangeFormatterDeleter>(unumrf_openForSkeletonWithCollapseAndIdentityFallback(upconverted.get(), skeletonView.length(), UNUM_RANGE_COLLAPSE_NONE, UNUM_IDENTITY_FALLBACK_RANGE, locale.data(), nullptr, &status));
+     if (U_FAILURE(status)) {
+         throwTypeError(globalObject, scope, "failed to initialize PluralRules"_s);
+         return;
+     }
++#endif
++#else
++    m_numberFormat = std::unique_ptr<UNumberFormat, UNumberFormatDeleter>(unum_open(UNUM_DECIMAL, nullptr, 0, locale.data(), nullptr, &status));
++    if (U_FAILURE(status)) {
++        throwTypeError(globalObject, scope, "failed to initialize PluralRules"_s);
++        return;
++    }
++
++    switch (m_roundingType) {
++    case IntlRoundingType::FractionDigits:
++        unum_setAttribute(m_numberFormat.get(), UNUM_MIN_INTEGER_DIGITS, m_minimumIntegerDigits);
++        unum_setAttribute(m_numberFormat.get(), UNUM_MIN_FRACTION_DIGITS, m_minimumFractionDigits);
++        unum_setAttribute(m_numberFormat.get(), UNUM_MAX_FRACTION_DIGITS, m_maximumFractionDigits);
++        break;
++    case IntlRoundingType::SignificantDigits:
++        unum_setAttribute(m_numberFormat.get(), UNUM_SIGNIFICANT_DIGITS_USED, true);
++        unum_setAttribute(m_numberFormat.get(), UNUM_MIN_SIGNIFICANT_DIGITS, m_minimumSignificantDigits);
++        unum_setAttribute(m_numberFormat.get(), UNUM_MAX_SIGNIFICANT_DIGITS, m_maximumSignificantDigits);
++        break;
++    case IntlRoundingType::MorePrecision:
++    case IntlRoundingType::LessPrecision:
++        break;
++    }
++#endif
+ 
+     m_pluralRules = std::unique_ptr<UPluralRules, UPluralRulesDeleter>(uplrules_openForType(locale.data(), m_type == Type::Ordinal ? UPLURAL_TYPE_ORDINAL : UPLURAL_TYPE_CARDINAL, &status));
+     if (U_FAILURE(status)) {
+@@ -230,6 +260,7 @@ JSValue IntlPluralRules::select(JSGlobalObject* globalObject, double value) cons
+ 
+     UErrorCode status = U_ZERO_ERROR;
+ 
++#if HAVE(ICU_U_NUMBER_FORMATTER)
+     auto formattedNumber = std::unique_ptr<UFormattedNumber, ICUDeleter<unumf_closeResult>>(unumf_openResult(&status));
+     if (U_FAILURE(status))
+         return throwTypeError(globalObject, scope, "failed to select plural value"_s);
+@@ -241,8 +272,17 @@ JSValue IntlPluralRules::select(JSGlobalObject* globalObject, double value) cons
+     if (U_FAILURE(status))
+         return throwTypeError(globalObject, scope, "failed to select plural value"_s);
+     return jsString(vm, String(WTFMove(buffer)));
++#else
++    Vector<UChar, 8> result(8);
++    auto length = uplrules_selectWithFormat(m_pluralRules.get(), value, m_numberFormat.get(), result.data(), result.size(), &status);
++    if (U_FAILURE(status))
++        return throwTypeError(globalObject, scope, "failed to select plural value"_s);
++
++    return jsString(vm, String({ result.data(), static_cast<size_t>(length) }));
++#endif
+ }
+ 
++#if HAVE(ICU_U_NUMBER_RANGE_FORMATTER)
+ JSValue IntlPluralRules::selectRange(JSGlobalObject* globalObject, double start, double end) const
+ {
+     ASSERT(m_numberRangeFormatter);
+@@ -268,5 +308,6 @@ JSValue IntlPluralRules::selectRange(JSGlobalObject* globalObject, double start,
+         return throwTypeError(globalObject, scope, "failed to select plural value"_s);
+     return jsString(vm, String(WTFMove(buffer)));
+ }
++#endif
+ 
+ } // namespace JSC
+diff --git a/Source/JavaScriptCore/runtime/IntlPluralRules.h b/Source/JavaScriptCore/runtime/IntlPluralRules.h
+index 26b7d72b16..7f476e03ca 100644
+--- a/Source/JavaScriptCore/runtime/IntlPluralRules.h
++++ b/Source/JavaScriptCore/runtime/IntlPluralRules.h
+@@ -69,9 +69,12 @@ public:
+ 
+     void initializePluralRules(JSGlobalObject*, JSValue locales, JSValue options);
+     JSValue select(JSGlobalObject*, double value) const;
+-    JSValue selectRange(JSGlobalObject*, double start, double end) const;
+     JSObject* resolvedOptions(JSGlobalObject*) const;
+ 
++#if HAVE(ICU_U_NUMBER_RANGE_FORMATTER)
++    JSValue selectRange(JSGlobalObject*, double start, double end) const;
++#endif
++
+ private:
+     IntlPluralRules(VM&, Structure*);
+     DECLARE_DEFAULT_FINISH_CREATION;
+@@ -82,8 +85,15 @@ private:
+     enum class Type : bool { Cardinal, Ordinal };
+ 
+     std::unique_ptr<UPluralRules, UPluralRulesDeleter> m_pluralRules;
++#if HAVE(ICU_U_NUMBER_FORMATTER)
+     std::unique_ptr<UNumberFormatter, UNumberFormatterDeleter> m_numberFormatter;
++#if HAVE(ICU_U_NUMBER_RANGE_FORMATTER)
+     std::unique_ptr<UNumberRangeFormatter, UNumberRangeFormatterDeleter> m_numberRangeFormatter;
++#endif
++#else
++    using UNumberFormatDeleter = ICUDeleter<unum_close>;
++    std::unique_ptr<UNumberFormat, UNumberFormatDeleter> m_numberFormat;
++#endif
+ 
+     String m_locale;
+     unsigned m_minimumIntegerDigits { 1 };
+diff --git a/Source/JavaScriptCore/runtime/IntlPluralRulesPrototype.cpp b/Source/JavaScriptCore/runtime/IntlPluralRulesPrototype.cpp
+index aae2cabe2a..6c908d3a7d 100644
+--- a/Source/JavaScriptCore/runtime/IntlPluralRulesPrototype.cpp
++++ b/Source/JavaScriptCore/runtime/IntlPluralRulesPrototype.cpp
+@@ -33,7 +33,9 @@
+ namespace JSC {
+ 
+ static JSC_DECLARE_HOST_FUNCTION(intlPluralRulesPrototypeFuncSelect);
++#if HAVE(ICU_U_NUMBER_RANGE_FORMATTER)
+ static JSC_DECLARE_HOST_FUNCTION(intlPluralRulesPrototypeFuncSelectRange);
++#endif
+ static JSC_DECLARE_HOST_FUNCTION(intlPluralRulesPrototypeFuncResolvedOptions);
+ 
+ }
+@@ -47,7 +49,6 @@ const ClassInfo IntlPluralRulesPrototype::s_info = { "Intl.PluralRules"_s, &Base
+ /* Source for IntlPluralRulesPrototype.lut.h
+ @begin pluralRulesPrototypeTable
+   select           intlPluralRulesPrototypeFuncSelect           DontEnum|Function 1
+-  selectRange      intlPluralRulesPrototypeFuncSelectRange      DontEnum|Function 2
+   resolvedOptions  intlPluralRulesPrototypeFuncResolvedOptions  DontEnum|Function 0
+ @end
+ */
+@@ -75,6 +76,9 @@ void IntlPluralRulesPrototype::finishCreation(VM& vm, JSGlobalObject* globalObje
+     ASSERT(inherits(info()));
+     JSC_TO_STRING_TAG_WITHOUT_TRANSITION();
+     UNUSED_PARAM(globalObject);
++#if HAVE(ICU_U_NUMBER_RANGE_FORMATTER)
++    JSC_NATIVE_FUNCTION_WITHOUT_TRANSITION(vm.propertyNames->selectRange, intlPluralRulesPrototypeFuncSelectRange, static_cast<unsigned>(PropertyAttribute::DontEnum), 2, ImplementationVisibility::Public);
++#endif
+ }
+ 
+ JSC_DEFINE_HOST_FUNCTION(intlPluralRulesPrototypeFuncSelect, (JSGlobalObject* globalObject, CallFrame* callFrame))
+@@ -95,6 +99,7 @@ JSC_DEFINE_HOST_FUNCTION(intlPluralRulesPrototypeFuncSelect, (JSGlobalObject* gl
+     RELEASE_AND_RETURN(scope, JSValue::encode(pluralRules->select(globalObject, value)));
+ }
+ 
++#if HAVE(ICU_U_NUMBER_RANGE_FORMATTER)
+ JSC_DEFINE_HOST_FUNCTION(intlPluralRulesPrototypeFuncSelectRange, (JSGlobalObject* globalObject, CallFrame* callFrame))
+ {
+     VM& vm = globalObject->vm();
+@@ -119,6 +124,7 @@ JSC_DEFINE_HOST_FUNCTION(intlPluralRulesPrototypeFuncSelectRange, (JSGlobalObjec
+ 
+     RELEASE_AND_RETURN(scope, JSValue::encode(pluralRules->selectRange(globalObject, start, end)));
+ }
++#endif
+ 
+ JSC_DEFINE_HOST_FUNCTION(intlPluralRulesPrototypeFuncResolvedOptions, (JSGlobalObject* globalObject, CallFrame* callFrame))
+ {
+diff --git a/Source/JavaScriptCore/runtime/IntlWorkaround.cpp b/Source/JavaScriptCore/runtime/IntlWorkaround.cpp
+index c6c1fa0cd2..85d7e85469 100644
+--- a/Source/JavaScriptCore/runtime/IntlWorkaround.cpp
++++ b/Source/JavaScriptCore/runtime/IntlWorkaround.cpp
+@@ -26,17 +26,25 @@
+ #include "config.h"
+ #include "IntlWorkaround.h"
+ 
+-#ifdef U_HIDE_DRAFT_API
++// ICU 69 introduces draft API ubrk_clone and deprecates ubrk_safeClone.
++#if defined(U_HIDE_DRAFT_API)
+ #undef U_HIDE_DRAFT_API
+ #endif
+ #include <unicode/ubrk.h>
+-#define U_HIDE_DRAFT_API 1
++
++#if U_ICU_VERSION_MAJOR_NUM >= 69
++#define HAVE_ICU_UBRK_CLONE 1
++#endif
+ 
+ namespace JSC {
+ 
+ UBreakIterator* cloneUBreakIterator(const UBreakIterator* iterator, UErrorCode* status)
+ {
++#if HAVE(ICU_UBRK_CLONE)
+     return ubrk_clone(iterator, status);
++#else
++    return ubrk_safeClone(iterator, nullptr, nullptr, status);
++#endif
+ }
+ 
+ } // namespace JSC
+diff --git a/Source/JavaScriptCore/runtime/JSDateMath.cpp b/Source/JavaScriptCore/runtime/JSDateMath.cpp
+index c6a194568d..f77f87c5be 100644
+--- a/Source/JavaScriptCore/runtime/JSDateMath.cpp
++++ b/Source/JavaScriptCore/runtime/JSDateMath.cpp
+@@ -81,11 +81,24 @@
+ #include <wtf/unicode/CharacterNames.h>
+ #include <wtf/unicode/icu/ICUHelpers.h>
+ 
++#if U_ICU_VERSION_MAJOR_NUM >= 69 || (U_ICU_VERSION_MAJOR_NUM == 68 && USE(APPLE_INTERNAL_SDK))
++#define HAVE_ICU_C_TIMEZONE_API 1
+ #ifdef U_HIDE_DRAFT_API
+ #undef U_HIDE_DRAFT_API
+ #endif
+ #include <unicode/ucal.h>
+-#define U_HIDE_DRAFT_API 1
++#else
++// icu::TimeZone and icu::BasicTimeZone features are only available in ICU C++ APIs.
++// We use these C++ APIs as an exception.
++#undef U_SHOW_CPLUSPLUS_API
++#define U_SHOW_CPLUSPLUS_API 1
++#include <unicode/basictz.h>
++#include <unicode/locid.h>
++#include <unicode/timezone.h>
++#include <unicode/unistr.h>
++#undef U_SHOW_CPLUSPLUS_API
++#define U_SHOW_CPLUSPLUS_API 0
++#endif
+ 
+ namespace JSC {
+ namespace JSDateMathInternal {
+@@ -96,6 +109,7 @@ static constexpr bool verbose = false;
+ std::atomic<uint64_t> lastTimeZoneID { 1 };
+ #endif
+ 
++#if HAVE(ICU_C_TIMEZONE_API)
+ class OpaqueICUTimeZone {
+     WTF_MAKE_TZONE_ALLOCATED(OpaqueICUTimeZone);
+ public:
+@@ -105,10 +119,26 @@ public:
+ 
+ WTF_MAKE_TZONE_ALLOCATED_IMPL(OpaqueICUTimeZone);
+ 
++#else
++static icu::TimeZone* toICUTimeZone(OpaqueICUTimeZone* timeZone)
++{
++    return std::bit_cast<icu::TimeZone*>(timeZone);
++}
++static OpaqueICUTimeZone* toOpaqueICUTimeZone(icu::TimeZone* timeZone)
++{
++    return std::bit_cast<OpaqueICUTimeZone*>(timeZone);
++}
++#endif
++
+ void OpaqueICUTimeZoneDeleter::operator()(OpaqueICUTimeZone* timeZone)
+ {
+-    if (timeZone)
++    if (timeZone) {
++#if HAVE(ICU_C_TIMEZONE_API)
+         delete timeZone;
++#else
++        delete toICUTimeZone(timeZone);
++#endif
++    }
+ }
+ 
+ // Get the combined UTC + DST offset for the time passed in.
+@@ -126,6 +156,7 @@ LocalTimeOffset DateCache::calculateLocalTimeOffset(double millisecondsFromEpoch
+     // We can return any values in this case since later we fail when computing non timezone offset part anyway.
+     constexpr LocalTimeOffset failed { false, 0 };
+ 
++#if HAVE(ICU_C_TIMEZONE_API)
+     auto& timeZoneCache = *this->timeZoneCache();
+     ucal_setMillis(timeZoneCache.m_calendar.get(), millisecondsFromEpoch, &status);
+     if (U_FAILURE(status))
+@@ -143,6 +174,21 @@ LocalTimeOffset DateCache::calculateLocalTimeOffset(double millisecondsFromEpoch
+         if (U_FAILURE(status))
+             return failed;
+     }
++#else
++    auto& timeZoneCache = *toICUTimeZone(this->timeZoneCache());
++    if (inputTimeType != WTF::LocalTime) {
++        constexpr bool isLocalTime = false;
++        timeZoneCache.getOffset(millisecondsFromEpoch, isLocalTime, rawOffset, dstOffset, status);
++        if (U_FAILURE(status))
++            return failed;
++    } else {
++        // icu::TimeZone is a timezone instance which inherits icu::BasicTimeZone.
++        // https://unicode-org.atlassian.net/browse/ICU-13705 will move getOffsetFromLocal to icu::TimeZone.
++        static_cast<const icu::BasicTimeZone&>(timeZoneCache).getOffsetFromLocal(millisecondsFromEpoch, icu::BasicTimeZone::kFormer, icu::BasicTimeZone::kFormer, rawOffset, dstOffset, status);
++        if (U_FAILURE(status))
++            return failed;
++    }
++#endif
+ 
+     return { !!dstOffset, rawOffset + dstOffset };
+ }
+@@ -427,12 +473,32 @@ double DateCache::parseDate(JSGlobalObject* globalObject, VM& vm, const String&
+ // https://tc39.es/ecma402/#sec-defaulttimezone
+ String DateCache::defaultTimeZone()
+ {
++#if HAVE(ICU_C_TIMEZONE_API)
+     return timeZoneCache()->m_canonicalTimeZoneID;
++#else
++    icu::UnicodeString timeZoneID;
++    icu::UnicodeString canonicalTimeZoneID;
++    auto& timeZone = *toICUTimeZone(timeZoneCache());
++    timeZone.getID(timeZoneID);
++
++    UErrorCode status = U_ZERO_ERROR;
++    UBool isSystem = false;
++    icu::TimeZone::getCanonicalID(timeZoneID, canonicalTimeZoneID, isSystem, status);
++    if (U_FAILURE(status))
++        return "UTC"_s;
++
++    String canonical = String({ canonicalTimeZoneID.getBuffer(), static_cast<size_t>(canonicalTimeZoneID.length()) });
++    if (isUTCEquivalent(canonical))
++        return "UTC"_s;
++
++    return canonical;
++#endif
+ }
+ 
+ String DateCache::timeZoneDisplayName(bool isDST)
+ {
+     if (m_timeZoneStandardDisplayNameCache.isNull()) {
++#if HAVE(ICU_C_TIMEZONE_API)
+         auto& timeZoneCache = *this->timeZoneCache();
+         CString language = defaultLanguage().utf8();
+         {
+@@ -447,6 +513,21 @@ String DateCache::timeZoneDisplayName(bool isDST)
+             if (U_SUCCESS(status))
+                 m_timeZoneDSTDisplayNameCache = String::adopt(WTFMove(dstDisplayNameBuffer));
+         }
++#else
++        auto& timeZoneCache = *toICUTimeZone(this->timeZoneCache());
++        String language = defaultLanguage();
++        icu::Locale locale(language.utf8().data());
++        {
++            icu::UnicodeString standardDisplayName;
++            timeZoneCache.getDisplayName(false /* inDaylight */, icu::TimeZone::LONG, locale, standardDisplayName);
++            m_timeZoneStandardDisplayNameCache = String({ standardDisplayName.getBuffer(), static_cast<size_t>(standardDisplayName.length()) });
++        }
++        {
++            icu::UnicodeString dstDisplayName;
++            timeZoneCache.getDisplayName(true /* inDaylight */, icu::TimeZone::LONG, locale, dstDisplayName);
++            m_timeZoneDSTDisplayNameCache = String({ dstDisplayName.getBuffer(), static_cast<size_t>(dstDisplayName.length()) });
++        }
++#endif
+     }
+     if (isDST)
+         return m_timeZoneDSTDisplayNameCache;
+@@ -520,6 +601,7 @@ void DateCache::timeZoneCacheSlow()
+ {
+     ASSERT(!m_timeZoneCache);
+     auto [canonical, timeZoneID] = retrieveTimeZoneInformation();
++#if HAVE(ICU_C_TIMEZONE_API)
+     auto* cache = new OpaqueICUTimeZone;
+     cache->m_canonicalTimeZoneID = WTFMove(canonical);
+     UErrorCode status = U_ZERO_ERROR;
+@@ -527,6 +609,14 @@ void DateCache::timeZoneCacheSlow()
+     ASSERT_UNUSED(status, U_SUCCESS(status));
+     ucal_setGregorianChange(cache->m_calendar.get(), minECMAScriptTime, &status); // Ignore "unsupported" error.
+     m_timeZoneCache = std::unique_ptr<OpaqueICUTimeZone, OpaqueICUTimeZoneDeleter>(cache);
++#else
++    if (!timeZoneID.isEmpty()) {
++        m_timeZoneCache = std::unique_ptr<OpaqueICUTimeZone, OpaqueICUTimeZoneDeleter>(toOpaqueICUTimeZone(icu::TimeZone::createTimeZone(icu::UnicodeString(timeZoneID.data(), timeZoneID.size()))));
++        return;
++    }
++    // Do not use icu::TimeZone::createDefault. ICU internally has a cache for timezone and createDefault returns this cached value.
++    m_timeZoneCache = std::unique_ptr<OpaqueICUTimeZone, OpaqueICUTimeZoneDeleter>(toOpaqueICUTimeZone(icu::TimeZone::detectHostTimeZone()));
++#endif
+ }
+ 
+ void DateCache::resetIfNecessarySlow()
