@@ -1,0 +1,10 @@
+fix-ftbfs-riscv64.patch
+fix-ftbfs-sparc64.patch
+fix-ftbfs-x32.patch
+dont-detect-sse2.patch
+disable-dmabuf.patch
+revert-cmake-bump.patch
+revert-cmake_path-usage.patch
+revert-glib-bump.patch
+revert-icu-bump.patch
+fix-out-of-tree-build.patch
