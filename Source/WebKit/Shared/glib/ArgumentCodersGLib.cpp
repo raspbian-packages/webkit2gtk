@@ -121,11 +121,13 @@ void ArgumentCoder<GRefPtr<GTlsCertificate>>::encode(Encoder& encoder, const GRe
 
     encoder << certificatesData;
 
+#if GLIB_CHECK_VERSION(2, 69, 0)
     GRefPtr<GByteArray> privateKey;
     GUniqueOutPtr<char> privateKeyPKCS11Uri;
     g_object_get(certificate.get(), "private-key", &privateKey.outPtr(), "private-key-pkcs11-uri", &privateKeyPKCS11Uri.outPtr(), nullptr);
     encoder << privateKey;
     encoder << CString(privateKeyPKCS11Uri.get());
+#endif
 }
 
 std::optional<GRefPtr<GTlsCertificate>> ArgumentCoder<GRefPtr<GTlsCertificate>>::decode(Decoder& decoder)
@@ -138,6 +140,7 @@ std::optional<GRefPtr<GTlsCertificate>> ArgumentCoder<GRefPtr<GTlsCertificate>>:
     if (!certificatesData->size())
         return GRefPtr<GTlsCertificate>();
 
+#if GLIB_CHECK_VERSION(2, 69, 0)
     std::optional<GRefPtr<GByteArray>> privateKey;
     decoder >> privateKey;
     if (UNLIKELY(!privateKey))
@@ -147,6 +150,7 @@ std::optional<GRefPtr<GTlsCertificate>> ArgumentCoder<GRefPtr<GTlsCertificate>>:
     decoder >> privateKeyPKCS11Uri;
     if (UNLIKELY(!privateKeyPKCS11Uri))
         return std::nullopt;
+#endif
 
     GType certificateType = g_tls_backend_get_certificate_type(g_tls_backend_get_default());
     GRefPtr<GTlsCertificate> certificate;
@@ -157,8 +161,10 @@ std::optional<GRefPtr<GTlsCertificate>> ArgumentCoder<GRefPtr<GTlsCertificate>>:
             certificateType, nullptr, nullptr,
             "certificate", certificateData.get(),
             "issuer", issuer,
+#if GLIB_CHECK_VERSION(2, 69, 0)
             "private-key", i == certificatesData->size() - 1 ? privateKey->get() : nullptr,
             "private-key-pkcs11-uri", i == certificatesData->size() - 1 ? privateKeyPKCS11Uri->data() : nullptr,
+#endif
             nullptr)));
         issuer = certificate.get();
         i++;
