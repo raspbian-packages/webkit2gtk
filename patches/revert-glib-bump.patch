@@ -1,0 +1,385 @@
+--- a/Source/WTF/wtf/URL.h
++++ b/Source/WTF/wtf/URL.h
+@@ -27,7 +27,7 @@
+ 
+ #include <wtf/text/WTFString.h>
+ 
+-#if USE(GLIB)
++#if USE(GLIB) && HAVE(GURI)
+ #include <wtf/glib/GRefPtr.h>
+ #endif
+ 
+@@ -237,7 +237,7 @@ public:
+     WTF_EXPORT_PRIVATE operator NSURL *() const;
+ #endif
+ 
+-#if USE(GLIB)
++#if USE(GLIB) && HAVE(GURI)
+     WTF_EXPORT_PRIVATE URL(GUri*);
+     WTF_EXPORT_PRIVATE GRefPtr<GUri> createGUri() const;
+ #endif
+--- a/Source/WTF/wtf/glib/GRefPtr.cpp
++++ b/Source/WTF/wtf/glib/GRefPtr.cpp
+@@ -207,6 +207,7 @@ template <> void derefGPtr(GDBusNodeInfo
+         g_dbus_node_info_unref(ptr);
+ }
+ 
++#if HAVE(GURI)
+ template <> GUri* refGPtr(GUri* ptr)
+ {
+     if (ptr)
+@@ -219,6 +220,7 @@ template <> void derefGPtr(GUri* ptr)
+     if (ptr)
+         g_uri_unref(ptr);
+ }
++#endif
+ 
+ template <>
+ GArray* refGPtr(GArray* ptr)
+--- a/Source/WTF/wtf/glib/GRefPtr.h
++++ b/Source/WTF/wtf/glib/GRefPtr.h
+@@ -264,8 +264,11 @@ template <> WTF_EXPORT_PRIVATE GArray* r
+ template <> WTF_EXPORT_PRIVATE void derefGPtr(GArray*);
+ template <> WTF_EXPORT_PRIVATE GResource* refGPtr(GResource*);
+ template <> WTF_EXPORT_PRIVATE void derefGPtr(GResource*);
++
++#if HAVE(GURI)
+ template <> WTF_EXPORT_PRIVATE GUri* refGPtr(GUri*);
+ template <> WTF_EXPORT_PRIVATE void derefGPtr(GUri*);
++#endif
+ 
+ template <typename T> inline T* refGPtr(T* ptr)
+ {
+--- a/Source/WTF/wtf/glib/SocketConnection.cpp
++++ b/Source/WTF/wtf/glib/SocketConnection.cpp
+@@ -145,7 +145,20 @@ bool SocketConnection::readMessage()
+         if (!it->value.first.isNull()) {
+             GUniquePtr<GVariantType> variantType(g_variant_type_new(it->value.first.data()));
+             size_t parametersSize = bodySize.value() - messageNameLength.value();
++            // g_variant_new_from_data() requires the memory to be properly aligned for the type being loaded,
++            // but it's not possible to know the alignment because g_variant_type_info_query() is not public API.
++            // Since GLib 2.60 g_variant_new_from_data() already checks the alignment and reallocates the buffer
++            // in aligned memory only if needed. For older versions we can simply ensure the memory is 8 aligned.
++#if GLIB_CHECK_VERSION(2, 60, 0)
+             parameters = g_variant_new_from_data(variantType.get(), messageData, parametersSize, FALSE, nullptr, nullptr);
++#else
++            auto* alignedMemory = fastAlignedMalloc(8, parametersSize);
++            memcpy(alignedMemory, messageData, parametersSize);
++            GRefPtr<GBytes> bytes = g_bytes_new_with_free_func(alignedMemory, parametersSize, [](gpointer data) {
++                fastAlignedFree(data);
++            }, alignedMemory);
++            parameters = g_variant_new_from_bytes(variantType.get(), bytes.get(), FALSE);
++#endif
+             if (messageIsByteSwapped(flags))
+                 parameters = adoptGRef(g_variant_byteswap(parameters.get()));
+         }
+--- a/Source/WTF/wtf/glib/URLGLib.cpp
++++ b/Source/WTF/wtf/glib/URLGLib.cpp
+@@ -35,6 +35,7 @@
+ 
+ namespace WTF {
+ 
++#if HAVE(GURI)
+ URL::URL(GUri* uri)
+ {
+     if (!uri) {
+@@ -56,6 +57,7 @@ GRefPtr<GUri> URL::createGUri() const
+         static_cast<GUriFlags>(G_URI_FLAGS_HAS_PASSWORD | G_URI_FLAGS_ENCODED_PATH | G_URI_FLAGS_ENCODED_QUERY | G_URI_FLAGS_ENCODED_FRAGMENT | G_URI_FLAGS_SCHEME_NORMALIZE | G_URI_FLAGS_PARSE_RELAXED),
+         nullptr));
+ }
++#endif
+ 
+ bool URL::hostIsIPAddress(StringView host)
+ {
+--- a/Source/WebCore/platform/LowPowerModeNotifier.h
++++ b/Source/WebCore/platform/LowPowerModeNotifier.h
+@@ -61,8 +61,10 @@ private:
+     RetainPtr<WebLowPowerModeObserver> m_observer;
+     LowPowerModeChangeCallback m_callback;
+ #elif USE(GLIB)
++#if GLIB_CHECK_VERSION(2, 69, 1)
+     LowPowerModeChangeCallback m_callback;
+     GRefPtr<GPowerProfileMonitor> m_powerProfileMonitor;
++#endif
+     bool m_lowPowerModeEnabled { false };
+ #endif
+ };
+--- a/Source/WebCore/platform/glib/LowPowerModeNotifierGLib.cpp
++++ b/Source/WebCore/platform/glib/LowPowerModeNotifierGLib.cpp
+@@ -28,10 +28,13 @@ namespace WebCore {
+ 
+ 
+ LowPowerModeNotifier::LowPowerModeNotifier(LowPowerModeChangeCallback&& callback)
++#if GLIB_CHECK_VERSION(2, 69, 1)
+     : m_callback(WTFMove(callback))
+     , m_powerProfileMonitor(adoptGRef(g_power_profile_monitor_dup_default()))
+     , m_lowPowerModeEnabled(g_power_profile_monitor_get_power_saver_enabled(m_powerProfileMonitor.get()))
++#endif
+ {
++#if GLIB_CHECK_VERSION(2, 69, 1)
+     g_signal_connect_swapped(m_powerProfileMonitor.get(), "notify::power-saver-enabled", G_CALLBACK(+[] (LowPowerModeNotifier* self, GParamSpec*, GPowerProfileMonitor* monitor) {
+         bool powerSaverEnabled = g_power_profile_monitor_get_power_saver_enabled(monitor);
+         if (self->m_lowPowerModeEnabled != powerSaverEnabled) {
+@@ -39,11 +42,16 @@ LowPowerModeNotifier::LowPowerModeNotifi
+             self->m_callback(self->m_lowPowerModeEnabled);
+         }
+     }), this);
++#else
++    UNUSED_PARAM(callback);
++#endif
+ }
+ 
+ LowPowerModeNotifier::~LowPowerModeNotifier()
+ {
++#if GLIB_CHECK_VERSION(2, 69, 1)
+     g_signal_handlers_disconnect_by_data(m_powerProfileMonitor.get(), this);
++#endif
+ }
+ 
+ bool LowPowerModeNotifier::isLowPowerModeEnabled() const
+--- a/Source/WebCore/platform/network/soup/CertificateInfoSoup.cpp
++++ b/Source/WebCore/platform/network/soup/CertificateInfoSoup.cpp
+@@ -73,9 +73,11 @@ CertificateInfo CertificateInfo::isolate
+         certificatesDataList.append(certificateData.release());
+     }
+ 
++#if GLIB_CHECK_VERSION(2, 69, 0)
+     GUniqueOutPtr<char> privateKey;
+     GUniqueOutPtr<char> privateKeyPKCS11Uri;
+     g_object_get(m_certificate.get(), "private-key-pem", &privateKey.outPtr(), "private-key-pkcs11-uri", &privateKeyPKCS11Uri.outPtr(), nullptr);
++#endif
+ 
+     GType certificateType = g_tls_backend_get_certificate_type(g_tls_backend_get_default());
+     GRefPtr<GTlsCertificate> certificate;
+@@ -86,8 +88,10 @@ CertificateInfo CertificateInfo::isolate
+             certificateType, nullptr, nullptr,
+             "certificate-pem", certificateData.get(),
+             "issuer", issuer,
++#if GLIB_CHECK_VERSION(2, 69, 0)
+             "private-key-pem", certificatesDataList.isEmpty() ? privateKey.get() : nullptr,
+             "private-key-pkcs11-uri", certificatesDataList.isEmpty() ? privateKeyPKCS11Uri.get() : nullptr,
++#endif
+             nullptr)));
+         RELEASE_ASSERT(certificate);
+         issuer = certificate.get();
+@@ -101,6 +105,7 @@ std::optional<CertificateSummary> Certif
+     if (!m_certificate)
+         return std::nullopt;
+ 
++#if GLIB_CHECK_VERSION(2, 69, 0)
+     CertificateSummary summaryInfo;
+ 
+     GRefPtr<GDateTime> validNotBefore;
+@@ -125,6 +130,9 @@ std::optional<CertificateSummary> Certif
+     }
+ 
+     return summaryInfo;
++#else
++    return std::nullopt;
++#endif
+ }
+ 
+ } // namespace WebCore
+--- a/Source/WebKit/NetworkProcess/glib/DNSCache.cpp
++++ b/Source/WebKit/NetworkProcess/glib/DNSCache.cpp
+@@ -50,9 +50,17 @@ DNSCache::DNSCacheMap& DNSCache::mapForT
+     case Type::Default:
+         return m_dnsMap;
+     case Type::IPv4Only:
++#if GLIB_CHECK_VERSION(2, 59, 0)
+         return m_ipv4Map;
++#else
++        return m_dnsMap;
++#endif
+     case Type::IPv6Only:
++#if GLIB_CHECK_VERSION(2, 59, 0)
+         return m_ipv6Map;
++#else
++        return m_dnsMap;
++#endif
+     }
+ 
+     RELEASE_ASSERT_NOT_REACHED();
+@@ -118,16 +126,20 @@ void DNSCache::removeExpiredResponsesFir
+ {
+     Locker locker { m_lock };
+     removeExpiredResponsesInMap(m_dnsMap);
++#if GLIB_CHECK_VERSION(2, 59, 0)
+     removeExpiredResponsesInMap(m_ipv4Map);
+     removeExpiredResponsesInMap(m_ipv6Map);
++#endif
+ }
+ 
+ void DNSCache::clear()
+ {
+     Locker locker { m_lock };
+     m_dnsMap.clear();
++#if GLIB_CHECK_VERSION(2, 59, 0)
+     m_ipv4Map.clear();
+     m_ipv6Map.clear();
++#endif
+ }
+ 
+ } // namespace WebKit
+--- a/Source/WebKit/NetworkProcess/glib/DNSCache.h
++++ b/Source/WebKit/NetworkProcess/glib/DNSCache.h
+@@ -65,8 +65,10 @@ private:
+ 
+     Lock m_lock;
+     DNSCacheMap m_dnsMap WTF_GUARDED_BY_LOCK(m_lock);
++#if GLIB_CHECK_VERSION(2, 59, 0)
+     DNSCacheMap m_ipv4Map;
+     DNSCacheMap m_ipv6Map;
++#endif
+     RunLoop::Timer m_expiredTimer;
+ };
+ 
+--- a/Source/WebKit/NetworkProcess/glib/WebKitCachedResolver.cpp
++++ b/Source/WebKit/NetworkProcess/glib/WebKitCachedResolver.cpp
+@@ -67,7 +67,9 @@ static Vector<GRefPtr<GInetAddress>> add
+ 
+ struct LookupAsyncData {
+     CString hostname;
++#if GLIB_CHECK_VERSION(2, 59, 0)
+     DNSCache::Type dnsCacheType { DNSCache::Type::Default };
++#endif
+ };
+ WEBKIT_DEFINE_ASYNC_DATA_STRUCT(LookupAsyncData)
+ 
+@@ -117,6 +119,7 @@ static GList* webkitCachedResolverLookup
+     return static_cast<GList*>(g_task_propagate_pointer(G_TASK(result), error));
+ }
+ 
++#if GLIB_CHECK_VERSION(2, 59, 0)
+ static inline DNSCache::Type dnsCacheType(GResolverNameLookupFlags flags)
+ {
+     // A cache is kept for each type of response to avoid the overcomplication of combining or filtering results.
+@@ -177,6 +180,7 @@ static GList* webkitCachedResolverLookup
+ 
+     return static_cast<GList*>(g_task_propagate_pointer(G_TASK(result), error));
+ }
++#endif // GLIB_CHECK_VERSION(2, 59, 0)
+ 
+ static char* webkitCachedResolverLookupByAddress(GResolver* resolver, GInetAddress* address, GCancellable* cancellable, GError** error)
+ {
+@@ -219,9 +223,11 @@ static void webkit_cached_resolver_class
+     resolverClass->lookup_by_name = webkitCachedResolverLookupByName;
+     resolverClass->lookup_by_name_async = webkitCachedResolverLookupByNameAsync;
+     resolverClass->lookup_by_name_finish = webkitCachedResolverLookupByNameFinish;
++#if GLIB_CHECK_VERSION(2, 59, 0)
+     resolverClass->lookup_by_name_with_flags = webkitCachedResolverLookupByNameWithFlags;
+     resolverClass->lookup_by_name_with_flags_async = webkitCachedResolverLookupByNameWithFlagsAsync;
+     resolverClass->lookup_by_name_with_flags_finish = webkitCachedResolverLookupByNameWithFlagsFinish;
++#endif
+     resolverClass->lookup_by_address = webkitCachedResolverLookupByAddress;
+     resolverClass->lookup_by_address_async = webkitCachedResolverLookupByAddressAsync;
+     resolverClass->lookup_by_address_finish = webkitCachedResolverLookupByAddressFinish;
+--- a/Source/WebKit/NetworkProcess/glib/WebKitOverridingResolver.cpp
++++ b/Source/WebKit/NetworkProcess/glib/WebKitOverridingResolver.cpp
+@@ -90,6 +90,7 @@ static GList* webkitOverridingResolverLo
+     return static_cast<GList*>(g_task_propagate_pointer(G_TASK(result), error));
+ }
+ 
++#if GLIB_CHECK_VERSION(2, 59, 0)
+ static GList* createLoobackAddressList(WebKitOverridingResolver* resolver, GResolverNameLookupFlags flags)
+ {
+     GList* list = nullptr;
+@@ -129,6 +130,7 @@ static GList* webkitOverridingResolverLo
+ 
+     return static_cast<GList*>(g_task_propagate_pointer(G_TASK(result), error));
+ }
++#endif // GLIB_CHECK_VERSION(2, 59, 0)
+ 
+ static char* webkitOverridingResolverLookupByAddress(GResolver* resolver, GInetAddress* address, GCancellable* cancellable, GError** error)
+ {
+@@ -166,9 +168,11 @@ static void webkit_overriding_resolver_c
+     resolverClass->lookup_by_name = webkitOverridingResolverLookupByName;
+     resolverClass->lookup_by_name_async = webkitOverridingResolverLookupByNameAsync;
+     resolverClass->lookup_by_name_finish = webkitOverridingResolverLookupByNameFinish;
++#if GLIB_CHECK_VERSION(2, 59, 0)
+     resolverClass->lookup_by_name_with_flags = webkitOverridingResolverLookupByNameWithFlags;
+     resolverClass->lookup_by_name_with_flags_async = webkitOverridingResolverLookupByNameWithFlagsAsync;
+     resolverClass->lookup_by_name_with_flags_finish = webkitOverridingResolverLookupByNameWithFlagsFinish;
++#endif
+     resolverClass->lookup_by_address = webkitOverridingResolverLookupByAddress;
+     resolverClass->lookup_by_address_async = webkitOverridingResolverLookupByAddressAsync;
+     resolverClass->lookup_by_address_finish = webkitOverridingResolverLookupByAddressFinish;
+--- a/Source/WebKit/Shared/glib/ArgumentCodersGLib.cpp
++++ b/Source/WebKit/Shared/glib/ArgumentCodersGLib.cpp
+@@ -121,11 +121,13 @@ void ArgumentCoder<GRefPtr<GTlsCertifica
+ 
+     encoder << certificatesData;
+ 
++#if GLIB_CHECK_VERSION(2, 69, 0)
+     GRefPtr<GByteArray> privateKey;
+     GUniqueOutPtr<char> privateKeyPKCS11Uri;
+     g_object_get(certificate.get(), "private-key", &privateKey.outPtr(), "private-key-pkcs11-uri", &privateKeyPKCS11Uri.outPtr(), nullptr);
+     encoder << privateKey;
+     encoder << CString(privateKeyPKCS11Uri.get());
++#endif
+ }
+ 
+ std::optional<GRefPtr<GTlsCertificate>> ArgumentCoder<GRefPtr<GTlsCertificate>>::decode(Decoder& decoder)
+@@ -138,6 +140,7 @@ std::optional<GRefPtr<GTlsCertificate>>
+     if (!certificatesData->size())
+         return GRefPtr<GTlsCertificate>();
+ 
++#if GLIB_CHECK_VERSION(2, 69, 0)
+     std::optional<GRefPtr<GByteArray>> privateKey;
+     decoder >> privateKey;
+     if (UNLIKELY(!privateKey))
+@@ -147,6 +150,7 @@ std::optional<GRefPtr<GTlsCertificate>>
+     decoder >> privateKeyPKCS11Uri;
+     if (UNLIKELY(!privateKeyPKCS11Uri))
+         return std::nullopt;
++#endif
+ 
+     GType certificateType = g_tls_backend_get_certificate_type(g_tls_backend_get_default());
+     GRefPtr<GTlsCertificate> certificate;
+@@ -157,8 +161,10 @@ std::optional<GRefPtr<GTlsCertificate>>
+             certificateType, nullptr, nullptr,
+             "certificate", certificateData.get(),
+             "issuer", issuer,
++#if GLIB_CHECK_VERSION(2, 69, 0)
+             "private-key", i == certificatesData->size() - 1 ? privateKey->get() : nullptr,
+             "private-key-pkcs11-uri", i == certificatesData->size() - 1 ? privateKeyPKCS11Uri->data() : nullptr,
++#endif
+             nullptr)));
+         issuer = certificate.get();
+         i++;
+--- a/Source/cmake/OptionsGTK.cmake
++++ b/Source/cmake/OptionsGTK.cmake
+@@ -7,7 +7,6 @@ SET_PROJECT_VERSION(2 48 5)
+ 
+ set(USER_AGENT_BRANDING "" CACHE STRING "Branding to add to user agent string")
+ 
+-find_package(GLIB 2.70.0 REQUIRED COMPONENTS gio gio-unix gobject gthread gmodule)
+ find_package(Cairo 1.16.0 REQUIRED)
+ find_package(LibGcrypt 1.7.0 REQUIRED)
+ find_package(Libtasn1 REQUIRED)
+@@ -205,6 +204,13 @@ else ()
+     SET_AND_EXPOSE_TO_BUILD(ENABLE_2022_GLIB_API OFF)
+ endif ()
+ 
++if (ENABLE_2022_GLIB_API)
++    set(GLIB_MINIMUM_VERSION 2.70.0)
++else ()
++    set(GLIB_MINIMUM_VERSION 2.56.4)
++endif ()
++find_package(GLIB ${GLIB_MINIMUM_VERSION} REQUIRED COMPONENTS gio gio-unix gobject gthread gmodule)
++
+ EXPOSE_STRING_VARIABLE_TO_BUILD(WEBKITGTK_API_INFIX)
+ EXPOSE_STRING_VARIABLE_TO_BUILD(WEBKITGTK_API_VERSION)
+ 
+@@ -277,6 +283,11 @@ if (ENABLED_COMPILER_SANITIZERS)
+     set(ENABLE_DOCUMENTATION OFF)
+ endif ()
+ 
++# GUri is available in GLib since version 2.66, but we only want to use it if version is >= 2.67.1.
++if (PC_GLIB_VERSION VERSION_GREATER "2.67.1" OR PC_GLIB_VERSION STREQUAL "2.67.1")
++    SET_AND_EXPOSE_TO_BUILD(HAVE_GURI 1)
++endif ()
++
+ if (ENABLE_GAMEPAD)
+     find_package(Manette 0.2.4)
+     if (NOT Manette_FOUND)
