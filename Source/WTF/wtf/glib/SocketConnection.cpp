@@ -165,7 +165,20 @@ bool SocketConnection::readMessage()
         GRefPtr<GVariant> parameters;
         if (!it->value.first.isNull()) {
             GUniquePtr<GVariantType> variantType(g_variant_type_new(it->value.first.data()));
+            // g_variant_new_from_data() requires the memory to be properly aligned for the type being loaded,
+            // but it's not possible to know the alignment because g_variant_type_info_query() is not public API.
+            // Since GLib 2.60 g_variant_new_from_data() already checks the alignment and reallocates the buffer
+            // in aligned memory only if needed. For older versions we can simply ensure the memory is 8 aligned.
+#if GLIB_CHECK_VERSION(2, 60, 0)
             parameters = g_variant_new_from_data(variantType.get(), messageData.data(), messageData.size(), FALSE, nullptr, nullptr);
+#else
+            auto* alignedMemory = fastAlignedMalloc(8, messageData.size());
+            memcpy(alignedMemory, messageData.data(), messageData.size());
+            GRefPtr<GBytes> bytes = g_bytes_new_with_free_func(alignedMemory, parametersSize, [](gpointer data) {
+                fastAlignedFree(data);
+            }, alignedMemory);
+            parameters = g_variant_new_from_bytes(variantType.get(), bytes.get(), FALSE);
+#endif
             if (messageIsByteSwapped(flags))
                 parameters = adoptGRef(g_variant_byteswap(parameters.get()));
         }
