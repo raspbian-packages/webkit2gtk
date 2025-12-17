@@ -84,8 +84,8 @@ OptionSet<RendererBufferTransportMode> AcceleratedBackingStore::rendererBufferTr
     static OptionSet<RendererBufferTransportMode> mode;
     static std::once_flag onceFlag;
     std::call_once(onceFlag, [] {
-        const char* disableDMABuf = getenv("WEBKIT_DISABLE_DMABUF_RENDERER");
-        if (disableDMABuf && g_strcmp0(disableDMABuf, "0"))
+        const char* forceDMABuf = getenv("WEBKIT_FORCE_DMABUF_RENDERER");
+        if (!forceDMABuf || !g_strcmp0(forceDMABuf, "0"))
             return;
 
         const char* platformExtensions = eglQueryString(nullptr, EGL_EXTENSIONS);
