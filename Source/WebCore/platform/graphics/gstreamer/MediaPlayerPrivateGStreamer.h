@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2007, 2009 Apple Inc.  All rights reserved.
+ * Copyright (C) 2007, 2009 Apple Inc. All rights reserved.
  * Copyright (C) 2007 Collabora Ltd. All rights reserved.
  * Copyright (C) 2007 Alp Toker <alp@atoker.com>
  * Copyright (C) 2014 Cable Television Laboratories, Inc.
@@ -30,6 +30,7 @@
 #include "GStreamerCommon.h"
 #include "GStreamerEMEUtilities.h"
 #include "GStreamerQuirks.h"
+#include "GUniquePtrGStreamer.h"
 #include "ImageOrientation.h"
 #include "Logging.h"
 #include "MainThreadNotifier.h"
@@ -37,6 +38,7 @@
 #include "PlatformLayer.h"
 #include "PlatformMediaResourceLoader.h"
 #include "TrackPrivateBaseGStreamer.h"
+#include "VideoFrameGStreamer.h"
 #include <glib.h>
 #include <gst/gst.h>
 #include <gst/pbutils/install-plugins.h>
@@ -60,12 +62,20 @@
 
 typedef struct _GstMpegtsSection GstMpegtsSection;
 
+#if USE(GSTREAMER_GL)
 // Include the <epoxy/gl.h> header before <gst/gl/gl.h>.
 #include <epoxy/gl.h>
+#define GST_USE_UNSTABLE_API
 #include <gst/gl/gl.h>
+#undef GST_USE_UNSTABLE_API
+#endif
 
 #if ENABLE(ENCRYPTED_MEDIA)
 #include "CDMProxy.h"
+#endif
+
+#if ENABLE(MEDIA_TELEMETRY)
+#include "MediaTelemetry.h"
 #endif
 
 typedef struct _GstStreamVolume GstStreamVolume;
@@ -144,7 +154,8 @@ public:
     void setPreservesPitch(bool) final;
     void setPreload(MediaPlayer::Preload) final;
     FloatSize naturalSize() const final;
-    void setVolume(float) final;
+    void setVolumeLocked(bool) final;
+    void setVolumeDouble(double) final;
     float volume() const final;
     void setMuted(bool) final;
     MediaPlayer::NetworkState networkState() const final;
@@ -209,7 +220,9 @@ public:
     void handleMessage(GstMessage*);
 
     void triggerRepaint(GRefPtr<GstSample>&&);
+#if USE(GSTREAMER_GL)
     void flushCurrentBuffer();
+#endif
 
     void handleTextSample(GRefPtr<GstSample>&&, TrackID streamId);
 
@@ -296,7 +309,9 @@ protected:
     void pushNextHolePunchBuffer();
     bool shouldIgnoreIntrinsicSize() final;
 
+#if USE(GSTREAMER_GL)
     GstElement* createVideoSinkGL();
+#endif
 
 #if USE(COORDINATED_GRAPHICS)
     void pushTextureToCompositor(bool isDuplicateSample);
@@ -324,9 +339,8 @@ protected:
     void ensureAudioSourceProvider();
     virtual void checkPlayingConsistency();
 
-    virtual bool doSeek(const SeekTarget& position, float rate);
+    virtual bool doSeek(const SeekTarget& position, float rate, bool isAsync = false, bool isSegment = false);
     void invalidateCachedPosition() const;
-    void ensureSeekFlags();
 
     static void sourceSetupCallback(MediaPlayerPrivateGStreamer*, GstElement*);
 
@@ -355,6 +369,9 @@ protected:
     bool m_didErrorOccur { false };
     mutable bool m_isEndReached { false };
     mutable std::optional<bool> m_isLiveStream;
+
+    bool isSeamlessSeekingEnabled() const;
+    bool m_isSegmentSeekAllowed { true };
 
     // Must reflect whether the last successfull call to gst_element_set_state() was for PLAYING.
     bool m_isPipelinePlaying = false;
@@ -401,8 +418,8 @@ protected:
 
     mutable Lock m_sampleMutex;
     GRefPtr<GstSample> m_sample WTF_GUARDED_BY_LOCK(m_sampleMutex);
-    bool m_hasFirstVideoSampleBeenRendered WTF_GUARDED_BY_LOCK(m_sampleMutex) { false };
 
+    mutable IntSize m_videoSizeFromCaps;
     mutable FloatSize m_videoSize;
     bool m_isUsingFallbackVideoSink { false };
     bool m_canRenderingBeAccelerated { false };
@@ -423,7 +440,6 @@ protected:
 #endif
 
     std::optional<GstVideoDecoderPlatform> m_videoDecoderPlatform;
-    GstSeekFlags m_seekFlags;
     bool m_ignoreErrors { false };
 
     String errorMessage() const override { return m_errorMessage; }
@@ -473,6 +489,8 @@ private:
     void setPlaybackFlags(bool isMediaStream);
     void recalculateDurationIfNeeded() const; // It's called from other const methods.
 
+    ImageOrientation getVideoOrientation(const GstTagList*);
+
     GstElement* createVideoSink();
     GstElement* createAudioSink();
     GstElement* audioSink() const { return m_audioSink.get(); }
@@ -518,6 +536,8 @@ private:
     void configureAudioDecoder(GstElement*);
     void configureVideoDecoder(GstElement*);
     void configureElement(GstElement*);
+    void configureParsebin(GstElement*);
+    void configureUriDecodebin2(GstElement*);
 
     void configureElementPlatformQuirks(GstElement*);
 
@@ -535,6 +555,10 @@ private:
     void initializationDataEncountered(InitData&&);
     InitData parseInitDataFromProtectionMessage(GstMessage*);
     bool waitForCDMAttachment();
+#endif
+
+#if ENABLE(MEDIA_TELEMETRY)
+    MediaTelemetryReport::DrmType getDrm() const;
 #endif
 
     void configureMediaStreamAudioTracks();
@@ -626,9 +650,11 @@ private:
     uint64_t m_lastVideoFrameMetadataSampleCount { 0 };
     mutable PlatformTimeRanges m_buffered;
 #if !RELEASE_LOG_DISABLED
-    Ref<const Logger> m_logger;
+    const Ref<const Logger> m_logger;
     const uint64_t m_logIdentifier;
 #endif
+
+    bool m_initialSegmentSeekDone { false };
 
     String m_errorMessage;
 
@@ -649,21 +675,23 @@ private:
     Lock m_codecsLock;
     TrackIDHashMap<String> m_codecs WTF_GUARDED_BY_LOCK(m_codecsLock);
 
-    bool isSeamlessSeekingEnabled() const { return m_seekFlags & GST_SEEK_FLAG_SEGMENT; }
-
     Ref<PlatformMediaResourceLoader> m_loader;
 
     RefPtr<GStreamerQuirksManager> m_quirksManagerForTesting;
-    UncheckedKeyHashMap<const GStreamerQuirk*, std::unique_ptr<GStreamerQuirkBase::GStreamerQuirkState>> m_quirkStates;
+    HashMap<const GStreamerQuirk*, std::unique_ptr<GStreamerQuirkBase::GStreamerQuirkState>> m_quirkStates;
 
     MediaTime m_estimatedVideoFrameDuration { MediaTime::zeroTime() };
 
-#if USE(COORDINATED_GRAPHICS)
-    void updateVideoInfoFromCaps(GstCaps*);
+    std::optional<VideoFrameGStreamer::Info> m_videoInfo;
 
-    std::optional<DMABufFormat> m_dmabufFormat;
-    GstVideoInfo m_videoInfo;
-#endif
+    bool m_volumeLocked { false };
+
+    void determineContainerTypeFromCaps(const GstCaps*);
+    enum ContainerType {
+        Ogg,
+        Other
+    };
+    ContainerType m_containerType { ContainerType::Other };
 };
 
 } // namespace WebCore

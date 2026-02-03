@@ -136,8 +136,13 @@ if (DEVELOPER_MODE AND DEVELOPER_MODE_FATAL_WARNINGS)
     endif ()
 endif ()
 
+if (DEVELOPER_MODE OR ARM)
+    # This lets us get good backtraces, in particular when using JSC_useGdbJITInfo=1.
+    WEBKIT_PREPEND_GLOBAL_COMPILER_FLAGS(-fno-omit-frame-pointer)
+endif ()
+
 if (COMPILER_IS_GCC_OR_CLANG)
-    if (COMPILER_IS_CLANG OR (DEVELOPER_MODE AND !ARM))
+    if (COMPILER_IS_CLANG OR (DEVELOPER_MODE AND NOT ARM))
         # Split debug information in ".debug_types" / ".debug_info" sections - this leads
         # to a smaller overall size of the debug information, and avoids linker relocation
         # errors on e.g. aarch64 (relocation R_AARCH64_ABS32 out of range: 4312197985 is not in [-2147483648, 4294967295])
@@ -187,6 +192,11 @@ if (COMPILER_IS_GCC_OR_CLANG)
         WEBKIT_PREPEND_GLOBAL_COMPILER_FLAGS(-Wno-uninitialized)
     endif ()
 
+    # GCC gives false warnings for subobject-linkage <https://gcc.gnu.org/bugzilla/show_bug.cgi?id=105595>
+    if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+        WEBKIT_PREPEND_GLOBAL_COMPILER_FLAGS(-Wno-subobject-linkage)
+    endif ()
+
     WEBKIT_PREPEND_GLOBAL_CXX_FLAGS(-Wno-noexcept-type)
 
     # These GCC warnings produce too many false positives to be useful. We'll
@@ -214,6 +224,15 @@ if (COMPILER_IS_GCC_OR_CLANG)
         # Match Clang's behavor and exit after emitting 20 errors.
         # https://bugs.webkit.org/show_bug.cgi?id=244621
         WEBKIT_PREPEND_GLOBAL_COMPILER_FLAGS(-fmax-errors=20)
+    endif ()
+
+    # Force SSE2 fp on x86 builds.
+    if (WTF_CPU_X86 AND NOT CMAKE_CROSSCOMPILING)
+        WEBKIT_PREPEND_GLOBAL_COMPILER_FLAGS(-msse2 -mfpmath=sse)
+        include(DetectSSE2)
+        if (NOT SSE2_SUPPORT_FOUND)
+            message(FATAL_ERROR "SSE2 support is required to compile WebKit")
+        endif ()
     endif ()
 
     # Makes builds faster. The GCC manual warns about the possibility that the assembler being
@@ -354,6 +373,8 @@ endif ()
 
 if (COMPILER_IS_GCC_OR_CLANG)
     set(ATOMIC_TEST_SOURCE "
+#include <atomic>
+#include <optional>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -420,6 +441,8 @@ static inline bool compare_and_swap_uint64_weak(uint64_t* ptr, uint64_t old_valu
 }
 
 int main() {
+    std::atomic<std::optional<double>> d;
+    d = 0.0;
     bool y = false;
     bool expected = true;
     bool j = compare_and_swap_bool_weak(&y, expected, false);
@@ -434,13 +457,13 @@ int main() {
                   k ||
 #endif
                   l) ? 0 : 1;
-    return result;
+    return static_cast<int>(result + d.load().value());
 }
     ")
-    check_c_source_compiles("${ATOMIC_TEST_SOURCE}" ATOMICS_ARE_BUILTIN)
+    check_cxx_source_compiles("${ATOMIC_TEST_SOURCE}" ATOMICS_ARE_BUILTIN)
     if (NOT ATOMICS_ARE_BUILTIN)
         set(CMAKE_REQUIRED_LIBRARIES atomic)
-        check_c_source_compiles("${ATOMIC_TEST_SOURCE}" ATOMICS_REQUIRE_LIBATOMIC)
+        check_cxx_source_compiles("${ATOMIC_TEST_SOURCE}" ATOMICS_REQUIRE_LIBATOMIC)
         unset(CMAKE_REQUIRED_LIBRARIES)
     endif ()
 

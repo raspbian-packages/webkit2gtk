@@ -108,10 +108,7 @@ protected:
     template<typename T>
     IPC::Error send(T&& message) const
     {
-        // FIXME: Remove this suppression once https://github.com/llvm/llvm-project/pull/119336 is merged.
-IGNORE_CLANG_STATIC_ANALYZER_WARNINGS_BEGIN("alpha.webkit.UncountedCallArgsChecker")
         return Ref { *m_streamConnection }->send(std::forward<T>(message), m_graphicsContextGLIdentifier);
-IGNORE_CLANG_STATIC_ANALYZER_WARNINGS_END
     }
 
     // GraphicsContextGL::Client overrides.
@@ -141,8 +138,8 @@ IGNORE_CLANG_STATIC_ANALYZER_WARNINGS_END
     void setSharedVideoFrameMemory(WebCore::SharedMemory::Handle&&);
 #endif
     void simulateEventForTesting(WebCore::GraphicsContextGL::SimulatedEventForTesting);
-    void getBufferSubDataInline(uint32_t target, uint64_t offset, size_t dataSize, CompletionHandler<void(std::span<const uint8_t>)>&&);
-    void getBufferSubDataSharedMemory(uint32_t target, uint64_t offset, size_t dataSize, WebCore::SharedMemory::Handle, CompletionHandler<void(bool)>&&);
+    void getBufferSubDataInline(uint32_t target, uint64_t offset, uint64_t dataSize, CompletionHandler<void(std::span<const uint8_t>)>&&);
+    void getBufferSubDataSharedMemory(uint32_t target, uint64_t offset, uint64_t dataSize, WebCore::SharedMemory::Handle, CompletionHandler<void(bool)>&&);
     void readPixelsInline(WebCore::IntRect, uint32_t format, uint32_t type, bool packReverseRowOrder, CompletionHandler<void(std::optional<WebCore::IntSize>, std::span<const uint8_t>)>&&);
     void readPixelsSharedMemory(WebCore::IntRect, uint32_t format, uint32_t type, bool packReverseRowOrder, WebCore::SharedMemory::Handle, CompletionHandler<void(std::optional<WebCore::IntSize>)>&&);
     void multiDrawArraysANGLE(uint32_t mode, IPC::ArrayReferenceTuple<int32_t, int32_t>&& firstsAndCounts);
@@ -151,6 +148,13 @@ IGNORE_CLANG_STATIC_ANALYZER_WARNINGS_END
     void multiDrawElementsInstancedANGLE(uint32_t mode, IPC::ArrayReferenceTuple<int32_t, int32_t, int32_t>&& countsOffsetsAndInstanceCounts, uint32_t type);
     void multiDrawArraysInstancedBaseInstanceANGLE(uint32_t mode, IPC::ArrayReferenceTuple<int32_t, int32_t, int32_t, uint32_t>&& firstsCountsInstanceCountsAndBaseInstances);
     void multiDrawElementsInstancedBaseVertexBaseInstanceANGLE(uint32_t mode, IPC::ArrayReferenceTuple<int32_t, int32_t, int32_t, int32_t, uint32_t>&& countsOffsetsInstanceCountsBaseVerticesAndBaseInstances, uint32_t type);
+    void drawBuffers(std::span<const uint32_t>);
+    void drawBuffersEXT(std::span<const uint32_t>);
+    void invalidateFramebuffer(uint32_t target, std::span<const uint32_t> attachments);
+    void invalidateSubFramebuffer(uint32_t target, std::span<const uint32_t> attachments, int32_t x, int32_t y, int32_t width, int32_t height);
+#if ENABLE(WEBXR)
+    void framebufferDiscard(uint32_t target, std::span<const uint32_t> attachments);
+#endif
 
 #if ENABLE(VIDEO)
     Ref<RemoteVideoFrameObjectHeap> protectedVideoFrameObjectHeap() const;
@@ -172,7 +176,6 @@ private:
     bool webXRPromptAccepted() const;
     Ref<IPC::StreamConnectionWorkQueue> protectedWorkQueue() const { return m_workQueue; }
     RefPtr<GCGLContext> protectedContext();
-    void messageCheck(bool);
 
 protected:
     ThreadSafeWeakPtr<GPUConnectionToWebProcess> m_gpuConnectionToWebProcess;

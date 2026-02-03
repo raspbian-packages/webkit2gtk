@@ -31,6 +31,7 @@
 
 #include "BackForwardItemIdentifier.h"
 #include "FrameLoader.h"
+#include "ProcessSwapDisposition.h"
 
 namespace WebCore {
 
@@ -39,6 +40,7 @@ class HistoryItemClient;
 class LocalFrame;
 class SerializedScriptValue;
 
+enum class ShouldGoToHistoryItem : uint8_t;
 enum class ShouldTreatAsContinuingLoad : uint8_t;
 
 struct NavigationAPIMethodTracker;
@@ -46,7 +48,7 @@ struct StringWithDirection;
 
 class HistoryController final : public CanMakeWeakPtr<HistoryController>  {
     WTF_MAKE_NONCOPYABLE(HistoryController);
-    WTF_MAKE_FAST_ALLOCATED_WITH_HEAP_IDENTIFIER(Loader);
+    WTF_DEPRECATED_MAKE_FAST_ALLOCATED_WITH_HEAP_IDENTIFIER(HistoryController, Loader);
 public:
     enum HistoryUpdateType { UpdateAll, UpdateAllExceptBackForwardList };
 
@@ -90,7 +92,6 @@ public:
     HistoryItem* provisionalItem() const { return m_provisionalItem.get(); }
     RefPtr<HistoryItem> protectedProvisionalItem() const;
     void setProvisionalItem(RefPtr<HistoryItem>&&);
-    void clearProvisionalItem();
 
     void pushState(RefPtr<SerializedScriptValue>&&, const String& url);
     void replaceState(RefPtr<SerializedScriptValue>&&, const String& url);
@@ -106,9 +107,9 @@ public:
 private:
     friend class Page;
     bool shouldStopLoadingForHistoryItem(HistoryItem&) const;
-    void goToItem(HistoryItem&, FrameLoadType, ShouldTreatAsContinuingLoad);
+    void goToItem(HistoryItem&, FrameLoadType, ShouldTreatAsContinuingLoad, ProcessSwapDisposition processSwapDisposition = ProcessSwapDisposition::None);
     void goToItemForNavigationAPI(HistoryItem&, FrameLoadType, LocalFrame& triggeringFrame, NavigationAPIMethodTracker*);
-    void goToItemShared(HistoryItem&, CompletionHandler<void(bool)>&&);
+    void goToItemShared(HistoryItem&, CompletionHandler<void(ShouldGoToHistoryItem)>&&, ProcessSwapDisposition processSwapDisposition = ProcessSwapDisposition::None);
 
     void initializeItem(HistoryItem&, RefPtr<DocumentLoader>);
     Ref<HistoryItem> createItem(HistoryItemClient&, BackForwardItemIdentifier);

@@ -38,7 +38,7 @@
 #include "SystemSettings.h"
 #endif
 
-#if defined(__ANDROID__) || defined(ANDROID)
+#if OS(ANDROID)
 #include <skia/ports/SkFontMgr_android.h>
 #elif PLATFORM(WIN)
 #include <dwrite.h>
@@ -56,7 +56,7 @@ void FontCache::platformInit()
 SkFontMgr& FontCache::fontManager() const
 {
     if (!m_fontManager) {
-#if defined(__ANDROID__) || defined(ANDROID)
+#if OS(ANDROID)
         m_fontManager = SkFontMgr_New_Android(nullptr);
 #elif OS(WINDOWS)
         auto result = createDWriteFactory();
@@ -106,9 +106,20 @@ static SkFontStyle skiaFontStyle(const FontDescription& fontDescription)
     return SkFontStyle(skWeight, skWidth, skSlant);
 }
 
-RefPtr<Font> FontCache::systemFallbackForCharacterCluster(const FontDescription& description, const Font&, IsForPlatformFont, PreferColoredFont, StringView stringView)
+static std::pair<bool, bool> computeSynthesisProperties(const SkTypeface& typeface, const FontDescription& fontDescription, OptionSet<FontLookupOptions> synthesisOptions)
 {
-    // FIXME: matchFamilyStyleCharacter is slow, we need a cache here, see https://bugs.webkit.org/show_bug.cgi?id=203544.
+    if (FontPlatformData::skiaTypefaceHasAnySupportedColorTable(typeface))
+        return { false, false };
+
+    bool allowsSyntheticBold = fontDescription.hasAutoFontSynthesisWeight() && !synthesisOptions.contains(FontLookupOptions::DisallowBoldSynthesis);
+    bool syntheticBold = allowsSyntheticBold && isFontWeightBold(fontDescription.weight()) && !typeface.isBold();
+    bool allowsSyntheticOblique = fontDescription.hasAutoFontSynthesisStyle() && !synthesisOptions.contains(FontLookupOptions::DisallowObliqueSynthesis);
+    bool syntheticOblique = allowsSyntheticOblique && isItalic(fontDescription.italic()) && !typeface.isItalic();
+    return { syntheticBold, syntheticOblique };
+}
+
+RefPtr<Font> FontCache::systemFallbackForCharacterCluster(const FontDescription& description, const Font&, IsForPlatformFont, PreferColoredFont preferColoredFont, StringView stringView)
+{
     auto codePoints = stringView.codePoints();
     auto codePointsIterator = codePoints.begin();
     char32_t baseCharacter = *codePointsIterator;
@@ -116,17 +127,29 @@ RefPtr<Font> FontCache::systemFallbackForCharacterCluster(const FontDescription&
     if (isDefaultIgnorableCodePoint(baseCharacter) || isPrivateUseAreaCharacter(baseCharacter))
         return nullptr;
 
-    bool isEmoji = codePointsIterator != codePoints.end() && *codePointsIterator == emojiVariationSelector;
+    bool isEmoji = (codePointsIterator != codePoints.end() && *codePointsIterator == emojiVariationSelector) || preferColoredFont == PreferColoredFont::Yes;
 
+#if OS(ANDROID) || PLATFORM(WIN)
     // FIXME: handle locale.
     Vector<const char*, 1> bcp47;
     if (isEmoji)
         bcp47.append("und-Zsye");
+    auto typeface = fontManager().matchFamilyStyleCharacter(nullptr, skiaFontStyle(description), bcp47.mutableSpan().data(), bcp47.size(), baseCharacter);
+#else
+    auto typeface = m_skiaSystemFallbackFontCache.fontForCharacterCluster(skiaFontStyle(description), isEmoji ? "und-Zsye"_s : description.computedLocale(), stringView);
+#endif
+    if (!typeface)
+        return nullptr;
 
-    // FIXME: handle synthetic properties.
     auto features = computeFeatures(description, { });
-    auto typeface = fontManager().matchFamilyStyleCharacter(nullptr, skiaFontStyle(description), bcp47.data(), bcp47.size(), baseCharacter);
-    FontPlatformData alternateFontData(WTFMove(typeface), description.computedSize(), false /* syntheticBold */, false /* syntheticOblique */, description.orientation(), description.widthVariant(), description.textRenderingMode(), WTFMove(features));
+    auto [syntheticBold, syntheticOblique] = computeSynthesisProperties(*typeface, description, { });
+
+    // @font-face size-adjust does not affect fallback font sizes, but font-size-adjust does.
+    // We initialize FontPlatformData with the computed size, then apply font-size-adjust if required.
+    auto size = description.computedSize();
+    FontPlatformData alternateFontData(WTFMove(typeface), size, syntheticBold, syntheticOblique, description.orientation(), description.widthVariant(), description.textRenderingMode(), WTFMove(features));
+    alternateFontData.updateSizeWithFontSizeAdjust(description.fontSizeAdjust(), size);
+
     return fontForPlatformData(alternateFontData);
 }
 
@@ -166,7 +189,8 @@ Ref<Font> FontCache::lastResortFallbackFont(const FontDescription& fontDescripti
         typeface = SkTypeface::MakeEmpty();
     }
 
-    FontPlatformData platformData(WTFMove(typeface), fontDescription.computedSize(), false /* syntheticBold */, false /* syntheticOblique */,
+    auto [syntheticBold, syntheticOblique] = computeSynthesisProperties(*typeface, fontDescription, { });
+    FontPlatformData platformData(WTFMove(typeface), fontDescription.computedSize(), syntheticBold, syntheticOblique,
         fontDescription.orientation(), fontDescription.widthVariant(), fontDescription.textRenderingMode(), computeFeatures(fontDescription, { }));
     return fontForPlatformData(platformData);
 }
@@ -363,14 +387,15 @@ Vector<hb_feature_t> FontCache::computeFeatures(const FontDescription& fontDescr
 std::unique_ptr<FontPlatformData> FontCache::createFontPlatformData(const FontDescription& fontDescription, const AtomString& family, const FontCreationContext& fontCreationContext, OptionSet<FontLookupOptions> options)
 {
     auto familyName = getFamilyNameStringFromFamily(family);
-    auto typeface = fontManager().matchFamilyStyle(familyName.utf8().data(), skiaFontStyle(fontDescription));
+    auto skFontStyle = skiaFontStyle(fontDescription);
+    auto typeface = fontManager().matchFamilyStyle(familyName.utf8().data(), skFontStyle);
     if (!typeface)
         return nullptr;
 
     auto size = fontDescription.adjustedSizeForFontFace(fontCreationContext.sizeAdjust());
     auto features = computeFeatures(fontDescription, fontCreationContext);
-    UNUSED_PARAM(options);
-    FontPlatformData platformData(WTFMove(typeface), size, false /* syntheticBold */, false /* syntheticOblique */, fontDescription.orientation(), fontDescription.widthVariant(), fontDescription.textRenderingMode(), WTFMove(features));
+    auto [syntheticBold, syntheticOblique] = computeSynthesisProperties(*typeface, fontDescription, options);
+    FontPlatformData platformData(WTFMove(typeface), size, syntheticBold, syntheticOblique, fontDescription.orientation(), fontDescription.widthVariant(), fontDescription.textRenderingMode(), WTFMove(features));
 
     platformData.updateSizeWithFontSizeAdjust(fontDescription.fontSizeAdjust(), fontDescription.computedSize());
     auto platformDataUniquePtr = makeUnique<FontPlatformData>(platformData);
@@ -390,6 +415,9 @@ void FontCache::platformInvalidate()
 void FontCache::platformPurgeInactiveFontData()
 {
     m_harfBuzzFontCache.clear();
+#if !OS(ANDROID) && !PLATFORM(WIN)
+    m_skiaSystemFallbackFontCache.clear();
+#endif
 }
 
 } // namespace WebCore

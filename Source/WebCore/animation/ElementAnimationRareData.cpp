@@ -28,6 +28,7 @@
 
 #include "CSSAnimation.h"
 #include "CSSTransition.h"
+#include "KeyframeEffect.h"
 #include "KeyframeEffectStack.h"
 #include "RenderStyle.h"
 #include "ScriptExecutionContext.h"
@@ -41,6 +42,7 @@ ElementAnimationRareData::ElementAnimationRareData()
 
 ElementAnimationRareData::~ElementAnimationRareData()
 {
+    ASSERT(!m_keyframeEffectStack || !m_keyframeEffectStack->hasEffects());
 }
 
 KeyframeEffectStack& ElementAnimationRareData::ensureKeyframeEffectStack()
@@ -52,6 +54,13 @@ KeyframeEffectStack& ElementAnimationRareData::ensureKeyframeEffectStack()
 
 void ElementAnimationRareData::setAnimationsCreatedByMarkup(CSSAnimationCollection&& animations)
 {
+    if (m_keyframeEffectStack) {
+        for (auto& animation : m_animationsCreatedByMarkup) {
+            if (RefPtr keyframeEffect = dynamicDowncast<KeyframeEffect>(animation->effect()))
+                m_keyframeEffectStack->removeEffect(*keyframeEffect);
+        }
+    }
+
     m_animationsCreatedByMarkup = WTFMove(animations);
 }
 

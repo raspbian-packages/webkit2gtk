@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2010 Apple Inc. All rights reserved.
- * Portions Copyright (c) 2011 Motorola Mobility, Inc.  All rights reserved.
+ * Portions Copyright (c) 2011 Motorola Mobility, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -56,6 +56,7 @@
 
 #if USE(GBM)
 #include <WebCore/DRMDeviceManager.h>
+#include <WebCore/GBMDevice.h>
 #endif
 
 #if PLATFORM(GTK) || PLATFORM(WPE)
@@ -114,6 +115,9 @@ void WebProcess::stopRunLoop()
     for (auto& webPage : copyToVector(m_pageMap.values()))
         webPage->close();
 
+    if (auto* display = PlatformDisplay::sharedDisplayIfExists())
+        display->clearGLContexts();
+
     AuxiliaryProcess::stopRunLoop();
 }
 
@@ -145,8 +149,8 @@ void WebProcess::initializePlatformDisplayIfNeeded() const
         disabled = disableGBM && strcmp(disableGBM, "0");
 #endif
         if (!disabled) {
-            if (auto* device = DRMDeviceManager::singleton().mainGBMDeviceNode(DRMDeviceManager::NodeType::Render)) {
-                PlatformDisplay::setSharedDisplay(PlatformDisplayGBM::create(device));
+            if (auto device = DRMDeviceManager::singleton().mainGBMDevice(DRMDeviceManager::NodeType::Render)) {
+                PlatformDisplay::setSharedDisplay(PlatformDisplayGBM::create(device->device()));
                 return;
             }
         }
@@ -182,7 +186,7 @@ void WebProcess::platformInitializeWebProcess(WebProcessCreationParameters& para
 #endif
 
 #if USE(GBM)
-    DRMDeviceManager::singleton().initializeMainDevice(parameters.renderDeviceFile);
+    DRMDeviceManager::singleton().initializeMainDevice(WTFMove(parameters.drmDevice));
 #endif
 
     m_rendererBufferTransportMode = parameters.rendererBufferTransportMode;
@@ -197,6 +201,8 @@ void WebProcess::platformInitializeWebProcess(WebProcessCreationParameters& para
             initializePlatformDisplayIfNeeded();
     }
 #endif
+
+    m_availableInputDevices = parameters.availableInputDevices;
 
 #if USE(GSTREAMER)
     WebCore::setGStreamerOptionsFromUIProcess(WTFMove(parameters.gstreamerOptions));
@@ -295,7 +301,21 @@ void WebProcess::setScreenProperties(const WebCore::ScreenProperties& properties
     for (auto& page : m_pageMap.values())
         page->screenPropertiesDidChange();
 }
-#endif
+
+std::optional<AvailableInputDevices> WebProcess::primaryPointingDevice() const
+{
+    if (m_availableInputDevices.contains(AvailableInputDevices::Mouse))
+        return AvailableInputDevices::Mouse;
+    if (m_availableInputDevices.contains(AvailableInputDevices::Touchscreen))
+        return AvailableInputDevices::Touchscreen;
+    return std::nullopt;
+}
+
+void WebProcess::setAvailableInputDevices(OptionSet<AvailableInputDevices> availableInputDevices)
+{
+    m_availableInputDevices = availableInputDevices;
+}
+#endif // PLATFORM(GTK) || PLATFORM(WPE)
 
 } // namespace WebKit
 

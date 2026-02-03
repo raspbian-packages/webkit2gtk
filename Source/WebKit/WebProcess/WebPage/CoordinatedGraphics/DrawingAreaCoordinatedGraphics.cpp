@@ -60,10 +60,10 @@ namespace WebKit {
 using namespace WebCore;
 
 DrawingAreaCoordinatedGraphics::DrawingAreaCoordinatedGraphics(WebPage& webPage, const WebPageCreationParameters& parameters)
-    : DrawingArea(DrawingAreaType::CoordinatedGraphics, parameters.drawingAreaIdentifier, webPage)
+    : DrawingArea(parameters.drawingAreaIdentifier, webPage)
     , m_isPaintingSuspended(!(parameters.activityState & ActivityState::IsVisible))
-    , m_exitCompositingTimer(RunLoop::main(), this, &DrawingAreaCoordinatedGraphics::exitAcceleratedCompositingMode)
-    , m_displayTimer(RunLoop::main(), this, &DrawingAreaCoordinatedGraphics::displayTimerFired)
+    , m_exitCompositingTimer(RunLoop::mainSingleton(), "DrawingAreaCoordinatedGraphics::ExitCompositingTimer"_s, this, &DrawingAreaCoordinatedGraphics::exitAcceleratedCompositingMode)
+    , m_displayTimer(RunLoop::mainSingleton(), "DrawingAreaCoordinatedGraphics::DisplayTimer"_s, this, &DrawingAreaCoordinatedGraphics::displayTimerFired)
 {
 #if USE(GLIB_EVENT_LOOP) && !PLATFORM(WPE)
     m_displayTimer.setPriority(RunLoopSourcePriority::NonAcceleratedDrawingTimer);
@@ -249,8 +249,9 @@ void DrawingAreaCoordinatedGraphics::backgroundColorDidChange()
 
 void DrawingAreaCoordinatedGraphics::setDeviceScaleFactor(float deviceScaleFactor, CompletionHandler<void()>&& completionHandler)
 {
-    Ref { m_webPage.get() }->setDeviceScaleFactor(deviceScaleFactor);
-    if (m_layerTreeHost)
+    Ref webPage = m_webPage.get();
+    webPage->setDeviceScaleFactor(deviceScaleFactor);
+    if (m_layerTreeHost && !webPage->size().isEmpty())
         m_layerTreeHost->sizeDidChange();
     completionHandler();
 }
@@ -792,6 +793,20 @@ void DrawingAreaCoordinatedGraphics::preferredBufferFormatsDidChange()
 {
     if (m_layerTreeHost)
         m_layerTreeHost->preferredBufferFormatsDidChange();
+}
+#endif
+
+#if ENABLE(DAMAGE_TRACKING)
+void DrawingAreaCoordinatedGraphics::resetDamageHistoryForTesting()
+{
+    if (m_layerTreeHost)
+        m_layerTreeHost->resetDamageHistoryForTesting();
+}
+
+void DrawingAreaCoordinatedGraphics::foreachRegionInDamageHistoryForTesting(Function<void(const Region&)>&& callback) const
+{
+    if (m_layerTreeHost)
+        m_layerTreeHost->foreachRegionInDamageHistoryForTesting(WTFMove(callback));
 }
 #endif
 

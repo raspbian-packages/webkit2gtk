@@ -126,6 +126,7 @@ WI.AnimationManager = class AnimationManager
         if (!animation)
             return;
 
+        // COMPATIBILITY (iOS 26.0, macOS 26.0): `Animation.effectChanged` removed the `effect` parameter in favor of `Animation.requestEffect`.
         animation.effectChanged(effect);
     }
 

@@ -30,6 +30,7 @@
 
 #include "JSCJSValueInlines.h"
 #include "JSWebAssemblyArray.h"
+#include "JSWebAssemblyException.h"
 #include "JSWebAssemblyStruct.h"
 #include "WasmCallee.h"
 #include "WasmFormat.h"
@@ -116,34 +117,30 @@ void StructType::dump(PrintStream& out) const
 {
     out.print("("_s);
     CommaPrinter comma;
-    for (StructFieldCount fieldIndex = 0; fieldIndex < fieldCount(); ++fieldIndex) {
-        out.print(comma, makeString(field(fieldIndex).type));
-        out.print(comma, field(fieldIndex).mutability ? "immutable"_s : "mutable"_s);
-    }
+    for (StructFieldCount fieldIndex = 0; fieldIndex < fieldCount(); ++fieldIndex)
+        out.print(comma, field(fieldIndex).mutability ? "immutable "_s : "mutable "_s, makeString(field(fieldIndex).type));
     out.print(")"_s);
 }
 
 StructType::StructType(void* payload, StructFieldCount fieldCount, const FieldType* fieldTypes)
     : m_payload(static_cast<FieldType*>(payload))
     , m_fieldCount(fieldCount)
-    , m_hasRecursiveReference(false)
 {
-    bool hasRecursiveReference = false;
-    // Account for the internal header in m_payload.m_storage.data
-    unsigned currentFieldOffset = FixedVector<uint8_t>::Storage::offsetOfData();
+    unsigned currentFieldOffset = 0;
     for (unsigned fieldIndex = 0; fieldIndex < m_fieldCount; ++fieldIndex) {
         const auto& fieldType = fieldTypes[fieldIndex];
-        hasRecursiveReference |= isRefWithRecursiveReference(fieldType.type);
+        m_hasRefFieldTypes |= isRefType(fieldType.type);
+        m_hasRecursiveReference |= isRefWithRecursiveReference(fieldType.type);
+
         getField(fieldIndex) = fieldType;
 
         const auto& fieldStorageType = field(fieldIndex).type;
         currentFieldOffset = WTF::roundUpToMultipleOf(typeAlignmentInBytes(fieldStorageType), currentFieldOffset);
-        *offsetOfField(fieldIndex) = currentFieldOffset;
+        fieldOffsetFromInstancePayload(fieldIndex) = currentFieldOffset;
         currentFieldOffset += typeSizeInBytes(fieldStorageType);
     }
 
     m_instancePayloadSize = WTF::roundUpToMultipleOf<sizeof(uint64_t)>(currentFieldOffset);
-    setHasRecursiveReference(hasRecursiveReference);
 }
 
 String ArrayType::toString() const
@@ -155,8 +152,7 @@ void ArrayType::dump(PrintStream& out) const
 {
     out.print("("_s);
     CommaPrinter comma;
-    out.print(comma, makeString(elementType().type));
-    out.print(comma, elementType().mutability ? "immutable"_s : "mutable"_s);
+    out.print(comma, elementType().mutability ? "immutable "_s : "mutable "_s, makeString(elementType().type));
     out.print(")"_s);
 }
 
@@ -355,7 +351,7 @@ RefPtr<TypeDefinition> TypeDefinition::tryCreateFunctionSignature(FunctionArgCou
     void* memory = nullptr;
     if (!result.getValue(memory))
         return nullptr;
-    TypeDefinition* signature = new (NotNull, memory) TypeDefinition(std::in_place_type<FunctionSignature>, argumentCount, returnCount);
+    TypeDefinition* signature = new (NotNull, memory) TypeDefinition(WTF::InPlaceType<FunctionSignature>, argumentCount, returnCount);
     return adoptRef(signature);
 }
 
@@ -366,7 +362,7 @@ RefPtr<TypeDefinition> TypeDefinition::tryCreateStructType(StructFieldCount fiel
     void* memory = nullptr;
     if (!result.getValue(memory))
         return nullptr;
-    TypeDefinition* signature = new (NotNull, memory) TypeDefinition(std::in_place_type<StructType>, fieldCount, fields);
+    TypeDefinition* signature = new (NotNull, memory) TypeDefinition(WTF::InPlaceType<StructType>, fieldCount, fields);
     return adoptRef(signature);
 }
 
@@ -377,7 +373,7 @@ RefPtr<TypeDefinition> TypeDefinition::tryCreateArrayType()
     void* memory = nullptr;
     if (!result.getValue(memory))
         return nullptr;
-    TypeDefinition* signature = new (NotNull, memory) TypeDefinition(std::in_place_type<ArrayType>);
+    TypeDefinition* signature = new (NotNull, memory) TypeDefinition(WTF::InPlaceType<ArrayType>);
     return adoptRef(signature);
 }
 
@@ -388,7 +384,7 @@ RefPtr<TypeDefinition> TypeDefinition::tryCreateRecursionGroup(RecursionGroupCou
     void* memory = nullptr;
     if (!result.getValue(memory))
         return nullptr;
-    TypeDefinition* signature = new (NotNull, memory) TypeDefinition(std::in_place_type<RecursionGroup>, typeCount);
+    TypeDefinition* signature = new (NotNull, memory) TypeDefinition(WTF::InPlaceType<RecursionGroup>, typeCount);
     return adoptRef(signature);
 }
 
@@ -399,7 +395,7 @@ RefPtr<TypeDefinition> TypeDefinition::tryCreateProjection()
     void* memory = nullptr;
     if (!result.getValue(memory))
         return nullptr;
-    TypeDefinition* signature = new (NotNull, memory) TypeDefinition(std::in_place_type<Projection>);
+    TypeDefinition* signature = new (NotNull, memory) TypeDefinition(WTF::InPlaceType<Projection>);
     return adoptRef(signature);
 }
 
@@ -410,7 +406,7 @@ RefPtr<TypeDefinition> TypeDefinition::tryCreateSubtype(SupertypeCount count, bo
     void* memory = nullptr;
     if (!result.getValue(memory))
         return nullptr;
-    TypeDefinition* signature = new (NotNull, memory) TypeDefinition(std::in_place_type<Subtype>, count, isFinal);
+    TypeDefinition* signature = new (NotNull, memory) TypeDefinition(WTF::InPlaceType<Subtype>, count, isFinal);
     return adoptRef(signature);
 }
 
@@ -586,19 +582,11 @@ RefPtr<RTT> RTT::tryCreateRTT(RTTKind kind, DisplayCount displaySize)
     return adoptRef(new (NotNull, memory) RTT(kind, displaySize));
 }
 
-bool RTT::isSubRTT(const RTT& parent) const
+bool RTT::isStrictSubRTT(const RTT& parent) const
 {
-    if (displaySize() > 0) {
-        if (parent.displaySize() > 0) {
-            if (displaySize() <= parent.displaySize())
-                return false;
-            return &parent == displayEntry(displaySize() - parent.displaySize() - 1);
-        }
-        // If not a subtype itself, the parent must be at the top of the display.
-        return &parent == displayEntry(displaySize() - 1);
-    }
-
-    return false;
+    if (displaySize() <= parent.displaySize())
+        return false;
+    return &parent == displayEntry(displaySize() - parent.displaySize() - 1);
 }
 
 const TypeDefinition& TypeInformation::signatureForLLIntBuiltin(LLIntBuiltin builtin)
@@ -648,7 +636,7 @@ struct FunctionParameterTypes {
 
     static unsigned hash(const FunctionParameterTypes& params)
     {
-        return computeSignatureHash(params.returnTypes.size(), params.returnTypes.data(), params.argumentTypes.size(), params.argumentTypes.data());
+        return computeSignatureHash(params.returnTypes.size(), params.returnTypes.span().data(), params.argumentTypes.size(), params.argumentTypes.span().data());
     }
 
     static bool equal(const TypeHash& sig, const FunctionParameterTypes& params)
@@ -716,7 +704,7 @@ struct StructParameterTypes {
 
     static unsigned hash(const StructParameterTypes& params)
     {
-        return computeStructTypeHash(params.fields.size(), params.fields.data());
+        return computeStructTypeHash(params.fields.size(), params.fields.span().data());
     }
 
     static bool equal(const TypeHash& sig, const StructParameterTypes& params)
@@ -738,7 +726,7 @@ struct StructParameterTypes {
 
     static void translate(TypeHash& entry, const StructParameterTypes& params, unsigned)
     {
-        RefPtr<TypeDefinition> signature = TypeDefinition::tryCreateStructType(params.fields.size(), params.fields.data());
+        RefPtr<TypeDefinition> signature = TypeDefinition::tryCreateStructType(params.fields.size(), params.fields.span().data());
         RELEASE_ASSERT(signature);
         entry.key = WTFMove(signature);
     }
@@ -783,7 +771,7 @@ struct RecursionGroupParameterTypes {
 
     static unsigned hash(const RecursionGroupParameterTypes& params)
     {
-        return computeRecursionGroupHash(params.types.size(), params.types.data());
+        return computeRecursionGroupHash(params.types.size(), params.types.span().data());
     }
 
     static bool equal(const TypeHash& sig, const RecursionGroupParameterTypes& params)
@@ -863,7 +851,7 @@ struct SubtypeParameterTypes {
 
     static unsigned hash(const SubtypeParameterTypes& params)
     {
-        return computeSubtypeHash(params.superTypes.size(), params.superTypes.data(), params.underlyingType, params.isFinal);
+        return computeSubtypeHash(params.superTypes.size(), params.superTypes.span().data(), params.underlyingType, params.isFinal);
     }
 
     static bool equal(const TypeHash& sig, const SubtypeParameterTypes& params)
@@ -1114,15 +1102,17 @@ bool TypeInformation::castReference(JSValue refValue, bool allowNull, TypeIndex 
 
     if (typeIndexIsType(typeIndex)) {
         switch (static_cast<TypeKind>(typeIndex)) {
-        case TypeKind::Exn:
         case TypeKind::Externref:
         case TypeKind::Anyref:
-            // Casts to these types cannot fail as any value can be an exn/externref/hostref.
+            // Casts to these types cannot fail as any value can be an externref/hostref.
             return true;
         case TypeKind::Funcref:
             return jsDynamicCast<WebAssemblyFunctionBase*>(refValue);
         case TypeKind::Eqref:
             return (refValue.isInt32() && refValue.asInt32() <= maxI31ref && refValue.asInt32() >= minI31ref) || jsDynamicCast<JSWebAssemblyArray*>(refValue) || jsDynamicCast<JSWebAssemblyStruct*>(refValue);
+        case TypeKind::Exn:
+            // Exn and Nullexn are in a different heap hierarchy
+            return jsDynamicCast<JSWebAssemblyException*>(refValue);
         case TypeKind::Nullexn:
         case TypeKind::Nullref:
         case TypeKind::Nullfuncref:
@@ -1147,25 +1137,25 @@ bool TypeInformation::castReference(JSValue refValue, bool allowNull, TypeIndex 
             auto funcRTT = funcRef->rtt();
             if (funcRTT == signatureRTT.get())
                 return true;
-            return funcRTT->isSubRTT(*signatureRTT);
+            return funcRTT->isStrictSubRTT(*signatureRTT);
         }
         if (signature.is<ArrayType>()) {
             JSWebAssemblyArray* arrayRef = jsDynamicCast<JSWebAssemblyArray*>(refValue);
             if (!arrayRef)
                 return false;
             auto arrayRTT = arrayRef->rtt();
-            if (arrayRTT.get() == signatureRTT.get())
+            if (arrayRTT.ptr() == signatureRTT.get())
                 return true;
-            return arrayRTT->isSubRTT(*signatureRTT);
+            return arrayRTT->isStrictSubRTT(*signatureRTT);
         }
         ASSERT(signature.is<StructType>());
         JSWebAssemblyStruct* structRef = jsDynamicCast<JSWebAssemblyStruct*>(refValue);
         if (!structRef)
             return false;
         auto structRTT = structRef->rtt();
-        if (structRTT.get() == signatureRTT.get())
+        if (structRTT.ptr() == signatureRTT.get())
             return true;
-        return structRTT->isSubRTT(*signatureRTT);
+        return structRTT->isStrictSubRTT(*signatureRTT);
     }
 
     return false;

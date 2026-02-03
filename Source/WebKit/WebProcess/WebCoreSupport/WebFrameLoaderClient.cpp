@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023-2024 Apple Inc. All rights reserved.
+ * Copyright (C) 2023-2025 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -38,7 +38,7 @@
 #include "WebProcess.h"
 #include <WebCore/FrameLoader.h>
 #include <WebCore/HitTestResult.h>
-#include <WebCore/LocalFrame.h>
+#include <WebCore/LocalFrameInlines.h>
 #include <WebCore/PolicyChecker.h>
 
 #if PLATFORM(COCOA)
@@ -47,7 +47,7 @@
 
 #define WebFrameLoaderClient_PREFIX_PARAMETERS "%p - [webFrame=%p, webFrameID=%" PRIu64 ", webPage=%p, webPageID=%" PRIu64 "] WebFrameLoaderClient::"
 #define WebFrameLoaderClient_WEBFRAME (&webFrame())
-#define WebFrameLoaderClient_WEBFRAMEID (webFrame().frameID().object().toUInt64())
+#define WebFrameLoaderClient_WEBFRAMEID (webFrame().frameID().toUInt64())
 #define WebFrameLoaderClient_WEBPAGE (webFrame().page())
 #define WebFrameLoaderClient_WEBPAGEID (WebFrameLoaderClient_WEBPAGE ? WebFrameLoaderClient_WEBPAGE->identifier().toUInt64() : 0)
 
@@ -99,10 +99,18 @@ std::optional<NavigationActionData> WebFrameLoaderClient::navigationActionData(c
     RefPtr coreLocalFrame = m_frame->coreLocalFrame();
     RefPtr document = coreLocalFrame ? coreLocalFrame->document() : nullptr;
 
-    FrameInfoData originatingFrameInfoData {
-        navigationAction.initiatedByMainFrame() == InitiatedByMainFrame::Yes,
+    auto originator = webPage->takeMainFrameNavigationInitiator();
+
+    bool originatingFrameIsMain = navigationAction.initiatedByMainFrame() == InitiatedByMainFrame::Yes;
+    if (!originatingFrameIsMain) {
+        if (RefPtr originatingFrame = WebProcess::singleton().webFrame(originatingFrameID))
+            originatingFrameIsMain = originatingFrame->isMainFrame();
+    }
+
+    auto originatingFrameInfoData = originator ? FrameInfoData { WTFMove(*originator) } : FrameInfoData {
+        originatingFrameIsMain,
         FrameType::Local,
-        ResourceRequest { requester.url },
+        ResourceRequest { URL { requester.url } },
         requester.securityOrigin->data(),
         { },
         WTFMove(originatingFrameID),
@@ -114,7 +122,7 @@ std::optional<NavigationActionData> WebFrameLoaderClient::navigationActionData(c
     };
 
     std::optional<WebPageProxyIdentifier> originatingPageID;
-    if (auto* webPage = requester.pageID ? WebProcess::singleton().webPage(*requester.pageID) : nullptr)
+    if (RefPtr webPage = requester.pageID ? WebProcess::singleton().webPage(*requester.pageID) : nullptr)
         originatingPageID = webPage->webPageProxyIdentifier();
 
     // FIXME: When we receive a redirect after the navigation policy has been decided for the initial request,
@@ -143,6 +151,8 @@ std::optional<NavigationActionData> WebFrameLoaderClient::navigationActionData(c
         navigationAction.openedByDOMWithOpener(),
         hasOpener,
         isPerformingHTTPFallback == IsPerformingHTTPFallback::Yes,
+        navigationAction.isInitialFrameSrcLoad(),
+        navigationAction.isContentRuleListRedirect(),
         { },
         requester.securityOrigin->data(),
         requester.topOrigin->data(),
@@ -164,7 +174,8 @@ std::optional<NavigationActionData> WebFrameLoaderClient::navigationActionData(c
         m_frame->info(),
         navigationID,
         navigationAction.originalRequest(),
-        request
+        request,
+        request.url().isValid() ? String() : request.url().string(),
     };
 }
 
@@ -195,7 +206,7 @@ void WebFrameLoaderClient::dispatchDecidePolicyForNavigationAction(const Navigat
             }
 
             auto [policyDecision] = sendResult.takeReply();
-            WebFrameLoaderClient_RELEASE_LOG(WEBFRAMELOADERCLIENT_DISPATCHDECIDEPOLICYFORNAVIGATIONACTION_GOT_POLICYACTION_FROM_SYNC_IPC, (unsigned)policyDecision.policyAction);
+            WebFrameLoaderClient_RELEASE_LOG(WEBFRAMELOADERCLIENT_DISPATCHDECIDEPOLICYFORNAVIGATIONACTION_GOT_POLICYACTION_FROM_SYNC_IPC, toString(policyDecision.policyAction).characters());
             m_frame->didReceivePolicyDecision(listenerID, PolicyDecision { policyDecision.isNavigatingToAppBoundDomain, policyDecision.policyAction, { }, policyDecision.downloadID });
             return;
         }
@@ -210,7 +221,7 @@ void WebFrameLoaderClient::dispatchDecidePolicyForNavigationAction(const Navigat
         if (!frame)
             return;
 
-        RELEASE_LOG_ERROR_FORWARDABLE(Network, WEBFRAMELOADERCLIENT_DISPATCHDECIDEPOLICYFORNAVIGATIONACTION_GOT_POLICYACTION_FROM_ASYNC_IPC, frame->frameID().object().toUInt64(), webPageID, (unsigned)policyDecision.policyAction);
+        RELEASE_LOG_FORWARDABLE(Network, WEBFRAMELOADERCLIENT_DISPATCHDECIDEPOLICYFORNAVIGATIONACTION_GOT_POLICYACTION_FROM_ASYNC_IPC, frame->frameID().toUInt64(), webPageID, toString(policyDecision.policyAction).characters());
 
         frame->didReceivePolicyDecision(listenerID, WTFMove(policyDecision));
     });
