@@ -49,8 +49,8 @@ endif
 # https://bugs.webkit.org/show_bug.cgi?id=290167
 ifneq (,$(filter $(DEB_HOST_ARCH),armhf))
 	EXTRA_CMAKE_ARGUMENTS += \
-	   -DCMAKE_C_COMPILER=clang-19 \
-	   -DCMAKE_CXX_COMPILER=clang++-19
+	   -DCMAKE_C_COMPILER=gcc \
+	   -DCMAKE_CXX_COMPILER=g++
 endif
 
 # The WebKit build scripts look at the CPU to detect the architecture.
@@ -68,8 +68,8 @@ endif
 
 # The debug packages produced by webkit are huge and cause problems in
 # most buildds. Use -g1 in all architectures to make them smaller.
-CFLAGS := $(CFLAGS:-g=-g1)
-CXXFLAGS := $(CXXFLAGS:-g=-g1)
+CFLAGS := $(CFLAGS:-g=)
+CXXFLAGS := $(CXXFLAGS:-g=)
 
 # https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=949621
 LDFLAGS += -Wl,--reduce-memory-overheads
