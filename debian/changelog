@@ -3,6 +3,7 @@ webkit2gtk (2.50.4-1+rpi2) forky-staging; urgency=medium
   * Non-maintainer upload.
   * Really build with gcc.
   * Disable debug information completely.
+  * Reduce optimisation to -O1.
 
  -- Peter Michael Green <plugwash@raspbian.org>  Thu, 05 Feb 2026 01:55:33 +0000
 

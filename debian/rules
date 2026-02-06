@@ -71,6 +71,9 @@ endif
 CFLAGS := $(CFLAGS:-g=)
 CXXFLAGS := $(CXXFLAGS:-g=)
 
+CFLAGS := $(CFLAGS:-O2=-O1)
+CXXFLAGS := $(CXXFLAGS:-O2=-O1)
+
 # https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=949621
 LDFLAGS += -Wl,--reduce-memory-overheads
 
