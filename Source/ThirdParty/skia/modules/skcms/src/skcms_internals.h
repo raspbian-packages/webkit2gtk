@@ -52,6 +52,8 @@ extern "C" {
                                                  && !defined(__arm__) \
                                                  && !defined(__riscv) \
                                                  && !defined(__powerpc__) \
+                                                 && !defined(__m68k__) \
+                                                 && !defined(__sh__) \
                                                  && !defined(__loongarch__) \
                                                  && !defined(_WIN32) && !defined(__SYMBIAN32__)
             #define SKCMS_HAS_MUSTTAIL 1
