@@ -1,0 +1,23 @@
+From: Emilio Pozuelo Monfort <pochu@debian.org>
+Origin: Debian
+
+[[fallthrough]] is defined in C++17, but this is a C file and (at least)
+clang treats it as such. So revert to use a comment, the worst thing that
+can happen is that we get a warning.
+
+--- a/Tools/MiniBrowser/gtk/main.c
++++ b/Tools/MiniBrowser/gtk/main.c
+@@ -287,11 +287,9 @@ static gboolean parseFeaturesOptionCallb
+         switch (item[0]) {
+         case '!':
+         case '-':
+-            enabled = FALSE;
+-            [[fallthrough]];
++            enabled = FALSE; /* fallthrough */
+         case '+':
+-            item++;
+-            [[fallthrough]];
++            item++; /* fallthrough */
+         default:
+             break;
+         }
