@@ -90,6 +90,7 @@ static GList* webkitOverridingResolverLookupByNameFinish(GResolver* resolver, GA
     return static_cast<GList*>(g_task_propagate_pointer(G_TASK(result), error));
 }
 
+#if GLIB_CHECK_VERSION(2, 59, 0)
 static GList* createLoobackAddressList(WebKitOverridingResolver* resolver, GResolverNameLookupFlags flags)
 {
     GList* list = nullptr;
@@ -129,6 +130,7 @@ static GList* webkitOverridingResolverLookupByNameWithFlagsFinish(GResolver* res
 
     return static_cast<GList*>(g_task_propagate_pointer(G_TASK(result), error));
 }
+#endif // GLIB_CHECK_VERSION(2, 59, 0)
 
 static char* webkitOverridingResolverLookupByAddress(GResolver* resolver, GInetAddress* address, GCancellable* cancellable, GError** error)
 {
@@ -166,9 +168,11 @@ static void webkit_overriding_resolver_class_init(WebKitOverridingResolverClass*
     resolverClass->lookup_by_name = webkitOverridingResolverLookupByName;
     resolverClass->lookup_by_name_async = webkitOverridingResolverLookupByNameAsync;
     resolverClass->lookup_by_name_finish = webkitOverridingResolverLookupByNameFinish;
+#if GLIB_CHECK_VERSION(2, 59, 0)
     resolverClass->lookup_by_name_with_flags = webkitOverridingResolverLookupByNameWithFlags;
     resolverClass->lookup_by_name_with_flags_async = webkitOverridingResolverLookupByNameWithFlagsAsync;
     resolverClass->lookup_by_name_with_flags_finish = webkitOverridingResolverLookupByNameWithFlagsFinish;
+#endif
     resolverClass->lookup_by_address = webkitOverridingResolverLookupByAddress;
     resolverClass->lookup_by_address_async = webkitOverridingResolverLookupByAddressAsync;
     resolverClass->lookup_by_address_finish = webkitOverridingResolverLookupByAddressFinish;
