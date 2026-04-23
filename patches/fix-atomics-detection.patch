@@ -1,0 +1,33 @@
+From: Alberto Garcia <berto@igalia.com>
+Subject: Improve detection of whether libatomic is required
+Bug: https://bugs.webkit.org/show_bug.cgi?id=312975
+Origin: https://github.com/WebKit/WebKit/pull/63310
+Index: webkitgtk/Source/cmake/WebKitCompilerFlags.cmake
+===================================================================
+--- webkitgtk.orig/Source/cmake/WebKitCompilerFlags.cmake
++++ webkitgtk/Source/cmake/WebKitCompilerFlags.cmake
+@@ -411,6 +411,13 @@ if (COMPILER_IS_GCC_OR_CLANG)
+ 
+ #define CPU(_FEATURE) (defined CPU_##_FEATURE && CPU_##_FEATURE)
+ 
++#if COMPILER(CLANG)
++#pragma clang optimize off
++#endif
++
++#if COMPILER(GCC)
++#pragma GCC optimize("O0")
++#endif
+ 
+ #if COMPILER(GCC_COMPATIBLE)
+ /* __LP64__ is not defined on 64bit Windows since it uses LLP64. Using __SIZEOF_POINTER__ is simpler. */
+@@ -453,8 +460,9 @@ static inline bool compare_and_swap_uint
+ #endif
+ }
+ 
++std::atomic<std::optional<double>> d;
++
+ int main() {
+-    std::atomic<std::optional<double>> d;
+     d = 0.0;
+     bool y = false;
+     bool expected = true;
