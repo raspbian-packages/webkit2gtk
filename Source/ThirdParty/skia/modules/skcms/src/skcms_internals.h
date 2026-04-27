@@ -52,11 +52,16 @@ extern "C" {
                                                  && !defined(__arm__) \
                                                  && !defined(__riscv) \
                                                  && !defined(__powerpc__) \
+                                                 && !defined(__alpha__) \
+                                                 && !defined(__hppa__) \
+                                                 && !defined(__m68k__) \
+                                                 && !defined(__sh__) \
                                                  && !defined(__loongarch__) \
                                                  && !defined(_WIN32) && !defined(__SYMBIAN32__)
             #define SKCMS_HAS_MUSTTAIL 1
         #endif
-    #elif defined(__GNUC__) && !defined(SKCMS_HAS_MUSTTAIL)
+    #elif defined(__GNUC__) && !defined(SKCMS_HAS_MUSTTAIL) && !defined(__alpha__) && \
+          !defined(__hppa__) && !defined(__m68k__) && !defined(__sh__)
         // GCC on riscv64 does not support our tail call functions
         // cf. https://gcc.gnu.org/bugzilla/show_bug.cgi?id=121784
         #if __has_cpp_attribute(clang::musttail) && !defined(__riscv)
@@ -64,7 +69,8 @@ extern "C" {
         #else
             #define SKCMS_HAS_MUSTTAIL 0
         #endif
-    #elif !defined(__clang__) && !defined(SKCMS_HAS_MUSTTAIL)
+    #elif !defined(__clang__) && !defined(SKCMS_HAS_MUSTTAIL) && !defined(__alpha__) && \
+          !defined(__hppa__) && !defined(__m68k__) && !defined(__sh__)
         #if __has_cpp_attribute(clang::musttail)
             #define SKCMS_HAS_MUSTTAIL 1
         #else
