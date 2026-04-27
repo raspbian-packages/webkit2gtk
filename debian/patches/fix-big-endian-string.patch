@@ -1,0 +1,21 @@
+From: Alberto Garcia <berto@igalia.com>
+Subject: Use the native byte order when converting from utf8 to utf16
+Bug: https://bugs.webkit.org/show_bug.cgi?id=312973
+Bug-Debian: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1132818
+Origin: https://github.com/WebKit/WebKit/pull/63416
+Index: webkitgtk/Source/WTF/wtf/text/StringImpl.cpp
+===================================================================
+--- webkitgtk.orig/Source/WTF/wtf/text/StringImpl.cpp
++++ webkitgtk/Source/WTF/wtf/text/StringImpl.cpp
+@@ -305,7 +305,11 @@ RefPtr<StringImpl> StringImpl::create(st
+     std::span<char16_t> data;
+     auto string = createUninitializedInternalNonEmpty(utf16Length, data);
+ 
++#if CPU(BIG_ENDIAN)
++    size_t written = simdutf::convert_valid_utf8_to_utf16be(input, inputLength, data.data());
++#else
+     size_t written = simdutf::convert_valid_utf8_to_utf16le(input, inputLength, data.data());
++#endif
+     RELEASE_ASSERT_WITH_SECURITY_IMPLICATION(written == utf16Length);
+ 
+     return string;
