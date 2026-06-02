@@ -1,0 +1,32 @@
+From: Alberto Garcia <berto@igalia.com>
+Description: Don't depend on bmalloc_CopyHeaders when USE_SYSTEM_MALLOC is enabled
+Bug: https://bugs.webkit.org/show_bug.cgi?id=316083
+Origin: https://github.com/WebKit/WebKit/commit/a6bc685a685c8f16c919dc6310a62a26971d396e
+Index: webkitgtk/Source/JavaScriptCore/CMakeLists.txt
+===================================================================
+--- webkitgtk.orig/Source/JavaScriptCore/CMakeLists.txt
++++ webkitgtk/Source/JavaScriptCore/CMakeLists.txt
+@@ -412,8 +412,10 @@ set(LLIntSettingsExtractor_DEPENDENCIES
+     JavaScriptCore_CopyHeaders
+     JavaScriptCore_CopyPrivateHeaders
+     WTF_CopyHeaders
+-    bmalloc_CopyHeaders
+ )
++if (NOT USE_SYSTEM_MALLOC)
++    list(APPEND LLIntSettingsExtractor_DEPENDENCIES bmalloc_CopyHeaders)
++endif ()
+ WEBKIT_EXECUTABLE(LLIntSettingsExtractor)
+
+ # LLIntSettingsExtractor target needs to have a direct or indirect
+@@ -439,8 +441,10 @@ set(LLIntOffsetsExtractor_DEPENDENCIES
+     JavaScriptCore_CopyHeaders
+     JavaScriptCore_CopyPrivateHeaders
+     WTF_CopyHeaders
+-    bmalloc_CopyHeaders
+ )
++if (NOT USE_SYSTEM_MALLOC)
++    list(APPEND LLIntOffsetsExtractor_DEPENDENCIES bmalloc_CopyHeaders)
++endif ()
+ WEBKIT_EXECUTABLE(LLIntOffsetsExtractor)
+
+ # The build system will execute asm.rb every time LLIntOffsetsExtractor's mtime is newer than

@@ -1,0 +1,6 @@
+fix-ftbfs-riscv64.patch
+fix-ftbfs-sparc64.patch
+fix-ftbfs-x32.patch
+disable-nvidia-dmabuf.patch
+no-must-tail.patch
+fix-ftbfs-system-malloc.patch
