@@ -288,10 +288,8 @@ static gboolean parseFeaturesOptionCallback(const gchar *option, const gchar *va
         case '!':
         case '-':
             enabled = FALSE;
-            [[fallthrough]];
         case '+':
             item++;
-            [[fallthrough]];
         default:
             break;
         }
