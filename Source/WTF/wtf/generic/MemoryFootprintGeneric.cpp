@@ -33,8 +33,12 @@ namespace WTF {
 
 size_t memoryFootprint()
 {
+#if OS(HURD)
+    return 0;
+#else
     auto memoryUse = memoryStatus();
     return memoryUse.memoryFootprint;
+#endif
 }
 
 } // namespace WTF
