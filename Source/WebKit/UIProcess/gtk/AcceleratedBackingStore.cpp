@@ -43,9 +43,11 @@
 #include <WebCore/IntRect.h>
 #include <WebCore/NativeImage.h>
 #include <WebCore/PlatformDisplay.h>
+#include <WebCore/PlatformDisplaySurfaceless.h>
 #include <WebCore/ShareableBitmap.h>
 #include <WebCore/SharedMemory.h>
 #include <epoxy/egl.h>
+#include <fcntl.h>
 #include <gtk/gtk.h>
 #include <wtf/TZoneMallocInlines.h>
 #include <wtf/glib/GUniquePtr.h>
@@ -58,6 +60,7 @@
 #if USE(GBM)
 #include <WebCore/DRMDeviceManager.h>
 #include <WebCore/GBMDevice.h>
+#include <WebCore/PlatformDisplayGBM.h>
 #include <gbm.h>
 #endif
 
@@ -78,6 +81,54 @@ using namespace WebCore;
 
 WTF_MAKE_TZONE_ALLOCATED_IMPL(AcceleratedBackingStore);
 
+static bool isNVIDIA()
+{
+    const char* forceDMABuf = getenv("WEBKIT_FORCE_DMABUF_RENDERER");
+    if (forceDMABuf && *forceDMABuf != '0')
+        return false;
+
+    std::unique_ptr<PlatformDisplay> platformDisplay;
+#if USE(GBM)
+    UnixFileDescriptor fd;
+    struct gbm_device* device = nullptr;
+    const char* disableGBM = getenv("WEBKIT_DMABUF_RENDERER_DISABLE_GBM");
+    if (!disableGBM || *disableGBM == '0') {
+        auto drmDevice = drmMainDevice();
+        if (!drmDevice.isNull()) {
+            const auto& filename = !drmDevice.renderNode.isNull() ? drmDevice.renderNode : drmDevice.primaryNode;
+            fd = UnixFileDescriptor { open(filename.data(), O_RDWR | O_CLOEXEC), UnixFileDescriptor::Adopt };
+            if (fd) {
+                device = gbm_create_device(fd.value());
+                if (device)
+                    platformDisplay = PlatformDisplayGBM::create(device);
+            }
+        }
+    }
+#endif
+    if (!platformDisplay)
+        platformDisplay = PlatformDisplaySurfaceless::create();
+
+    bool returnValue = false;
+    GLDisplay* glDisplay = platformDisplay ? &platformDisplay->glDisplay() : Display::singleton().glDisplay();
+    if (glDisplay) {
+        auto targetType = platformDisplay && platformDisplay->type() == PlatformDisplay::Type::Surfaceless ? GLContext::Target::Surfaceless : GLContext::Target::Default;
+        GLContext::ScopedGLContext glContext(GLContext::create(*glDisplay, targetType, nullptr));
+        const char* glVendor = reinterpret_cast<const char*>(glGetString(GL_VENDOR));
+        if (glVendor && strstr(glVendor, "NVIDIA"))
+            returnValue = true;
+    }
+
+    if (platformDisplay)
+        platformDisplay->clearGLContexts();
+
+#if USE(GBM)
+    if (device)
+        gbm_device_destroy(device);
+#endif
+
+    return returnValue;
+}
+
 OptionSet<RendererBufferTransportMode> AcceleratedBackingStore::rendererBufferTransportMode()
 {
     static OptionSet<RendererBufferTransportMode> mode;
@@ -94,6 +145,9 @@ OptionSet<RendererBufferTransportMode> AcceleratedBackingStore::rendererBufferTr
         }
 
         mode.add(RendererBufferTransportMode::SharedMemory);
+
+        if (isNVIDIA())
+            return;
 
         const char* forceSHM = getenv("WEBKIT_DMABUF_RENDERER_FORCE_SHM");
         if (forceSHM && g_strcmp0(forceSHM, "0"))
