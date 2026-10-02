@@ -948,6 +948,25 @@ static inline uintptr_t pas_pair_high(pas_pair pair)
     return pair.high;
 }
 
+#elif defined(__sh__)
+
+typedef uint64_t pas_pair;
+
+static inline pas_pair pas_pair_create(uintptr_t low, uintptr_t high)
+{
+    return ((pas_pair)low) | ((pas_pair)(high) << 32);
+}
+
+static inline uintptr_t pas_pair_low(pas_pair pair)
+{
+    return pair;
+}
+
+static inline uintptr_t pas_pair_high(pas_pair pair)
+{
+    return pair >> 32;
+}
+
 #else
 
 typedef __uint128_t pas_pair;
